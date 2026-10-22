@@ -40,6 +40,8 @@ pub struct UiData<'w, 's> {
     pub sel: ResMut<'w, EditorSelection>,
     pub gz: ResMut<'w, GizmoState>,
     pub draft: ResMut<'w, ui_inspector::InspectorDraft>,
+    pub rview: ResMut<'w, crate::ui_reflect::ReflectView>,
+    pub redits: ResMut<'w, crate::ui_reflect::ReflectEdits>,
     pub order: Res<'w, UndoOrder>,
     pub th: Res<'w, TerrainHistory>,
     pub grid: Res<'w, TerrainGrid>,

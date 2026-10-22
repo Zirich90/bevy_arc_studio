@@ -30,7 +30,7 @@ const HANDLE_SCALE: f32 = 2.0;
 const MOVE_SNAP: f32 = 0.5;
 const ROT_SNAP_DEG: f32 = 15.0;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Reflect, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum GizmoMode {
     Select,
     #[default]

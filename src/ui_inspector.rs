@@ -335,6 +335,8 @@ fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     #[cfg(feature = "pf2e")]
     crate::actors::inspector(ui, d, e);
 
+    crate::ui_reflect::draw(ui, &mut d.rview, &mut d.redits, &f.0);
+
     // PointLight child
     let mut stack = vec![e];
     let mut light = None;

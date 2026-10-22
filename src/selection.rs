@@ -46,6 +46,10 @@ impl EditorSelection {
         self.selected.insert(e);
         self.primary = Some(e);
     }
+    pub fn add(&mut self, e: Entity) {
+        self.selected.insert(e);
+        self.primary.get_or_insert(e);
+    }
     fn set_all(&mut self, set: HashSet<Entity>) {
         if !self.primary.is_some_and(|p| set.contains(&p)) {
             self.primary = set.iter().copied().min_by_key(|e| e.to_bits());

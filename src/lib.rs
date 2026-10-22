@@ -17,6 +17,7 @@ pub mod studio;
 pub mod terrain_brush;
 pub mod ui_hud;
 pub mod ui_inspector;
+pub mod ui_reflect;
 pub mod ui_toolbar;
 pub mod world_io;
 
@@ -75,6 +76,7 @@ impl Plugin for BevyArcStudioPlugin {
                 camera::EditorCameraPlugin,
                 lighting::LightingPlugin,
                 ui::UiPlugin,
+                ui_reflect::ReflectInspectorPlugin,
                 selection::SelectionPlugin,
                 gizmo_3d::Gizmo3dPlugin,
                 studio::StudioPlugin,
