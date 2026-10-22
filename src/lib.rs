@@ -9,6 +9,8 @@ pub mod terrain_render;
 pub mod ui;
 pub mod water;
 pub mod mcp_commands;
+pub mod movement;
+pub mod navigation;
 pub mod studio;
 pub mod terrain_brush;
 pub mod ui_hud;
@@ -76,6 +78,7 @@ impl Plugin for BevyArcStudioPlugin {
                 studio::StudioPlugin,
                 terrain_brush::TerrainBrushPlugin,
                 mcp_commands::McpCommandsPlugin,
+                movement::MovementPlugin,
                 world_io::WorldIoPlugin,
             ));
     }

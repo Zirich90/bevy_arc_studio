@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
 use crate::gizmo_3d::{ObjState, SceneHistory};
+use crate::movement;
 use crate::props::{SceneObject, UserProp, assets_dir};
 use crate::selection::{Deleted, EditorSelection, object_box};
 use crate::studio::*;
@@ -42,6 +43,11 @@ pub enum StudioCommand {
     Screenshot { path: String },
     SaveScene { path: String },
     LoadScene { path: String },
+    /// Spawn a test character on walkable ground nearest to (x, z); it becomes the active actor.
+    SpawnActor { x: f32, z: f32 },
+    /// Result line: `{"distance_meters","distance_feet","cost_feet","is_reachable"}`.
+    QueryPath { from: Vec3, to: Vec3 },
+    MoveActor { entity: Entity, to: Vec3 },
 }
 
 #[derive(Resource, Reflect, Default, Serialize, Deserialize)]
@@ -85,6 +91,15 @@ impl Plugin for McpCommandsPlugin {
             .register_type::<WorldPreset>()
             .add_systems(Update, execute_commands.before(process_history));
     }
+}
+
+/// Run `f` with world access after this system; its result line lands in the command log (`ERR ` prefix on failure).
+fn queue_world_cmd(commands: &mut Commands, f: impl FnOnce(&mut World) -> Result<String, String> + Send + 'static) {
+    commands.queue(move |w: &mut World| {
+        let line = f(w).unwrap_or_else(|e| format!("ERR {e}"));
+        w.resource_mut::<StudioState>().status = line.clone();
+        w.resource_mut::<StudioCommandQueue>().log.push(line);
+    });
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -248,6 +263,18 @@ pub fn execute_commands(
                 }
                 spawner.commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
                 Ok(format!("screenshot -> {path}"))
+            }
+            StudioCommand::SpawnActor { x, z } => {
+                queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_spawn_actor(w, x, z));
+                Ok("spawn actor queued".into())
+            }
+            StudioCommand::QueryPath { from, to } => {
+                queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_query_path(w, from, to));
+                Ok("path query queued".into())
+            }
+            StudioCommand::MoveActor { entity, to } => {
+                queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_move_actor(w, entity, to));
+                Ok("move queued".into())
             }
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));
