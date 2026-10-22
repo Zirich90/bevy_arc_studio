@@ -1,0 +1,14 @@
+(
+    name: "Goblin Warrior",
+    level: 1,
+    faction: Hostile,
+    abilities: (str: 10, dex: 16, con: 12, int: 10, wis: 10, cha: 8),
+    hp: 15,
+    ac: 16,
+    saves: (fortitude: 4, reflex: 6, will: 3),
+    speed_feet: 25.0,
+    attack_bonus: 7,
+    weapon: (name: "Dagger", dice: 1, sides: 4, damage_type: Piercing, agile: true),
+    color: (0.35, 0.75, 0.25),
+    scale: 0.8,
+)

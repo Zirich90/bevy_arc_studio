@@ -23,6 +23,10 @@ pub enum ObjectCategory {
     Structure,
     Camp,
     Model,
+    /// pf2e actor (NPC / hero).
+    Actor,
+    /// pf2e trigger volume.
+    Trigger,
 }
 
 /// Selectable root of every spawned object (stage 3 picking / inspector hook).
@@ -722,6 +726,20 @@ pub fn spawn_user_prop(
             let o = cx.obj(&stem, ObjectCategory::Model, Vec3::splat(1.0));
             let scene = server.load(GltfAssetLabel::Scene(0).from_asset(format!("models/{file}")));
             (commands.spawn((Name::new(stem), o, WorldAssetRoot(scene), tf)).id(), tf)
+        }
+        #[cfg(feature = "pf2e")]
+        k if k.starts_with("actor:") => {
+            let name = &k[6..];
+            let t = crate::actors::ActorTemplate::load(name).ok()?;
+            let tf = mul_tf(pos, rot);
+            let (_, so) = cx.obj(&t.name, ObjectCategory::Actor, Vec3::splat(1.0));
+            (crate::actors::spawn_actor(commands, meshes, mats, so, name, &t, tf), tf)
+        }
+        #[cfg(feature = "pf2e")]
+        "trigger" => {
+            let tf = mul_tf(pos, rot);
+            let (_, so) = cx.obj("TriggerVolume", ObjectCategory::Trigger, Vec3::splat(1.0));
+            (crate::actors::triggers::spawn_trigger(commands, meshes, mats, so, tf, Default::default()), tf)
         }
         _ => return None,
     };

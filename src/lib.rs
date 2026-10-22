@@ -1,3 +1,5 @@
+#[cfg(feature = "pf2e")]
+pub mod actors;
 pub mod arc_core;
 pub mod camera;
 pub mod gizmo_3d;
@@ -15,6 +17,7 @@ pub mod studio;
 pub mod terrain_brush;
 pub mod ui_hud;
 pub mod ui_inspector;
+pub mod ui_reflect;
 pub mod ui_toolbar;
 pub mod world_io;
 
@@ -73,6 +76,7 @@ impl Plugin for BevyArcStudioPlugin {
                 camera::EditorCameraPlugin,
                 lighting::LightingPlugin,
                 ui::UiPlugin,
+                ui_reflect::ReflectInspectorPlugin,
                 selection::SelectionPlugin,
                 gizmo_3d::Gizmo3dPlugin,
                 studio::StudioPlugin,
@@ -81,6 +85,8 @@ impl Plugin for BevyArcStudioPlugin {
                 movement::MovementPlugin,
                 world_io::WorldIoPlugin,
             ));
+        #[cfg(feature = "pf2e")]
+        app.add_plugins(actors::ActorsPlugin);
     }
 }
 

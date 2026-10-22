@@ -40,6 +40,8 @@ pub struct UiData<'w, 's> {
     pub sel: ResMut<'w, EditorSelection>,
     pub gz: ResMut<'w, GizmoState>,
     pub draft: ResMut<'w, ui_inspector::InspectorDraft>,
+    pub rview: ResMut<'w, crate::ui_reflect::ReflectView>,
+    pub redits: ResMut<'w, crate::ui_reflect::ReflectEdits>,
     pub order: Res<'w, UndoOrder>,
     pub th: Res<'w, TerrainHistory>,
     pub grid: Res<'w, TerrainGrid>,
@@ -49,6 +51,18 @@ pub struct UiData<'w, 's> {
     pub objs: Query<'w, 's, (Entity, &'static mut Transform, &'static SceneObject, Option<&'static UserProp>), Without<Deleted>>,
     pub children: Query<'w, 's, &'static Children>,
     pub lights: Query<'w, 's, (&'static mut PointLight, Option<&'static mut NightLight>)>,
+    #[cfg(feature = "pf2e")]
+    pub rpg: Query<
+        'w,
+        's,
+        (
+            Option<&'static crate::actors::Actor>,
+            Option<&'static crate::actors::CharacterSheet>,
+            Option<&'static mut crate::actors::Faction>,
+            Option<&'static crate::actors::Interactable>,
+            Option<&'static mut crate::actors::triggers::TriggerVolume>,
+        ),
+    >,
     pub light_count: Query<'w, 's, (), Or<(With<PointLight>, With<DirectionalLight>)>>,
 }
 

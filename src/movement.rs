@@ -126,6 +126,7 @@ pub fn footprint_of(tf: &Transform, so: &SceneObject) -> Option<Footprint> {
     match so.category {
         ObjectCategory::Vegetation => (h.y > 1.5).then(|| Footprint::Circle { c, r: (h.x.max(h.z) * 0.22).max(0.25) }),
         ObjectCategory::Rock => Some(Footprint::Circle { c, r: h.x.max(h.z) * 0.85 }),
+        ObjectCategory::Actor | ObjectCategory::Trigger => None,
         ObjectCategory::Camp => Some(Footprint::Circle { c, r: 1.2 }),
         ObjectCategory::Structure if so.name.contains("Pier") => None,
         ObjectCategory::Structure => Some(Footprint::Circle { c, r: h.x.max(h.z) * 0.6 }),

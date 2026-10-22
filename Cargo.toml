@@ -20,6 +20,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 noise = "0.9"
 rand = "0.8"
+ron = { version = "0.12", optional = true } # actor templates (.ron); already in the Bevy dependency tree
 
 [profile.dev]
 opt-level = 1
@@ -30,4 +31,4 @@ opt-level = 3
 
 [features]
 default = []
-pf2e = []
+pf2e = ["dep:ron"]

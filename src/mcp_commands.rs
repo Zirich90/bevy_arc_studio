@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
-use crate::gizmo_3d::{ObjState, SceneHistory};
+use crate::gizmo_3d::{GizmoMode, GizmoState, ObjState, SceneHistory};
 use crate::movement;
 use crate::props::{SceneObject, UserProp, assets_dir};
 use crate::selection::{Deleted, EditorSelection, object_box};
@@ -48,6 +48,21 @@ pub enum StudioCommand {
     /// Result line: `{"distance_meters","distance_feet","cost_feet","is_reachable"}`.
     QueryPath { from: Vec3, to: Vec3 },
     MoveActor { entity: Entity, to: Vec3 },
+    /// Gizmo tool and snapping; `None` leaves a field unchanged.
+    SetGizmo { mode: Option<GizmoMode>, snap_ground: Option<bool>, align_normal: Option<bool> },
+    /// Select by `SceneObject.id` (see ListObjects); `additive` keeps the current selection.
+    SelectIds { ids: Vec<u32>, additive: bool },
+    /// Edit a transform (target: `id` or the primary selection); rot_deg = (x, y, z) Euler YXZ; undoable.
+    SetTransform { id: Option<u32>, pos: Option<Vec3>, rot_deg: Option<Vec3>, scale: Option<Vec3>, drop_to_ground: bool },
+    /// Copy the selected editor-spawned props, offset by `offset` (x, z).
+    Duplicate { offset: [f32; 2] },
+    /// Set a WorldSpec field by reflect path (e.g. "lake_radius", "fog_enabled"); bool as 0/1; undoable.
+    SetSpec { field: String, value: f64 },
+    /// Result line: JSON array `[{"id","name","kind","pos":[x,y,z]}]` (max 300).
+    ListObjects,
+    /// pf2e: spawn `assets/actors/<template>.ron` on the terrain below `pos` (y ignored) with the given faction.
+    #[cfg(feature = "pf2e")]
+    SpawnActorFromTemplate { template: String, pos: Vec3, faction: crate::actors::Faction },
 }
 
 #[derive(Resource, Reflect, Default, Serialize, Deserialize)]
@@ -102,6 +117,12 @@ fn queue_world_cmd(commands: &mut Commands, f: impl FnOnce(&mut World) -> Result
     });
 }
 
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Extra<'w> {
+    gz: ResMut<'w, GizmoState>,
+    req: ResMut<'w, HistoryRequest>,
+}
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn execute_commands(
     mut queue: ResMut<StudioCommandQueue>,
@@ -114,7 +135,7 @@ pub fn execute_commands(
     mut studio: ResMut<StudioState>,
     mut brush: ResMut<BrushState>,
     mut sel: ResMut<EditorSelection>,
-    mut req: ResMut<HistoryRequest>,
+    mut extra: Extra,
     mut cam: Query<(&mut EditorCamera, &Projection)>,
     terrain: Query<&Mesh3d, With<TerrainMesh>>,
     objs: Query<(Entity, &Transform, &SceneObject, Option<&UserProp>), Without<Deleted>>,
@@ -250,11 +271,11 @@ pub fn execute_commands(
                 Ok("focus".into())
             }
             StudioCommand::Undo => {
-                req.undo = true;
+                extra.req.undo = true;
                 Ok("undo".into())
             }
             StudioCommand::Redo => {
-                req.redo = true;
+                extra.req.redo = true;
                 Ok("redo".into())
             }
             StudioCommand::Screenshot { path } => {
@@ -275,6 +296,109 @@ pub fn execute_commands(
             StudioCommand::MoveActor { entity, to } => {
                 queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_move_actor(w, entity, to));
                 Ok("move queued".into())
+            }
+            #[cfg(feature = "pf2e")]
+            StudioCommand::SpawnActorFromTemplate { template, pos, faction } => {
+                crate::actors::ActorTemplate::load(&template)?;
+                let half = grid.0.size * 0.5;
+                let (x, z) = (pos.x.clamp(-half, half), pos.z.clamp(-half, half));
+                let kind = format!("actor:{template}");
+                let (e, tf) = spawner.spawn(&grid.0, &spec, &kind, x, z, 0.0).ok_or_else(|| format!("cannot spawn '{kind}'"))?;
+                spawner.commands.entity(e).insert(faction);
+                sh.record(format!("Spawn {template}"), vec![ObjState { entity: e, tf, alive: false }], vec![ObjState { entity: e, tf, alive: true }]);
+                sel.set_one(e);
+                Ok(format!("spawned actor {template} ({faction:?}) at ({x:.1}, {z:.1})"))
+            }
+            StudioCommand::SetGizmo { mode, snap_ground, align_normal } => {
+                if let Some(m) = mode {
+                    extra.gz.mode = m;
+                }
+                extra.gz.snap_ground = snap_ground.unwrap_or(extra.gz.snap_ground);
+                extra.gz.align_normal = align_normal.unwrap_or(extra.gz.align_normal);
+                Ok(format!("gizmo {:?} snap={} align={}", extra.gz.mode, extra.gz.snap_ground, extra.gz.align_normal))
+            }
+            StudioCommand::SelectIds { ids, additive } => {
+                let mut set: Vec<Entity> = if additive { sel.selected.iter().copied().collect() } else { Vec::new() };
+                set.extend(objs.iter().filter(|(_, _, so, _)| ids.contains(&so.id)).map(|(e, ..)| e));
+                let _ = *set.first().ok_or("no object with these ids")?;
+                sel.clear();
+                for e in set {
+                    sel.add(e);
+                }
+                                Ok(format!("selected {} objects", sel.selected.len()))
+            }
+            StudioCommand::SetTransform { id, pos, rot_deg, scale, drop_to_ground } => {
+                let e = match id {
+                    Some(id) => objs.iter().find(|(_, _, so, _)| so.id == id).map(|(e, ..)| e).ok_or(format!("no object id {id}"))?,
+                    None => sel.primary.ok_or("nothing selected")?,
+                };
+                let (_, tf, ..) = objs.get(e).map_err(|_| "object not editable".to_string())?;
+                let mut next = *tf;
+                if let Some(p) = pos {
+                    next.translation = p;
+                }
+                if let Some(r) = rot_deg {
+                    next.rotation = Quat::from_euler(EulerRot::YXZ, r.y.to_radians(), r.x.to_radians(), r.z.to_radians());
+                }
+                if let Some(s) = scale {
+                    next.scale = s.max(Vec3::splat(0.05));
+                }
+                if drop_to_ground {
+                    next.translation.y = grid.0.sample_height(next.translation.x, next.translation.z);
+                }
+                sh.record("MCP transform", vec![ObjState { entity: e, tf: *tf, alive: true }], vec![ObjState { entity: e, tf: next, alive: true }]);
+                spawner.commands.entity(e).insert(next);
+                Ok(format!("transform set at ({:.1}, {:.1}, {:.1})", next.translation.x, next.translation.y, next.translation.z))
+            }
+            StudioCommand::Duplicate { offset } => {
+                let src: Vec<(Transform, String)> = sel.selected.iter().filter_map(|e| objs.get(*e).ok()).filter_map(|(_, tf, _, up)| up.map(|u| (*tf, u.kind.clone()))).collect();
+                if src.is_empty() {
+                    return Err("nothing duplicable selected (editor-spawned props only)".into());
+                }
+                sel.clear();
+                for (tf, kind) in &src {
+                    let (x, z) = (tf.translation.x + offset[0], tf.translation.z + offset[1]);
+                    let yaw = tf.rotation.to_euler(EulerRot::YXZ).0;
+                    if let Some((e, t)) = spawner.spawn(&grid.0, &spec, kind, x, z, yaw) {
+                        let t = Transform { scale: tf.scale, rotation: tf.rotation, ..t };
+                        spawner.commands.entity(e).insert(t);
+                        sh.record(format!("Duplicate {kind}"), vec![ObjState { entity: e, tf: t, alive: false }], vec![ObjState { entity: e, tf: t, alive: true }]);
+                        sel.add(e);
+                    }
+                }
+                Ok(format!("duplicated {}", src.len()))
+            }
+            StudioCommand::SetSpec { field, value } => {
+                use bevy::reflect::GetPath;
+                let mut next = spec.clone();
+                let slot = next.reflect_path_mut(field.as_str()).map_err(|e| format!("{field}: {e}"))?;
+                if let Some(x) = slot.try_downcast_mut::<f32>() {
+                    *x = value as f32;
+                } else if let Some(x) = slot.try_downcast_mut::<f64>() {
+                    *x = value;
+                } else if let Some(x) = slot.try_downcast_mut::<bool>() {
+                    *x = value != 0.0;
+                } else if let Some(x) = slot.try_downcast_mut::<u32>() {
+                    *x = value.max(0.0) as u32;
+                } else if let Some(x) = slot.try_downcast_mut::<usize>() {
+                    *x = value.max(0.0) as usize;
+                } else if let Some(x) = slot.try_downcast_mut::<i32>() {
+                    *x = value as i32;
+                } else {
+                    return Err(format!("{field}: unsupported type"));
+                }
+                next.sanitize();
+                wh.record(format!("Spec {field}"), spec.clone(), next.clone());
+                *spec = next;
+                Ok(format!("spec {field} = {value}"))
+            }
+            StudioCommand::ListObjects => {
+                let list: Vec<_> = objs
+                    .iter()
+                    .take(300)
+                    .map(|(_, tf, so, up)| serde_json::json!({"id": so.id, "name": so.name, "kind": up.map(|u| u.kind.as_str()), "pos": tf.translation.to_array()}))
+                    .collect();
+                Ok(serde_json::Value::Array(list).to_string())
             }
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));
@@ -340,6 +464,12 @@ mod tests {
                 StudioCommand::ApplyPreset(WorldPreset::MistyDuskLake),
                 StudioCommand::SpawnObject { kind: "pine".into(), x: 1.0, z: -2.0, yaw: 0.5 },
                 StudioCommand::Sculpt { kind: BrushKind::Raise, x: 0.0, z: 0.0, radius: 10.0, strength: 5.0, seconds: 1.0 },
+                StudioCommand::SetGizmo { mode: Some(GizmoMode::Rotate), snap_ground: Some(true), align_normal: None },
+                StudioCommand::SetTransform { id: Some(3), pos: Some(Vec3::new(1.0, 2.0, 3.0)), rot_deg: None, scale: None, drop_to_ground: true },
+                StudioCommand::SetSpec { field: "lake_radius".into(), value: 20.0 },
+                StudioCommand::SelectIds { ids: vec![1, 2], additive: false },
+                StudioCommand::Duplicate { offset: [2.0, 0.0] },
+                StudioCommand::ListObjects,
             ],
             log: vec![],
         };

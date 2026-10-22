@@ -1,0 +1,14 @@
+(
+    name: "Hero Fighter",
+    level: 1,
+    faction: Player,
+    abilities: (str: 18, dex: 14, con: 14, int: 10, wis: 12, cha: 10),
+    hp: 20,
+    ac: 18,
+    saves: (fortitude: 7, reflex: 5, will: 4),
+    speed_feet: 25.0,
+    attack_bonus: 9,
+    weapon: (name: "Longsword", dice: 1, sides: 8, damage_type: Slashing, agile: false),
+    color: (0.25, 0.45, 0.95),
+    scale: 1.0,
+)
