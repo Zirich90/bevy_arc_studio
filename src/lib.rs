@@ -1,3 +1,5 @@
+#[cfg(feature = "pf2e")]
+pub mod actors;
 pub mod arc_core;
 pub mod camera;
 pub mod gizmo_3d;
@@ -81,6 +83,8 @@ impl Plugin for BevyArcStudioPlugin {
                 movement::MovementPlugin,
                 world_io::WorldIoPlugin,
             ));
+        #[cfg(feature = "pf2e")]
+        app.add_plugins(actors::ActorsPlugin);
     }
 }
 

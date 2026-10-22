@@ -221,6 +221,17 @@ fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
             }
         }
     });
+    #[cfg(feature = "pf2e")]
+    {
+        ui.label(egui::RichText::new("RPG (pf2e)").strong().color(TEAL));
+        ui.horizontal_wrapped(|ui| {
+            for (label, kind) in [("+ Spawn Fighter", "actor:hero_fighter"), ("+ Spawn Goblin", "actor:goblin_warrior"), ("+ Spawn Trigger Volume", "trigger")] {
+                if chip(ui, false, label).clicked() {
+                    d.queue.push(Cmd::SpawnObject { kind: kind.into(), x: sx, z: sz, yaw: 0.0 });
+                }
+            }
+        });
+    }
     ui.horizontal(|ui| {
         let mut name = d.studio.glb_name.clone();
         ui.add(egui::TextEdit::singleline(&mut name).hint_text("model.glb in assets/models/").desired_width(190.0));
@@ -320,6 +331,9 @@ fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         let same = cur.clone();
         track_ev(&ev, &mut d.sh, "Inspector edit", &mut cur, same);
     }
+
+    #[cfg(feature = "pf2e")]
+    crate::actors::inspector(ui, d, e);
 
     // PointLight child
     let mut stack = vec![e];

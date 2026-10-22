@@ -48,6 +48,9 @@ pub enum StudioCommand {
     /// Result line: `{"distance_meters","distance_feet","cost_feet","is_reachable"}`.
     QueryPath { from: Vec3, to: Vec3 },
     MoveActor { entity: Entity, to: Vec3 },
+    /// pf2e: spawn `assets/actors/<template>.ron` on the terrain below `pos` (y ignored) with the given faction.
+    #[cfg(feature = "pf2e")]
+    SpawnActorFromTemplate { template: String, pos: Vec3, faction: crate::actors::Faction },
 }
 
 #[derive(Resource, Reflect, Default, Serialize, Deserialize)]
@@ -275,6 +278,18 @@ pub fn execute_commands(
             StudioCommand::MoveActor { entity, to } => {
                 queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_move_actor(w, entity, to));
                 Ok("move queued".into())
+            }
+            #[cfg(feature = "pf2e")]
+            StudioCommand::SpawnActorFromTemplate { template, pos, faction } => {
+                crate::actors::ActorTemplate::load(&template)?;
+                let half = grid.0.size * 0.5;
+                let (x, z) = (pos.x.clamp(-half, half), pos.z.clamp(-half, half));
+                let kind = format!("actor:{template}");
+                let (e, tf) = spawner.spawn(&grid.0, &spec, &kind, x, z, 0.0).ok_or_else(|| format!("cannot spawn '{kind}'"))?;
+                spawner.commands.entity(e).insert(faction);
+                sh.record(format!("Spawn {template}"), vec![ObjState { entity: e, tf, alive: false }], vec![ObjState { entity: e, tf, alive: true }]);
+                sel.set_one(e);
+                Ok(format!("spawned actor {template} ({faction:?}) at ({x:.1}, {z:.1})"))
             }
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));

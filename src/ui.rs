@@ -49,6 +49,18 @@ pub struct UiData<'w, 's> {
     pub objs: Query<'w, 's, (Entity, &'static mut Transform, &'static SceneObject, Option<&'static UserProp>), Without<Deleted>>,
     pub children: Query<'w, 's, &'static Children>,
     pub lights: Query<'w, 's, (&'static mut PointLight, Option<&'static mut NightLight>)>,
+    #[cfg(feature = "pf2e")]
+    pub rpg: Query<
+        'w,
+        's,
+        (
+            Option<&'static crate::actors::Actor>,
+            Option<&'static crate::actors::CharacterSheet>,
+            Option<&'static mut crate::actors::Faction>,
+            Option<&'static crate::actors::Interactable>,
+            Option<&'static mut crate::actors::triggers::TriggerVolume>,
+        ),
+    >,
     pub light_count: Query<'w, 's, (), Or<(With<PointLight>, With<DirectionalLight>)>>,
 }
 
