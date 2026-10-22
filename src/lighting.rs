@@ -138,16 +138,23 @@ fn apply_toggles(
     cam: Query<Entity, With<Camera3d>>,
     sun: Query<Entity, With<Sun>>,
     mut shadow_map: ResMut<DirectionalLightShadowMap>,
+    mut last: Local<Option<(bool, bool, bool, QualityPreset)>>,
 ) {
-    if !spec.is_changed() {
+    // the time-of-day slider mutates WorldSpec every frame; only react to real toggle changes
+    let key = (spec.bloom, spec.reflections, spec.god_rays, spec.quality_preset);
+    if *last == Some(key) {
         return;
     }
-    shadow_map.size = match spec.quality_preset {
+    *last = Some(key);
+    let size = match spec.quality_preset {
         QualityPreset::Low => 1024,
         QualityPreset::Medium => 2048,
         QualityPreset::High => 4096,
         QualityPreset::Ultra => 8192,
     };
+    if shadow_map.size != size {
+        shadow_map.size = size;
+    }
     for e in &cam {
         let mut c = commands.entity(e);
         if spec.bloom { c.insert(Bloom::NATURAL); } else { c.remove::<Bloom>(); }

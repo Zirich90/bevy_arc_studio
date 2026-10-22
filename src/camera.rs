@@ -140,6 +140,19 @@ fn editor_camera_system(
         None => {}
     }
 
+    // arrow keys: move along the ground plane (Up/Down = forward/back, Left/Right = strafe), Shift = faster
+    let kb_blocked = egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false);
+    if ctrl.mode != Some(CamMode::Fly) && !kb_blocked {
+        let ax = |p: KeyCode, n: KeyCode| keys.pressed(p) as i32 as f32 - keys.pressed(n) as i32 as f32;
+        let flat_fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero();
+        let mv = flat_fwd * ax(KeyCode::ArrowUp, KeyCode::ArrowDown) + right * ax(KeyCode::ArrowRight, KeyCode::ArrowLeft);
+        if mv != Vec3::ZERO {
+            let step = mv.normalize() * ctrl.distance.max(5.0) * if shift { 2.0 } else { 0.8 } * dt;
+            ctrl.pivot += step;
+            ctrl.focus = None;
+        }
+    }
+
     // zoom (wheel), cursor-directed when the cursor ray hits the terrain
     if ctrl.mode != Some(CamMode::Fly) && !blocked && scroll.delta.y != 0.0 {
         let notches = match scroll.unit {
