@@ -83,3 +83,6 @@ impl Plugin for BevyArcStudioPlugin {
             ));
     }
 }
+
+#[cfg(feature = "pf2e")]
+pub mod rules;

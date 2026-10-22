@@ -27,3 +27,7 @@ debug = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+[features]
+default = []
+pf2e = []
