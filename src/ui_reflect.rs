@@ -8,7 +8,9 @@ use bevy::reflect::enums::{DynamicEnum, DynamicVariant, VariantInfo};
 use bevy::reflect::{PartialReflect, ReflectMut};
 use bevy_egui::egui;
 
+use crate::operators::{COALESCE_SECS, CompClock, ComponentHistory, flush_comp_history, record_edit, snap};
 use crate::selection::EditorSelection;
+use crate::studio::HistoryRequest;
 use crate::ui::TEAL;
 
 /// Components with dedicated UI or computed every frame.
@@ -33,21 +35,47 @@ pub struct ReflectInspectorPlugin;
 
 impl Plugin for ReflectInspectorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ReflectView>().init_resource::<ReflectEdits>().add_systems(Update, sync_reflect);
+        app.init_resource::<ReflectView>().init_resource::<ReflectEdits>().add_systems(
+            Update,
+            sync_reflect.after(crate::mcp_commands::execute_commands).before(crate::studio::process_history),
+        );
     }
 }
 
 fn sync_reflect(world: &mut World) {
     let registry = world.resource::<AppTypeRegistry>().clone();
-    let edits = std::mem::take(&mut world.resource_mut::<ReflectEdits>().0);
-    {
-        let reg = registry.read();
-        for (e, tid, value) in edits {
-            let Some(rc) = reg.get_type_data::<ReflectComponent>(tid) else { continue };
-            if let Ok(em) = world.get_entity_mut(e) {
-                rc.apply(em, value.as_partial_reflect());
+    // Commit an idle (or about-to-be-undone) coalesced edit; a pending undo/redo waits one frame so the order stack sees it.
+    let now = world.resource::<Time>().elapsed_secs_f64();
+    let (replay_u, replay_r) = std::mem::take(&mut world.resource_mut::<CompClock>().replay);
+    if replay_u || replay_r {
+        let mut req = world.resource_mut::<HistoryRequest>();
+        (req.undo, req.redo) = (replay_u, replay_r);
+    }
+    let (req_u, req_r) = {
+        let r = world.resource::<HistoryRequest>();
+        (r.undo, r.redo)
+    };
+    if world.resource::<ComponentHistory>().is_open() {
+        let idle = now - world.resource::<CompClock>().last_edit > COALESCE_SECS;
+        if idle || req_u || req_r {
+            flush_comp_history(&mut world.resource_mut::<ComponentHistory>());
+            if req_u || req_r {
+                *world.resource_mut::<HistoryRequest>() = HistoryRequest::default();
+                world.resource_mut::<CompClock>().replay = (req_u, req_r);
             }
         }
+    }
+    let edits = std::mem::take(&mut world.resource_mut::<ReflectEdits>().0);
+    for (e, tid, value) in edits {
+        let before = snap(world, e, tid);
+        {
+            let reg = registry.read();
+            let Some(rc) = reg.get_type_data::<ReflectComponent>(tid) else { continue };
+            let Ok(em) = world.get_entity_mut(e) else { continue };
+            rc.apply(em, value.as_partial_reflect());
+        }
+        let after = snap(world, e, tid);
+        record_edit(world, "Edit component", before, after, true);
     }
     let target = world.resource::<EditorSelection>().primary;
     let mut view = ReflectView::default();
@@ -282,7 +310,7 @@ mod tests {
 
     fn app_with_probe() -> (App, Entity) {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins).register_type::<Probe>().init_resource::<EditorSelection>().add_plugins(ReflectInspectorPlugin);
+        app.add_plugins(MinimalPlugins).register_type::<Probe>().init_resource::<EditorSelection>().init_resource::<crate::studio::HistoryRequest>().add_plugins(crate::operators::OperatorsPlugin).add_plugins(ReflectInspectorPlugin);
         let e = app.world_mut().spawn(Probe::default()).id();
         app.world_mut().resource_mut::<EditorSelection>().set_one(e);
         (app, e)

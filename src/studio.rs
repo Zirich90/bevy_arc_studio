@@ -1,4 +1,4 @@
-//! Studio-wide editor state: mode / tab, unified undo order across world, scene and terrain histories, view toggles.
+//! Studio-wide editor state: mode / tab, unified undo order across world, scene, terrain and component histories, view toggles.
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -85,6 +85,7 @@ pub enum HistSrc {
     World,
     Scene,
     Terrain,
+    Comp,
 }
 
 /// Global chronological order of edits across the three histories (what `Undo` / `Redo` act on next).
@@ -92,7 +93,7 @@ pub enum HistSrc {
 pub struct UndoOrder {
     pub stack: Vec<HistSrc>,
     pub redo: Vec<HistSrc>,
-    last: [(usize, usize); 3],
+    last: [(usize, usize); 4],
 }
 
 #[derive(Resource, Default)]
@@ -176,6 +177,7 @@ pub fn process_history(
     mut wh: ResMut<UndoHistory<WorldSpec>>,
     mut sh: ResMut<SceneHistory>,
     mut th: ResMut<TerrainHistory>,
+    mut ch: ResMut<crate::operators::ComponentHistory>,
     mut grid: ResMut<TerrainGrid>,
     terrain: Query<&Mesh3d, With<TerrainMesh>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -200,6 +202,11 @@ pub fn process_history(
                 apply_states(&s, &mut q, &mut commands);
             }
         }
+        HistSrc::Comp => {
+            if let Some(s) = if undo { ch.undo() } else { ch.redo() } {
+                commands.queue(move |w: &mut World| crate::operators::apply_snap(w, &s));
+            }
+        }
         HistSrc::Terrain => {
             if let Some(h) = if undo { th.undo() } else { th.redo() } {
                 if h.len() == grid.0.heights.len() {
@@ -214,9 +221,9 @@ pub fn process_history(
     }
 }
 
-fn track_order(wh: Res<UndoHistory<WorldSpec>>, sh: Res<SceneHistory>, th: Res<TerrainHistory>, mut o: ResMut<UndoOrder>) {
-    let now = [(wh.undo_len(), wh.redo_len()), (sh.undo_len(), sh.redo_len()), (th.undo_len(), th.redo_len())];
-    for (k, src) in [HistSrc::World, HistSrc::Scene, HistSrc::Terrain].into_iter().enumerate() {
+fn track_order(wh: Res<UndoHistory<WorldSpec>>, sh: Res<SceneHistory>, th: Res<TerrainHistory>, ch: Res<crate::operators::ComponentHistory>, mut o: ResMut<UndoOrder>) {
+    let now = [(wh.undo_len(), wh.redo_len()), (sh.undo_len(), sh.redo_len()), (th.undo_len(), th.redo_len()), (ch.undo_len(), ch.redo_len())];
+    for (k, src) in [HistSrc::World, HistSrc::Scene, HistSrc::Terrain, HistSrc::Comp].into_iter().enumerate() {
         let ((u, r), (lu, lr)) = (now[k], o.last[k]);
         if u > lu {
             for _ in lu..u {

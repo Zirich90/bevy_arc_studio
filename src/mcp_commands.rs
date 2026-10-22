@@ -13,6 +13,7 @@ use crate::arc_core::*;
 use crate::camera::EditorCamera;
 use crate::gizmo_3d::{GizmoMode, GizmoState, ObjState, SceneHistory};
 use crate::movement;
+use crate::operators::{self, CommandResults, DEFERRED, Target};
 use crate::props::{SceneObject, UserProp, assets_dir};
 use crate::selection::{Deleted, EditorSelection, object_box};
 use crate::studio::*;
@@ -60,6 +61,17 @@ pub enum StudioCommand {
     SetSpec { field: String, value: f64 },
     /// Result line: JSON array `[{"id","name","kind","pos":[x,y,z]}]` (max 300).
     ListObjects,
+    /// Result data: JSON schema of every operator (`{"operators":[{name,undoable,kind,params}]}`).
+    Describe,
+    /// Result data: selection, per-name counts, and (up to `limit`, default 100, name contains `filter`) hierarchy paths, kinds, bounds, component names.
+    DescribeScene { filter: Option<String>, limit: Option<u32> },
+    /// Patch fields of an existing component; `value` is JSON in reflect-serde form (partial objects merge); undoable.
+    SetComponent { target: Target, component: String, value: String },
+    /// Insert a component by type name (short or full path); `value` JSON or Default; undoable.
+    AddComponent { target: Target, component: String, value: Option<String> },
+    RemoveComponent { target: Target, component: String },
+    /// Move `child` under `parent` (None = root), keeping world position; not undoable.
+    Reparent { child: Target, parent: Option<Target> },
     /// pf2e: spawn `assets/actors/<template>.ron` on the terrain below `pos` (y ignored) with the given faction.
     #[cfg(feature = "pf2e")]
     SpawnActorFromTemplate { template: String, pos: Vec3, faction: crate::actors::Faction },
@@ -99,7 +111,8 @@ pub struct McpCommandsPlugin;
 
 impl Plugin for McpCommandsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<StudioCommandQueue>()
+        app.add_plugins(operators::OperatorsPlugin)
+            .init_resource::<StudioCommandQueue>()
             .register_type::<StudioCommandQueue>()
             .register_type::<StudioCommand>()
             .register_type::<QualityPreset>()
@@ -109,18 +122,19 @@ impl Plugin for McpCommandsPlugin {
 }
 
 /// Run `f` with world access after this system; its result line lands in the command log (`ERR ` prefix on failure).
-fn queue_world_cmd(commands: &mut Commands, f: impl FnOnce(&mut World) -> Result<String, String> + Send + 'static) {
+fn queue_world_cmd(commands: &mut Commands, op: &'static str, f: impl FnOnce(&mut World) -> Result<String, String> + Send + 'static) -> Result<String, String> {
     commands.queue(move |w: &mut World| {
-        let line = f(w).unwrap_or_else(|e| format!("ERR {e}"));
-        w.resource_mut::<StudioState>().status = line.clone();
-        w.resource_mut::<StudioCommandQueue>().log.push(line);
+        let res = f(w);
+        operators::push_result(w, op, res);
     });
+    Ok(DEFERRED.into())
 }
 
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct Extra<'w> {
     gz: ResMut<'w, GizmoState>,
     req: ResMut<'w, HistoryRequest>,
+    results: ResMut<'w, CommandResults>,
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -286,16 +300,13 @@ pub fn execute_commands(
                 Ok(format!("screenshot -> {path}"))
             }
             StudioCommand::SpawnActor { x, z } => {
-                queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_spawn_actor(w, x, z));
-                Ok("spawn actor queued".into())
+                queue_world_cmd(&mut spawner.commands, "SpawnActor", move |w| movement::cmd_spawn_actor(w, x, z))
             }
             StudioCommand::QueryPath { from, to } => {
-                queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_query_path(w, from, to));
-                Ok("path query queued".into())
+                queue_world_cmd(&mut spawner.commands, "QueryPath", move |w| movement::cmd_query_path(w, from, to))
             }
             StudioCommand::MoveActor { entity, to } => {
-                queue_world_cmd(&mut spawner.commands, move |w| movement::cmd_move_actor(w, entity, to));
-                Ok("move queued".into())
+                queue_world_cmd(&mut spawner.commands, "MoveActor", move |w| movement::cmd_move_actor(w, entity, to))
             }
             #[cfg(feature = "pf2e")]
             StudioCommand::SpawnActorFromTemplate { template, pos, faction } => {
@@ -400,6 +411,22 @@ pub fn execute_commands(
                     .collect();
                 Ok(serde_json::Value::Array(list).to_string())
             }
+            StudioCommand::Describe => queue_world_cmd(&mut spawner.commands, "Describe", |w| operators::describe_operators(&w.resource::<AppTypeRegistry>().read())),
+            StudioCommand::DescribeScene { filter, limit } => {
+                queue_world_cmd(&mut spawner.commands, "DescribeScene", move |w| operators::describe_scene(w, filter.as_deref(), limit.unwrap_or(100) as usize))
+            }
+            StudioCommand::SetComponent { target, component, value } => {
+                queue_world_cmd(&mut spawner.commands, "SetComponent", move |w| operators::set_component(w, &target, &component, &value))
+            }
+            StudioCommand::AddComponent { target, component, value } => {
+                queue_world_cmd(&mut spawner.commands, "AddComponent", move |w| operators::add_component(w, &target, &component, value.as_deref()))
+            }
+            StudioCommand::RemoveComponent { target, component } => {
+                queue_world_cmd(&mut spawner.commands, "RemoveComponent", move |w| operators::remove_component(w, &target, &component))
+            }
+            StudioCommand::Reparent { child, parent } => {
+                queue_world_cmd(&mut spawner.commands, "Reparent", move |w| operators::reparent(w, &child, parent.as_ref()))
+            }
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));
                 Ok("save queued (reflect scene)".into())
@@ -442,10 +469,10 @@ pub fn execute_commands(
                 Ok(format!("loaded {path} ({n} objects)"))
             }
         })();
-        let line = match res {
-            Ok(s) => s,
-            Err(e) => format!("ERR {e}"),
-        };
+        if matches!(&res, Ok(s) if s == DEFERRED) {
+            continue;
+        }
+        let line = extra.results.push(&operators::op_name(&c), res);
         studio.status = line.clone();
         queue.log.push(line);
     }
@@ -470,6 +497,12 @@ mod tests {
                 StudioCommand::SelectIds { ids: vec![1, 2], additive: false },
                 StudioCommand::Duplicate { offset: [2.0, 0.0] },
                 StudioCommand::ListObjects,
+                StudioCommand::Describe,
+                StudioCommand::DescribeScene { filter: Some("Pine".into()), limit: None },
+                StudioCommand::SetComponent { target: Target::Path("Camp/Tent#1".into()), component: "Name".into(), value: "\"x\"".into() },
+                StudioCommand::AddComponent { target: Target::Id(4), component: "Visibility".into(), value: None },
+                StudioCommand::RemoveComponent { target: Target::Name("Pine".into()), component: "Visibility".into() },
+                StudioCommand::Reparent { child: Target::Id(1), parent: None },
             ],
             log: vec![],
         };
