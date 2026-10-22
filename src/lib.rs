@@ -11,6 +11,7 @@ pub mod terrain_render;
 pub mod ui;
 pub mod water;
 pub mod mcp_commands;
+pub mod operators;
 pub mod movement;
 pub mod navigation;
 pub mod studio;
