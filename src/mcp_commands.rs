@@ -17,6 +17,7 @@ use crate::selection::{Deleted, EditorSelection, object_box};
 use crate::studio::*;
 use crate::terrain_brush::{BrushKind, BrushState, height_dab, union_rect};
 use crate::terrain_render::{PendingHeights, TerrainGrid, TerrainMesh, update_terrain_region};
+use crate::world_io::{SceneIo, SceneIoQueue, is_reflect_path};
 
 #[derive(Reflect, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum StudioCommand {
@@ -87,7 +88,7 @@ impl Plugin for McpCommandsPlugin {
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-fn execute_commands(
+pub fn execute_commands(
     mut queue: ResMut<StudioCommandQueue>,
     mut spec: ResMut<WorldSpec>,
     mut wh: ResMut<UndoHistory<WorldSpec>>,
@@ -247,6 +248,14 @@ fn execute_commands(
                 }
                 spawner.commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
                 Ok(format!("screenshot -> {path}"))
+            }
+            StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
+                spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));
+                Ok("save queued (reflect scene)".into())
+            }
+            StudioCommand::LoadScene { path } if is_reflect_path(&path) => {
+                spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Load(path)));
+                Ok("load queued (reflect scene)".into())
             }
             StudioCommand::SaveScene { path } => {
                 let objects = users

@@ -1061,11 +1061,49 @@ impl<S: Clone + PartialEq + Send + Sync + 'static> UndoHistory<S> {
     }
 }
 
+// ───────────────────────────── Unit scale (feet ↔ world) ─────────────────────────────
+
+/// Rules are expressed in feet; the world is in metres. `world_per_foot` links them
+/// (`REAL` = exact conversion, `GAME` = 1 ft is 1 world unit, so 5 ft = 5 m).
+#[derive(Resource, Reflect, Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[reflect(Resource)]
+pub struct UnitScale {
+    pub world_per_foot: f32,
+}
+
+impl UnitScale {
+    pub const REAL: Self = Self { world_per_foot: 0.3048 };
+    pub const GAME: Self = Self { world_per_foot: 1.0 };
+
+    pub fn feet_to_world(&self, feet: f32) -> f32 {
+        feet * self.world_per_foot
+    }
+
+    pub fn world_to_feet(&self, world: f32) -> f32 {
+        world / self.world_per_foot
+    }
+}
+
+impl Default for UnitScale {
+    fn default() -> Self {
+        Self::GAME
+    }
+}
+
 // ───────────────────────────── Tests ─────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unit_scale_modes() {
+        assert!((UnitScale::REAL.feet_to_world(5.0) - 1.524).abs() < 1e-5);
+        assert_eq!(UnitScale::GAME.feet_to_world(5.0), 5.0);
+        for s in [UnitScale::REAL, UnitScale::GAME] {
+            assert!((s.world_to_feet(s.feet_to_world(30.0)) - 30.0).abs() < 1e-4);
+        }
+    }
 
     fn small_spec() -> WorldSpec {
         WorldSpec { resolution: 129, erosion_droplets: 0, thermal_iterations: 0, ..WorldSpec::default() }

@@ -64,14 +64,14 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
             }
             vsep(ui);
             let mut path = d.studio.scene_path.clone();
-            ui.add(egui::TextEdit::singleline(&mut path).desired_width(150.0));
+            ui.add(egui::TextEdit::singleline(&mut path).desired_width(190.0));
             if path != d.studio.scene_path {
                 d.studio.scene_path = path.clone();
             }
-            if chip(ui, false, "Save Scene JSON").clicked() {
+            if chip(ui, false, "Save Scene").clicked() {
                 d.queue.push(Cmd::SaveScene { path: path.clone() });
             }
-            if chip(ui, false, "Load Scene JSON").clicked() {
+            if chip(ui, false, "Load Scene").clicked() {
                 d.queue.push(Cmd::LoadScene { path });
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

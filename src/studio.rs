@@ -59,7 +59,7 @@ impl Default for StudioState {
             search: String::new(),
             hide_scatter: true,
             glb_name: String::new(),
-            scene_path: "scenes/arc_scene.json".into(),
+            scene_path: "scenes/arc_scene.scn.json".into(),
             show_water: true,
             show_grass: true,
             toolbar_h: 0.0,

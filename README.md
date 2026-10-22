@@ -14,7 +14,7 @@ English · [Русский](#русский)
 
 - Procedural terrain: domain-warped noise, droplet hydraulic erosion, 5-layer splatmap, Poisson-disk prop scattering.
 - Atmosphere, sun cycle, volumetric fog, water, bloom; 4 world presets and quality presets.
-- Editor: 3D move/rotate/scale gizmo, picking, surface snapping, terrain brushes (6 kinds), inspector, `.glb` import, JSON scene save/load.
+- Editor: 3D move/rotate/scale gizmo, picking, surface snapping, terrain brushes (6 kinds), inspector, `.glb` import, reflect scene save/load (`.scn.json` + `.heights`, extensible via `register_scene_component::<T>()`), feet↔world `UnitScale`.
 - Unified transactional undo/redo (world settings, objects, terrain strokes).
 - AI control: every action is a `StudioCommand` pushed through a reflected resource over `bevy_remote` (BRP), screenshots via `brp_extras/screenshot`. See [SKILL.md](SKILL.md).
 - Pure, unit-tested math core in `src/arc_core.rs`, independent of ECS rendering.

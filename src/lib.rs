@@ -14,12 +14,14 @@ pub mod terrain_brush;
 pub mod ui_hud;
 pub mod ui_inspector;
 pub mod ui_toolbar;
+pub mod world_io;
 
 pub mod prelude {
     pub use crate::BevyArcStudioPlugin;
-    pub use crate::arc_core::{HeightfieldGrid, UndoHistory, WorldSpec};
+    pub use crate::arc_core::{HeightfieldGrid, UndoHistory, UnitScale, WorldSpec};
     pub use crate::mcp_commands::StudioCommandQueue;
     pub use crate::props::SceneObject;
+    pub use crate::world_io::SceneComponentAppExt;
 }
 
 use bevy::diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
@@ -74,6 +76,7 @@ impl Plugin for BevyArcStudioPlugin {
                 studio::StudioPlugin,
                 terrain_brush::TerrainBrushPlugin,
                 mcp_commands::McpCommandsPlugin,
+                world_io::WorldIoPlugin,
             ));
     }
 }
