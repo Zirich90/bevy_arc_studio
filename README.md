@@ -78,6 +78,8 @@ The project was built by an AI agent from independent mathematical specification
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).
 
+Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample Assets.
+
 ---
 
 ## Русский

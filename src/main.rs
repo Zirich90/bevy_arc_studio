@@ -11,10 +11,11 @@ fn main() {
     });
     let plugin = spec.map_or_else(BevyArcStudioPlugin::default, |p| BevyArcStudioPlugin::with_spec(WorldSpec::from_preset(p)));
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window { title: "Bevy ArcStudio".into(), resolution: (1600, 900).into(), ..default() }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin { primary_window: Some(Window { title: "Bevy ArcStudio".into(), resolution: (1600, 900).into(), ..default() }), ..default() })
+                .set(AssetPlugin { file_path: bevy_arc_studio::props::assets_dir().to_string_lossy().into_owned(), ..default() }),
+        )
         .add_plugins(plugin)
         .run();
 }

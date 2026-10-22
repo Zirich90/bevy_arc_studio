@@ -346,10 +346,10 @@ fn build_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut ma
 }
 
 pub fn assets_dir() -> std::path::PathBuf {
-    if let Ok(p) = std::env::var("BEVY_ASSET_ROOT").or_else(|_| std::env::var("CARGO_MANIFEST_DIR")) {
-        return std::path::PathBuf::from(p).join("assets");
-    }
-    std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("assets"))).unwrap_or_else(|| "assets".into())
+    let env = ["BEVY_ASSET_ROOT", "CARGO_MANIFEST_DIR"].into_iter().filter_map(|k| std::env::var(k).ok()).map(|p| std::path::PathBuf::from(p).join("assets"));
+    let cwd = std::env::current_dir().ok().map(|p| p.join("assets"));
+    let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("assets")));
+    env.chain(cwd).chain(exe.clone()).find(|p| p.is_dir()).or(exe).unwrap_or_else(|| "assets".into())
 }
 
 /// Discover `assets/models/*.glb` / `.gltf` and request the first scene of each through the AssetServer.
