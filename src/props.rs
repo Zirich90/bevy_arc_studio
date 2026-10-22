@@ -106,8 +106,17 @@ impl Plugin for PropsPlugin {
             .init_resource::<ModelLibrary>()
             .init_resource::<NextObjectId>()
             .register_type::<UserProp>()
+            .add_observer(strip_model_cameras)
             .add_systems(Startup, (build_assets, load_models).chain())
             .add_systems(Update, (sync_props, animate_flames, animate_sparks, animate_bobbing));
+    }
+}
+
+/// glTF models may embed cameras; only the editor camera may render to the window.
+/// An observer strips them at insertion, before the first extract sees two active cameras.
+fn strip_model_cameras(add: On<Add<Camera>>, editor: Query<(), With<crate::camera::EditorCamera>>, mut commands: Commands) {
+    if !editor.contains(add.entity) {
+        commands.entity(add.entity).remove::<(Camera, Camera3d)>();
     }
 }
 
