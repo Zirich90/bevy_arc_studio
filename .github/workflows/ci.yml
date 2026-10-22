@@ -1,0 +1,13 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bevy system deps
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --message-format=short -q
+      - run: cargo test --message-format=short -q

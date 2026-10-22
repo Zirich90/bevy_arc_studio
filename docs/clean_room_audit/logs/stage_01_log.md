@@ -1,0 +1,12 @@
+# Stage 01 log
+- Time: 2026-10-22T19:11:01+10:00
+- Files: Cargo.toml, .cargo/config.toml, src/{lib,main,arc_core,camera,lighting,scene,ui}.rs, docs/clean_room_audit/prompts/stage_01_prompt.md
+- arc_core: WorldSpec (+4 presets), HeightfieldGrid (warped fBm, lake, camp, path, droplet+thermal erosion, 6-layer splatmap, brushes, raycast), Poisson-disk scatter, gizmo math, UndoHistory<S> transactions. Splatmap has 6 layers (doc 04 table lists sand/gravel/grass/moss/rock/snow), prompt said 5.
+- camera: Orbit (MMB/Alt+LMB), Pan (Shift+MMB), exp zoom (cursor-directed via raycast), fly (RMB+WASD/QE, Shift ramp, wheel speed, damping), Focus F (cursor point; selection AABB not yet available); blocked over egui.
+- lighting: Atmosphere+SunDisk+AtmosphereEnvironmentMapLight+VolumetricFog+SSR+Bloom+DistanceFog+TonyMcMapface, time_of_day sun/moon, auto exposure, night fire 19:30-06:30.
+- DEVIATION: bevy_brp_extras pinned 0.20.0 resolves to 0.20.1 which depends on Bevy 0.19 (type mismatch). Bumped to 0.23.0 (Bevy 0.20).
+- cargo test --message-format=short -q: 6 passed (5 arc_core + 1 lighting), 0 failed
+- cargo check --message-format=short -q: 0 errors
+- Screenshot: docs/screenshots/stage_01_atmosphere.png (brp_extras/screenshot): sky/atmosphere, fog haze, lake, pines, camp, egui panel render without layout bugs. Cosmetic: grass cones oversized, fog slightly flat.
+- Not verified: interactive camera controls, night preset visuals, volumetric god-ray visibility.
+- Verdict: PASS

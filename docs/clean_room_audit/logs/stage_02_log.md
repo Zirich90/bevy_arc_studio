@@ -1,0 +1,13 @@
+# Stage 02 log
+- Time: 2026-10-22T10:15+10:00
+- Files: src/{terrain_render,water,props}.rs (new); scene.rs (lights/camera only), arc_core.rs (ScatterKind::WoodenPier/CampfireSite, pier planner, presets 20.8 / 13.5), lighting.rs, camera.rs (EditorCamera reflected for BRP), main.rs, lib.rs; docs/clean_room_audit/prompts/stage_02_prompt.md; assets/models/ (glb drop folder)
+- terrain_render: indexed mesh, smooth normals, splatmap vertex colours + 2-octave tint jitter; GeoKey change detection -> regenerate heightfield+mesh, bump TerrainVersion; water/props follow on version change.
+- water: depth-tinted mesh over the sub-waterline bbox, 4 analytic waves @30 Hz (CPU), roughness 0.06, reflectance 0.9, Opaque + OpaqueRendererMethod::Deferred so SSR applies (Blend disables SSR; depth tint replaces translucency).
+- props: merged vertex-coloured meshes (4 pine variants x 5 tiers, 5 faceted mossy boulders, blade-clump grass/reeds), WoodenPier (piles to lake bed, deck, bobbing boat, lantern PointLight), CampfireSite (stones, logs, benches, tent, animated flames, 26 sparks, PointLight shadows+VolumetricLight). SceneObject{id,name,category,aabb_half_extents} on every root (registered for reflection). assets/models/*.glb|gltf auto-loaded via AssetServer (WorldAsset) and placed around camp; no sample glb shipped -> loader untested with a real file.
+- BUG FOUND+FIXED (stage 1): Atmosphere was on the camera, so its GlobalTransform (planet centre) followed the camera -> black sky/orange terminator at high sun. Now a separate "Planet" entity at (0,-R,0).
+- Fog volume density now follows spec.fog_density; day ambient raised.
+- cargo check --message-format=short -q: 0 errors; cargo test: 6 passed
+- Screenshots (brp_extras/screenshot): docs/screenshots/stage_02_dusk_lake.png (20.8: pier+lantern glow+boat, lantern reflected in water via SSR, campfire glowing in clearing, mist), docs/screenshots/stage_02_alpine_noon.png (13.5: lake ripples, pier, mountain slope)
+- Viewed both: pines on land only, pier at shore, fire bright at dusk, no layout bugs.
+- Known gaps: mountain/forest reflections in water barely visible at noon (SSR grazing, only far-shore sliver); fire is small in the dusk frame; moss/foam colours uncalibrated; terrain rebuild is synchronous (hitch on geometry edits); camera set via ARC_CAM env (dev aid).
+- Verdict: PASS (with gaps above)

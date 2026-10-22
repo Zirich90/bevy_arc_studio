@@ -1,0 +1,29 @@
+[package]
+name = "bevy_arc_studio"
+version = "0.1.0"
+edition = "2024"
+resolver = "3"
+license = "MIT OR Apache-2.0"
+description = "AI-First Procedural 3D Environment Studio & Super GUI for Bevy 0.20"
+
+[dependencies]
+bevy = { version = "0.20.0", features = [
+    "dynamic_linking",
+    "bevy_remote",
+    "bevy_feathers",
+    "free_camera",
+    "pan_orbit_camera",
+] }
+bevy_egui = "0.43.1"
+bevy_brp_extras = "0.23.0" # CLAUDE.md pinned 0.20.0, but 0.20.x targets Bevy 0.19; 0.23 targets Bevy 0.20
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+noise = "0.9"
+rand = "0.8"
+
+[profile.dev]
+opt-level = 1
+debug = 1
+
+[profile.dev.package."*"]
+opt-level = 3

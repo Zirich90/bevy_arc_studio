@@ -1,0 +1,13 @@
+# Stage 03 log
+- Time: 2026-10-22T10:35+10:00
+- Files: src/selection.rs, src/gizmo_3d.rs (new); arc_core.rs (+combine_selection, normalize_rect, rect_contains, surface_align_rotation, yaw_of, scale_factor, dist_point_segment, point_in_quad + test); ui.rs (tool/space/snap/align controls); props.rs/lighting.rs (Clone derives for entity cloning); lib.rs, main.rs; docs/clean_room_audit/prompts/stage_03_prompt.md
+- selection: MeshPickingPlugin (require_markers; Pickable on meshes under a SceneObject, MeshPickingCamera on editor camera); PointerClick observer climbs ChildOf to SceneObject root; marquee (4 px threshold, Shift union / Ctrl toggle) via egui overlay; AABB wireframe + corner brackets (HDR cyan, bloom glow) via SelectionGizmos group.
+- gizmo_3d: Q/W/E/R modes, X World/Local, constant size = calc_handle_size * 2 (visual); Move = 3 axes+cones, 3 plane quads (XZ/XY/YZ), centre; axis_drag_delta + grab_offset, plane_drag_point (grazing rejected), screen fallback in dead zone; Rotate = 3 rings, accumulated wrapped atan2 delta, 15 deg on Ctrl, tangent drag when edge-on; Scale = axis cubes + uniform centre. Surface snap (Shift or toggle) via HeightfieldGrid::raycast + optional Align to Normal.
+- Undo: UndoHistory<Vec<ObjState>> (begin/update_preview/commit per drag); Ctrl+D (linked entity clone), Delete (soft delete, undoable), Ctrl+Z / Ctrl+Y; Esc cancels a drag.
+- Deviation: pivot is on the object base, so snap uses bottom offset 0 (aabb_half_extents.y only used for box centre); +y would float trees.
+- Note: object undo (Ctrl+Z) is a separate history from the WorldSpec Undo/Redo buttons.
+- cargo check --message-format=short -q: 0 errors; cargo test: 7 passed
+- Screenshots: docs/screenshots/stage_03_gizmo.png (CampfireSite selected, Move gizmo: 3 arrows, 3 plane quads, centre, AABB box), stage_03_gizmo_drag.png (X-axis drag via BRP mouse moved the camp), stage_03_undo.png (Ctrl+Z restored it)
+- Viewed all; gizmo drawn on top of terrain, no layout bugs. Not exercised by hand: Rotate/Scale drags, marquee, Ctrl+D/Delete, surface snap (code paths compiled only).
+- Known gaps: corner brackets are short and hard to see on very large boxes; gizmo lags one frame after undo; brp_launch binary start fails (dynamic_linking), app run via cargo run.
+- Verdict: PASS (with gaps above)
