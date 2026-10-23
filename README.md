@@ -4,6 +4,8 @@
 
 English · [Русский](#русский)
 
+Originally created to build levels for an upcoming RPG, it combines procedural terrain generation with manual scene editing and a remote command protocol (`bevy_remote`), so worlds can be built by hand or by AI agents (such as Claude).
+
 ![Editor](docs/screenshots/stage_04_editor_global.png)
 
 | Misty dusk lake | Sunny alpine noon |
@@ -66,13 +68,11 @@ The project was built by an AI agent from independent mathematical specification
 - Stage prompts: [00](docs/clean_room_audit/prompts/stage_00_prompt.md) · [01](docs/clean_room_audit/prompts/stage_01_prompt.md) · [02](docs/clean_room_audit/prompts/stage_02_prompt.md) · [03](docs/clean_room_audit/prompts/stage_03_prompt.md) · [04](docs/clean_room_audit/prompts/stage_04_prompt.md) · [05](docs/clean_room_audit/prompts/stage_05_prompt.md)
 - Flight logs: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
 
-## Project Status & Maintenance (As-Is Disclaimer)
+## Project Status & Contributing
 
-> **Important:** This project is provided **"AS IS"** under the MIT / Apache-2.0 licenses.
->
-> It was developed as a clean-room AI-engineered foundation and is now gifted to the open-source community. Due to primary engineering workload, the author **does not actively maintain** this repository, provide user support, or commit to roadmap features (author participation will be rare, occasional, and mostly detached).
->
-> **Forks, community maintenance, and pull requests are warmly encouraged!** Feel free to fork and build upon this foundation.
+**Bevy ArcStudio** is being developed alongside my own upcoming RPG. My primary focus is building the game and evolving this editor to fit its needs, so I can't promise a strict release schedule or full-time support.
+
+However, **forks, issues, and Pull Requests are very welcome!** I will gladly review and merge useful community contributions whenever time permits. Feel free to use this repository as a foundation for your own Bevy tools or games.
 
 ## License
 
@@ -85,6 +85,8 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 ## Русский
 
 **ИИ-ориентированная студия процедурной 3D-среды и визуальный редактор для Bevy 0.20.**
+
+Проект создавался как рабочий инструмент для уровней моей будущей RPG. Он сочетает процедурную генерацию и ручное редактирование сцены с протоколом `bevy_remote`, поэтому локации можно собирать и мышкой, и с помощью ИИ-агентов (например, Claude).
 
 ![Редактор](docs/screenshots/stage_04_editor_global.png)
 
@@ -129,13 +131,9 @@ app.add_plugins(BevyArcStudioPlugin::default());
 - Промпты этапов: [stage_00..05_prompt.md](docs/clean_room_audit/prompts/stage_05_prompt.md)
 - Бортовые журналы: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
 
-### Статус проекта: «Как есть» (As-Is) и сообщество
+### Статус проекта и участие
 
-> **Важно:** Проект передаётся сообществу **«КАК ЕСТЬ» (AS IS)** под лицензиями MIT / Apache-2.0.
->
-> Я отдаю этот рабочий фундамент в руки опенсорса как законченный продукт. Из-за плотной загрузки на основной работе я **не планирую активно поддерживать репозиторий**, решать проблемы совместимости по запросам или вести регулярную разработку (моё участие будет крайне редким и отдалённым).
->
-> **Форки, пулл-реквесты и развитие проекта силами комьюнити только приветствуются!** Смело забирайте проект к себе и развивайте его дальше.
+В первую очередь я развиваю этот инструмент под задачи своей игры, поэтому уделяю репозиторию время по мере возможности. Тем не менее, я открыт к идеям сообщества: **форки и пулл-реквесты приветствуются**. Буду рад смотреть и вливать полезные доработки по мере свободного времени!
 
 Лицензия: [MIT](LICENSE-MIT) или [Apache-2.0](LICENSE-APACHE).
 
