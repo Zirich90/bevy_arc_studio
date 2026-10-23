@@ -12,3 +12,9 @@ Algorithm: SHA-256
 | 05_transactional_undo_and_mcp_api.md | `b8e698dc1008344f84d369a496d0b4de95f5ddea74b742d2b9dab5da64be41cc` |
 
 Donor temp folder `.tmp_donor_ref` removed after hashing.
+
+## Redaction of the Stage 0 transcript (2026-10-24)
+
+`raw_transcripts/stage_00_session.jsonl` originally contained raw donor C# reference text inside tool output (7 strings, 27021 bytes). These were replaced by one-line stubs carrying the byte length and SHA-256 of each omitted string, by `redact_stage00.py` in this folder. Prompts, timestamps, model reasoning, tool calls and the writes of `docs/architecture/*.md` are untouched. The original is kept privately outside the repository (original SHA-256 `9e3ca876d783ea2b38f7cd779b417768a8080651c5997759b105b586bf6def69`). Git history was rewritten so the unredacted blob is no longer present.
+
+Redacted transcript SHA-256: `2ae1ae7f805c799a472d604b04b8164b681a201da7fa743d9a8c1dbb2d6c2913`
