@@ -13,8 +13,10 @@ Algorithm: SHA-256
 
 Donor temp folder `.tmp_donor_ref` removed after hashing.
 
-## Redaction of the Stage 0 transcript (2026-10-24)
+## Process and boundary (facts supported by the recorded data)
 
-`raw_transcripts/stage_00_session.jsonl` originally contained raw donor C# reference text inside tool output (7 strings, 27021 bytes). These were replaced by one-line stubs carrying the byte length and SHA-256 of each omitted string, by `redact_stage00.py` in this folder. Prompts, timestamps, model reasoning, tool calls and the writes of `docs/architecture/*.md` are untouched. The original is kept privately outside the repository (original SHA-256 `9e3ca876d783ea2b38f7cd779b417768a8080651c5997759b105b586bf6def69`). Git history was rewritten so the unredacted blob is no longer present.
-
-Redacted transcript SHA-256: `2ae1ae7f805c799a472d604b04b8164b681a201da7fa743d9a8c1dbb2d6c2913`
+- **Stage 0 (analysis)** ran 2026-10-22 08:34-08:38 UTC in session `d9322c13-...`. It downloaded 10 reference-only donor files into `.tmp_donor_ref/`, extracted formulas and algorithm descriptions into `docs/architecture/01..05.md` (a sixth spec, `06_tactical_rpg_framework.md`, was added later), hashed the specs (table above) and deleted `.tmp_donor_ref/`.
+- **Stages 1-5 (Rust implementation)** ran as separate Claude Code sessions, each with its own session id and a later start time (`e72921ec` 08:40, `d0307e82` 09:21, `0aa1fa46` 10:18, `0f958162` 10:35, `8c334f8a` 10:54). Their recorded tool calls contain no access to `.tmp_donor_ref`, the donor repository or any `.cs` file; spec reads are of `docs/architecture/*.md` only (checked on the published transcripts `raw_transcripts/stage_01..05`).
+- **What this does not claim.** The specs were produced inside this repository by the same author and model family as the later stages; there is no organizational separation between "dirty" and "clean" roles, only a process separation (new sessions, donor files deleted before Stage 1, code written against the specs). Stages 6-11 and the model-import work have logs but no raw transcripts in this repository.
+- **Stage 0 raw transcript withheld.** `stage_00_session.jsonl` contains excerpts of the donor C# source (command output) and is therefore not published. It is kept in a private archive outside this repository. Size: 955650 bytes; SHA-256: `9e3ca876d783ea2b38f7cd779b417768a8080651c5997759b105b586bf6def69`. The Stage 0 prompt and log remain in `prompts/stage_00_prompt.md` and `logs/stage_00_log.md`.
+- Git history was rewritten (2026-10-24) to drop that transcript; commit order and dates of the remaining history are preserved.
