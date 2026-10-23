@@ -1,144 +1,106 @@
 # Bevy ArcStudio
 
-**AI-first procedural 3D environment studio & editor GUI for Bevy 0.20** · `MIT OR Apache-2.0`
+**3D environment studio, procedural terrain generator & level editor for Bevy 0.20**  
+`MIT OR Apache-2.0` · [Русское описание ниже](#-русский)
 
-English · [Русский](#русский)
+![Hero — misty dusk lake and procedural pines](docs/images/01_hero_dusk.png)
 
-![Editor](docs/screenshots/stage_04_editor_global.png)
-
-| Misty dusk lake | Sunny alpine noon |
-|---|---|
-| ![Dusk lake](docs/screenshots/stage_02_dusk_lake.png) | ![Alpine noon](docs/screenshots/stage_02_alpine_noon.png) |
-
-## Features
-
-- Procedural terrain: domain-warped noise, droplet hydraulic erosion, 5-layer splatmap, Poisson-disk prop scattering.
-- Atmosphere, sun cycle, volumetric fog, water, bloom; 4 world presets and quality presets.
-- Editor: 3D move/rotate/scale gizmo, picking, surface snapping, terrain brushes (6 kinds), inspector, `.glb` import, reflect scene save/load (`.scn.json` + `.heights`, extensible via `register_scene_component::<T>()`), feet↔world `UnitScale`.
-- Unified transactional undo/redo (world settings, objects, terrain strokes).
-- AI control: every action is a `StudioCommand` pushed through a reflected resource over `bevy_remote` (BRP), screenshots via `brp_extras/screenshot`. See [SKILL.md](SKILL.md).
-- Pure, unit-tested math core in `src/arc_core.rs`, independent of ECS rendering.
-
-## Hotkeys
-
-| Key | Action |
-|---|---|
-| `Q` / `W` / `E` / `R` | Select / Move / Rotate / Scale |
-| `F` | Focus selected object |
-| `Shift` (while dragging) | Surface Snap |
-| `Tab` | Toggle Play / Editor |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
-| RMB + `WASD` | Fly mode |
-| `Delete` | Delete selected |
-
-![Gizmo](docs/screenshots/stage_03_gizmo.png)
-
-## Quick start
-
-```bash
-./run.sh            # Windows: run.bat
-./run.sh dusk       # presets: dusk | noon | night | dawn
-```
-
-Embed into your game (Bevy 0.20, `DefaultPlugins` first):
-
-```rust
-use bevy::prelude::*;
-use bevy_arc_studio::prelude::*;
-
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(BevyArcStudioPlugin::default())
-        .run();
-}
-```
-
-The prelude exports `BevyArcStudioPlugin`, `WorldSpec`, `HeightfieldGrid`, `SceneObject`, `StudioCommandQueue`, `UndoHistory`.
-Use `BevyArcStudioPlugin::with_spec(WorldSpec::from_preset(..))` to start from a preset.
-
-## Clean-Room AI Engineering & Provenance Audit
-
-The project was built by an AI agent from independent mathematical specifications, with every stage audited.
-
-- Manifest with SHA-256 hashes of the specs: [CLEAN_ROOM_PROOF.md](docs/clean_room_audit/CLEAN_ROOM_PROOF.md)
-- Math specifications: [01](docs/architecture/01_viewport_camera_math.md) · [02](docs/architecture/02_3d_gizmo_projection.md) · [03](docs/architecture/03_surface_snapping_and_picking.md) · [04](docs/architecture/04_procedural_terrain_and_splatmap.md) · [05](docs/architecture/05_transactional_undo_and_mcp_api.md)
-- Stage prompts: [00](docs/clean_room_audit/prompts/stage_00_prompt.md) · [01](docs/clean_room_audit/prompts/stage_01_prompt.md) · [02](docs/clean_room_audit/prompts/stage_02_prompt.md) · [03](docs/clean_room_audit/prompts/stage_03_prompt.md) · [04](docs/clean_room_audit/prompts/stage_04_prompt.md) · [05](docs/clean_room_audit/prompts/stage_05_prompt.md)
-- Flight logs: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
-
-## Project Status & Maintenance (As-Is Disclaimer)
-
-> **Important:** This project is provided **"AS IS"** under the MIT / Apache-2.0 licenses.
->
-> It was developed as a clean-room AI-engineered foundation and is now gifted to the open-source community. Due to primary engineering workload, the author **does not actively maintain** this repository, provide user support, or commit to roadmap features (author participation will be rare, occasional, and mostly detached).
->
-> **Forks, community maintenance, and pull requests are warmly encouraged!** Feel free to fork and build upon this foundation.
-
-## License
-
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).
-
-Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample Assets.
+**Bevy ArcStudio** is a lightweight 3D world-building studio and scene editor built on **Bevy 0.20** and `bevy_egui`. Originally created to build levels for an upcoming RPG, it combines procedural terrain generation (with droplet hydraulic erosion) and manual scene editing with a remote command protocol (`bevy_remote`) so scenes can be built both by hand and via AI agents (such as Claude).
 
 ---
 
-## Русский
+## Highlights
 
-**ИИ-ориентированная студия процедурной 3D-среды и визуальный редактор для Bevy 0.20.**
+- **Procedural Terrain & Erosion:** Domain-warped noise, droplet hydraulic erosion, thermal relaxation, 5-layer automatic splatmap (shoreline sand, grass, dirt, rock, snow), and Poisson-disk prop scattering.
+- **Atmosphere & Environment:** Dynamic sun cycle, sky & volumetric fog, lake water plane with shore foam, bloom, plus instant world presets (`dusk`, `noon`, `night`, `dawn`) and quality tiers (`low`, `med`, `high`, `ultra`).
+- **Interactive 3D Editor:**
+  - 3D **Move / Rotate / Scale** gizmo with ray-plane & ray-circle intersection math.
+  - **Surface Snapping:** Raycast against the heightfield with analytical normal alignment.
+  - **6 Terrain Brushes:** Raise, Lower, Smooth, Flatten, Noise, and local Erosion.
+  - **Scene Management:** `.glb` asset import, entity inspector, and reflection-based save/load (`.scn.json` + binary `.heights`), easily extensible via `register_scene_component::<T>()`.
+  - **Transactional Undo/Redo:** Unified history stack covering world settings, object transforms, and terrain brush strokes.
+- **AI & Remote Control Ready (`bevy_remote`):** Every editor action is a `StudioCommand` exposed over Bevy Remote Protocol (BRP) alongside `brp_extras/screenshot`. You can connect an LLM agent (like Claude Code) to inspect, sculpt, populate, and screenshot levels live. See [`SKILL.md`](SKILL.md) for the protocol specification.
 
-![Редактор](docs/screenshots/stage_04_editor_global.png)
+| Editor UI (`bevy_egui` + 3D gizmo) | Sunny Noon Preset | Midnight Camp Preset |
+| :---: | :---: | :---: |
+| ![Editor UI](docs/images/02_editor_ui.png) | ![Noon](docs/images/03_noon_lake.png) | ![Night](docs/images/04_night_camp.png) |
 
-### Возможности
+---
 
-- Процедурный рельеф: domain warping, капельная гидравлическая эрозия, 5-слойный splatmap, Poisson-Disk рассадка объектов.
-- Атмосфера, цикл солнца, объёмный туман, вода, bloom; 4 пресета мира и пресеты качества.
-- Редактор: 3D-гизмо (перенос/поворот/масштаб), пикинг, Surface Snap, 6 кистей рельефа, инспектор, импорт `.glb`, сохранение/загрузка сцены в JSON.
-- Единый транзакционный Undo/Redo (настройки мира, объекты, мазки рельефа).
-- Управление ИИ-агентами: команды `StudioCommand` через рефлектируемый ресурс по `bevy_remote` (BRP), скриншоты через `brp_extras/screenshot`. См. [SKILL.md](SKILL.md).
-- Чистое математическое ядро `src/arc_core.rs` с юнит-тестами, без зависимости от ECS-рендера.
+## Quick Start
 
-### Горячие клавиши
-
-| Клавиша | Действие |
-|---|---|
-| `Q` / `W` / `E` / `R` | Выбор / Перенос / Поворот / Масштаб |
-| `F` | Фокус на выбранном объекте |
-| `Shift` (при перетаскивании) | Surface Snap |
-| `Tab` | Play / Editor |
-| `Ctrl+Z` / `Ctrl+Y` | Отмена / Повтор |
-| ПКМ + `WASD` | Режим полёта (Fly) |
-| `Delete` | Удалить выбранное |
-
-### Быстрый старт
+Requires **Rust 1.85+** (2024 edition) and a GPU supporting Vulkan, Metal, or DX12.
 
 ```bash
-./run.sh            # Windows: run.bat
-./run.sh noon       # пресеты: dusk | noon | night | dawn
+# Run in release mode (recommended for smooth hydraulic erosion & rendering)
+cargo run --release
+
+# Launch with specific world & quality presets
+cargo run --release -- --preset noon --quality high --seed 42
+
+# Run unit tests for the math & terrain core
+cargo test
 ```
 
-Подключение к своей игре одной строкой (после `DefaultPlugins`):
+### CLI Options
 
-```rust
-app.add_plugins(BevyArcStudioPlugin::default());
-```
+| Flag | Values | Default |
+| :--- | :--- | :--- |
+| `--preset <NAME>` | `dusk`, `noon`, `night`, `dawn` | `dusk` |
+| `--quality <TIER>` | `low`, `med`, `high`, `ultra` | `high` |
+| `--seed <U32>` | Any `u32` integer | `1337` |
+| `--load <PATH>` | Path to `.scn.json` | — |
+| `--headless-smoke` | Run 5 ticks and exit (CI check) | off |
 
-### Clean-Room AI Engineering & Provenance Audit (аудит происхождения)
+### Controls & Hotkeys
 
-- Манифест со слепками SHA-256 спецификаций: [CLEAN_ROOM_PROOF.md](docs/clean_room_audit/CLEAN_ROOM_PROOF.md)
-- Математические спецификации: [docs/architecture/01..05](docs/architecture/01_viewport_camera_math.md)
-- Промпты этапов: [stage_00..05_prompt.md](docs/clean_room_audit/prompts/stage_05_prompt.md)
-- Бортовые журналы: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
+| Input | Action |
+| :--- | :--- |
+| `Tab` | Toggle **Editor** / **Play** mode (hides UI) |
+| `Q` / `W` / `E` / `R` | Select / Move / Rotate / Scale gizmo modes |
+| `F` / `Delete` | Focus camera on selected / Delete selected entity |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo (settings, objects, terrain strokes) |
+| `F5` / `F9` | Quick-save / Quick-load (`scenes/arc_scene.json`) |
+| `F12` | Save clean screenshot to `screenshots/` |
+| `RMB + WASD/QE` | Fly camera (`Shift` for speed boost) |
+| `Alt + LMB` / `MMB` / `Wheel` | Orbit / Pan / Zoom camera |
 
-### Статус проекта: «Как есть» (As-Is) и сообщество
+---
 
-> **Важно:** Проект передаётся сообществу **«КАК ЕСТЬ» (AS IS)** под лицензиями MIT / Apache-2.0.
->
-> Я отдаю этот рабочий фундамент в руки опенсорса как законченный продукт. Из-за плотной загрузки на основной работе я **не планирую активно поддерживать репозиторий**, решать проблемы совместимости по запросам или вести регулярную разработку (моё участие будет крайне редким и отдалённым).
->
-> **Форки, пулл-реквесты и развитие проекта силами комьюнити только приветствуются!** Смело забирайте проект к себе и развивайте его дальше.
+## Architecture & Layout
 
-Лицензия: [MIT](LICENSE-MIT) или [Apache-2.0](LICENSE-APACHE).
+The core mathematical routines are decoupled from ECS rendering into a pure, unit-tested module so you can easily reuse or adapt them in your own Bevy projects:
 
-## 💖 Support / Донаты
-- 🇷🇺 **Из России (СБП / Карты):** [CloudTips](https://pay.cloudtips.ru/p/429760d6)
-- 🌍 **International (USDT Polygon):** `0xF5A1a9C39626C99AB4A8e92c8c06ccF9F5109dd5`
+- `src/arc_core.rs` — Pure math & algorithms: value/FBM noise, domain warping, droplet hydraulic erosion, splatmap weights, Poisson disk sampling, gizmo ray geometry, surface snap, `UnitScale` (feet ↔ meters), and the `UndoStack` state machine.
+- `src/main.rs` — Bevy 0.20 application, PBR materials, water & sky setup, 3D gizmos, `bevy_egui` panels, and the `StudioCommand` remote dispatcher.
+- `SKILL.md` — Documentation for controlling the editor externally over JSON-RPC (`bevy_remote` on `127.0.0.1:15702`).
+- `docs/clean_room_audit/` — Mathematical specifications (`01`–`05`) and design notes used to build the core systems.
+
+---
+
+## Project Status & Contributing
+
+**Bevy ArcStudio** is being developed alongside my own upcoming RPG. My primary focus is building the game and evolving this engine/editor to fit its needs, so I cannot promise a strict release schedule or full-time support.
+
+However, **forks, issues, and Pull Requests are very welcome!** I will gladly review and merge useful community contributions and improvements whenever time permits. Feel free to use this repository as a foundation for your own Bevy tools or games.
+
+---
+
+## 🇷🇺 Русский
+
+**Bevy ArcStudio** — 3D-студия окружения, генератор процедурного ландшафта и редактор уровней на **Bevy 0.20** (`MIT OR Apache-2.0`).
+
+Проект создавался как рабочий инструмент для разработки уровней моей будущей RPG. Он сочетает ручное редактирование сцены с процедурной генерацией и поддержкой протокола `bevy_remote` (BRP) — это позволяет собирать локации как вручную мышкой, так и с помощью ИИ-агентов (например, Claude), которые могут отправлять команды в запущенный редактор и видеть результат через скриншоты.
+
+### Основные возможности
+- **Террейн и эрозия:** FBM-шум с доменным искажением, капельная гидравлическая эрозия, 5-слойный сплатмап (песок, трава, грунт, скалы, снег) и рассадка объектов по алгоритму диска Пуассона.
+- **Атмосфера и вода:** динамический цикл солнца, туман, вода с береговой пеной, bloom, 4 пресета времени суток (`dusk`, `noon`, `night`, `dawn`) и пресеты графики (`low`..`ultra`).
+- **Редактор:** 3D-гизмо (перемещение, вращение, масштаб), прилипание объектов к рельефу по нормали (Surface Snap), 6 скульптурных кистей для террейна, импорт `.glb`, сохранение и загрузка сцен через `Reflect` (`.scn.json` + `.heights`), а также единый стек `Undo/Redo`.
+- **Управление через ИИ (`bevy_remote`):** каждое действие в редакторе представлено как `StudioCommand`. Подробности подключения агентов — в [`SKILL.md`](SKILL.md).
+
+### Статус проекта и участие
+В первую очередь я развиваю этот инструмент под задачи своей игры, поэтому уделяю репозиторию время по мере возможности. Тем не менее, я открыт к идеям сообщества: **форки и пулл-реквесты приветствуются** — буду рад смотреть и вливать полезные доработки по мере свободного времени!
+
+## License
+
+Dual-licensed under **MIT** or **Apache-2.0**, at your option.
