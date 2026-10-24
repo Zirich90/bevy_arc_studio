@@ -1,6 +1,7 @@
 //! Procedural prop forge (pines, boulders, reeds, grass, pier, campsite) + auto-loading of `assets/models/*.glb`.
 
 use std::f32::consts::{FRAC_PI_2, TAU};
+use std::sync::Arc;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::{NotShadowCaster, VolumetricLight};
@@ -23,9 +24,9 @@ pub enum ObjectCategory {
     Structure,
     Camp,
     Model,
-    /// pf2e actor (NPC / hero).
+    /// Game character (NPC / hero) provided by a rules plugin.
     Actor,
-    /// pf2e trigger volume.
+    /// Gameplay trigger volume provided by a rules plugin.
     Trigger,
     /// Modular level tile (`LevelTile`); navigation footprints come from the tile, not the category.
     Level,
@@ -99,6 +100,56 @@ pub struct ModelLibrary {
     pub models: Vec<(String, Handle<WorldAsset>)>,
 }
 
+/// Context handed to a [`SpawnKinds`] handler: where to put the object and the asset stores to build it from.
+pub struct SpawnCtx<'a, 'w, 's> {
+    pub commands: &'a mut Commands<'w, 's>,
+    pub meshes: &'a mut Assets<Mesh>,
+    pub mats: &'a mut Assets<StandardMaterial>,
+    pub server: &'a AssetServer,
+    /// Spawn transform (terrain point + yaw).
+    pub tf: Transform,
+    /// Id reserved for this object's `SceneObject`.
+    pub id: u32,
+}
+
+impl SpawnCtx<'_, '_, '_> {
+    /// Selectable root component for the object this handler spawns.
+    pub fn scene_object(&self, name: &str, category: ObjectCategory, half: Vec3) -> SceneObject {
+        SceneObject { id: self.id, name: name.to_string(), category, aabb_half_extents: half }
+    }
+}
+
+pub type SpawnHandler = Arc<dyn Fn(&mut SpawnCtx<'_, '_, '_>, &str) -> Option<Entity> + Send + Sync>;
+
+/// Spawn handlers for `UserProp::kind` strings the editor does not know itself (`SpawnObject { kind }`).
+/// A key ending in `:` matches by prefix (`"actor:"` handles `"actor:hero_fighter"`), any other key matches exactly.
+#[derive(Resource, Default, Clone)]
+pub struct SpawnKinds(Vec<(&'static str, SpawnHandler)>);
+
+impl SpawnKinds {
+    pub fn register(&mut self, key: &'static str, handler: SpawnHandler) {
+        match self.0.iter_mut().find(|(k, _)| *k == key) {
+            Some(e) => e.1 = handler,
+            None => self.0.push((key, handler)),
+        }
+    }
+
+    pub fn find(&self, kind: &str) -> Option<SpawnHandler> {
+        self.0.iter().find(|(k, _)| if k.ends_with(':') { kind.starts_with(k) } else { kind == *k }).map(|(_, h)| h.clone())
+    }
+}
+
+pub trait SpawnKindAppExt {
+    fn register_spawn_kind(&mut self, key: &'static str, handler: impl Fn(&mut SpawnCtx<'_, '_, '_>, &str) -> Option<Entity> + Send + Sync + 'static) -> &mut Self;
+}
+
+impl SpawnKindAppExt for App {
+    fn register_spawn_kind(&mut self, key: &'static str, handler: impl Fn(&mut SpawnCtx<'_, '_, '_>, &str) -> Option<Entity> + Send + Sync + 'static) -> &mut Self {
+        self.world_mut().get_resource_or_insert_with(SpawnKinds::default).register(key, Arc::new(handler));
+        self
+    }
+}
+
 pub struct PropsPlugin;
 
 impl Plugin for PropsPlugin {
@@ -106,6 +157,7 @@ impl Plugin for PropsPlugin {
         app.register_type::<SceneObject>()
             .register_type::<ObjectCategory>()
             .init_resource::<ModelLibrary>()
+            .init_resource::<SpawnKinds>()
             .init_resource::<NextObjectId>()
             .register_type::<UserProp>()
             .add_observer(strip_model_cameras)
@@ -704,6 +756,7 @@ pub fn spawn_user_prop(
     meshes: &mut Assets<Mesh>,
     mats: &mut Assets<StandardMaterial>,
     server: &AssetServer,
+    kinds: &SpawnKinds,
 ) -> Option<(Entity, Transform)> {
     let mut cx = Ctx { grid, spec, next_id: id - 1 };
     let rot = Quat::from_rotation_y(yaw);
@@ -756,21 +809,12 @@ pub fn spawn_user_prop(
             let scene = server.load(GltfAssetLabel::Scene(0).from_asset(model_asset_path(file)));
             (commands.spawn((Name::new(stem), o, WorldAssetRoot(scene), tf)).id(), tf)
         }
-        #[cfg(feature = "pf2e")]
-        k if k.starts_with("actor:") => {
-            let name = &k[6..];
-            let t = crate::actors::ActorTemplate::load(name).ok()?;
+        k => {
+            let handler = kinds.find(k)?;
             let tf = mul_tf(pos, rot);
-            let (_, so) = cx.obj(&t.name, ObjectCategory::Actor, Vec3::splat(1.0));
-            (crate::actors::spawn_actor(commands, meshes, mats, so, name, &t, tf), tf)
+            let mut sc = SpawnCtx { commands: &mut *commands, meshes: &mut *meshes, mats: &mut *mats, server, tf, id };
+            (handler(&mut sc, k)?, tf)
         }
-        #[cfg(feature = "pf2e")]
-        "trigger" => {
-            let tf = mul_tf(pos, rot);
-            let (_, so) = cx.obj("TriggerVolume", ObjectCategory::Trigger, Vec3::splat(1.0));
-            (crate::actors::triggers::spawn_trigger(commands, meshes, mats, so, tf, Default::default()), tf)
-        }
-        _ => return None,
     };
     commands.entity(e).remove::<PropRoot>().insert(UserProp { kind: kind.to_string() });
     Some((e, tf))

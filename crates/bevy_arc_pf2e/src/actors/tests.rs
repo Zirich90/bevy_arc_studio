@@ -4,11 +4,11 @@ use bevy::ecs::system::RunSystemOnce;
 
 use super::triggers::*;
 use super::*;
-use crate::arc_core::{UnitScale, WorldSpec};
-use crate::props::UserProp;
-use crate::selection::Deleted;
-use crate::studio::{StudioMode, StudioState};
-use crate::world_io::{SceneComponentRegistry, build_dynamic_world, dynamic_world_from_json, dynamic_world_to_json};
+use bevy_arc_studio::arc_core::{UnitScale, WorldSpec};
+use bevy_arc_studio::props::UserProp;
+use bevy_arc_studio::selection::Deleted;
+use bevy_arc_studio::studio::{StudioMode, StudioState};
+use bevy_arc_studio::world_io::{SceneComponentRegistry, build_dynamic_world, dynamic_world_from_json, dynamic_world_to_json};
 
 fn base_app() -> App {
     let mut app = App::new();

@@ -862,7 +862,7 @@ impl Plugin for LevelBuilderPlugin {
 
 // ───────────────────────────── Interactive tool ─────────────────────────────
 
-pub(crate) fn ray_aabb(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
+pub fn ray_aabb(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
     let inv = Vec3::ONE / d;
     let (t1, t2) = ((min - o) * inv, (max - o) * inv);
     let (tn, tf) = (t1.min(t2).max_element(), t1.max(t2).min_element());

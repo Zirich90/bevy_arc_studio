@@ -59,18 +59,6 @@ pub struct UiData<'w, 's> {
     pub children: Query<'w, 's, &'static Children>,
     pub parents: Query<'w, 's, &'static ChildOf>,
     pub lights: Query<'w, 's, (&'static mut PointLight, Option<&'static mut NightLight>)>,
-    #[cfg(feature = "pf2e")]
-    pub rpg: Query<
-        'w,
-        's,
-        (
-            Option<&'static crate::actors::Actor>,
-            Option<&'static crate::actors::CharacterSheet>,
-            Option<&'static mut crate::actors::Faction>,
-            Option<&'static crate::actors::Interactable>,
-            Option<&'static mut crate::actors::triggers::TriggerVolume>,
-        ),
-    >,
     pub light_count: Query<'w, 's, (), Or<(With<PointLight>, With<DirectionalLight>)>>,
 }
 
@@ -93,7 +81,7 @@ fn apply_style(ctx: &egui::Context) {
     });
 }
 
-pub(crate) fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<bool>) {
+pub fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<bool>) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     if !*styled {
         apply_style(ctx);

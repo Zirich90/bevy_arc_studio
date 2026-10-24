@@ -13,18 +13,18 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
 use crate::actors::{Actor, CharacterSheet, Faction};
-use crate::arc_core::{HeightfieldGrid, UnitScale};
-use crate::camera::EditorCamera;
-use crate::level_builder::{Door, GridSettings, LevelTile};
-use crate::movement::{ActiveActor, CombatLock, NavMap, PathGizmos, WaypointsPath, ray_point_distance, ring, sample_polyline};
-use crate::navigation::{NavGrid, NavPath};
+use bevy_arc_studio::arc_core::{HeightfieldGrid, UnitScale};
+use bevy_arc_studio::camera::EditorCamera;
+use bevy_arc_studio::level_builder::{Door, GridSettings, LevelTile};
+use bevy_arc_studio::movement::{ActiveActor, MoveInputLock, NavMap, PathGizmos, WaypointsPath, ray_point_distance, ring, sample_polyline};
+use bevy_arc_studio::navigation::{NavGrid, NavPath};
 use crate::rules::actions::MultipleAttackPenalty;
 use crate::rules::check::{CheckResult, DegreeOfSuccess, Dice};
 use crate::rules::conditions::Conditions;
 use crate::rules::encounter::*;
-use crate::selection::Deleted;
-use crate::studio::{StudioMode, StudioState};
-use crate::terrain_render::TerrainGrid;
+use bevy_arc_studio::selection::Deleted;
+use bevy_arc_studio::studio::{StudioMode, StudioState};
+use bevy_arc_studio::terrain_render::TerrainGrid;
 
 const ACTIONS_PER_TURN: u8 = 3;
 const STEP_FT: f32 = 5.0;
@@ -610,7 +610,7 @@ fn playing(s: Res<StudioState>) -> bool {
     s.mode == StudioMode::Playing
 }
 
-fn lifecycle(studio: Res<StudioState>, mut combat: ResMut<Combat>, mut lock: ResMut<CombatLock>, actors: Actors) {
+fn lifecycle(studio: Res<StudioState>, mut combat: ResMut<Combat>, mut lock: ResMut<MoveInputLock>, actors: Actors) {
     if studio.mode == StudioMode::Edit {
         if combat.started || !combat.log.is_empty() {
             *combat = Combat::default();
@@ -846,7 +846,7 @@ fn player_input(
                         let dist = match &ray {
                             Some(r) => {
                                 let (lo, hi) = (c - Vec3::new(cs * 0.5, 0.0, cs * 0.5), c + Vec3::new(cs * 0.5, gset.floor_height, cs * 0.5));
-                                crate::level_builder::ray_aabb(r.origin, *r.direction, lo, hi)
+                                bevy_arc_studio::level_builder::ray_aabb(r.origin, *r.direction, lo, hi)
                             }
                             None => Some(Vec2::new(c.x, c.z).distance(ground)).filter(|d| *d <= cs),
                         };
@@ -1009,7 +1009,7 @@ impl Plugin for EncounterPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::navigation::Footprint;
+    use bevy_arc_studio::navigation::Footprint;
 
     fn nav_with_wall() -> NavGrid {
         let grid = HeightfieldGrid::new(81, 40.0);

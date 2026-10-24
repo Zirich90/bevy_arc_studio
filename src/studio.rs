@@ -148,6 +148,7 @@ pub struct Spawner<'w, 's> {
     mats: ResMut<'w, Assets<StandardMaterial>>,
     server: Res<'w, AssetServer>,
     next: ResMut<'w, NextObjectId>,
+    kinds: Res<'w, crate::props::SpawnKinds>,
 }
 
 impl Spawner<'_, '_> {
@@ -155,7 +156,7 @@ impl Spawner<'_, '_> {
         let assets = self.assets.as_deref()?;
         self.next.0 += 1;
         let pos = Vec3::new(x, grid.sample_height(x, z), z);
-        spawn_user_prop(&mut self.commands, assets, kind, pos, yaw, self.next.0, spec, grid, &mut self.meshes, &mut self.mats, &self.server)
+        spawn_user_prop(&mut self.commands, assets, kind, pos, yaw, self.next.0, spec, grid, &mut self.meshes, &mut self.mats, &self.server, &self.kinds)
     }
 }
 

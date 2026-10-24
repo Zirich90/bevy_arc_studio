@@ -5,6 +5,8 @@
 //! `{"commands":[{"ApplyPreset":"MistyDuskLake"},{"SpawnObject":{"kind":"pine","x":10.0,"z":-4.0,"yaw":0.5}}],"log":[]}`;
 //! results are appended to `log` the next frame.
 
+use std::sync::Arc;
+
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use serde::{Deserialize, Serialize};
@@ -91,9 +93,38 @@ pub enum StudioCommand {
     SaveSelectionAsPrefab { path: String },
     /// Instance a prefab at `position` (grid / ground snapped per settings) turned by `rotation_y_deg`; one undo step.
     SpawnPrefab { path: String, position: Vec3, rotation_y_deg: f32 },
-    /// pf2e: spawn `assets/actors/<template>.ron` on the terrain below `pos` (y ignored) with the given faction.
-    #[cfg(feature = "pf2e")]
-    SpawnActorFromTemplate { template: String, pos: Vec3, faction: crate::actors::Faction },
+    /// Command contributed by a plugin through [`CustomCommands`]; `args` is a JSON document the handler parses itself.
+    Custom { name: String, args: String },
+}
+
+pub type CustomCommandFn = Arc<dyn Fn(&mut World, &str) -> Result<String, String> + Send + Sync>;
+
+/// Plugin-contributed `StudioCommand::Custom` handlers, looked up by `name` (use `"<plugin>.<verb>"`).
+#[derive(Resource, Default, Clone)]
+pub struct CustomCommands(Vec<(String, CustomCommandFn)>);
+
+impl CustomCommands {
+    pub fn register(&mut self, name: &str, f: CustomCommandFn) {
+        match self.0.iter_mut().find(|(n, _)| n == name) {
+            Some(e) => e.1 = f,
+            None => self.0.push((name.to_string(), f)),
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<CustomCommandFn> {
+        self.0.iter().find(|(n, _)| n == name).map(|(_, f)| f.clone())
+    }
+}
+
+pub trait CustomCommandAppExt {
+    fn register_custom_command(&mut self, name: &str, f: impl Fn(&mut World, &str) -> Result<String, String> + Send + Sync + 'static) -> &mut Self;
+}
+
+impl CustomCommandAppExt for App {
+    fn register_custom_command(&mut self, name: &str, f: impl Fn(&mut World, &str) -> Result<String, String> + Send + Sync + 'static) -> &mut Self {
+        self.world_mut().get_resource_or_insert_with(CustomCommands::default).register(name, Arc::new(f));
+        self
+    }
 }
 
 #[derive(Resource, Reflect, Default, Serialize, Deserialize)]
@@ -132,6 +163,7 @@ impl Plugin for McpCommandsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(operators::OperatorsPlugin)
             .init_resource::<StudioCommandQueue>()
+            .init_resource::<CustomCommands>()
             .register_type::<StudioCommandQueue>()
             .register_type::<StudioCommand>()
             .register_type::<QualityPreset>()
@@ -154,6 +186,7 @@ pub struct Extra<'w> {
     gz: ResMut<'w, GizmoState>,
     req: ResMut<'w, HistoryRequest>,
     results: ResMut<'w, CommandResults>,
+    custom: Res<'w, CustomCommands>,
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -328,17 +361,9 @@ pub fn execute_commands(
             StudioCommand::MoveActor { entity, to } => {
                 queue_world_cmd(&mut spawner.commands, "MoveActor", move |w| movement::cmd_move_actor(w, entity, to))
             }
-            #[cfg(feature = "pf2e")]
-            StudioCommand::SpawnActorFromTemplate { template, pos, faction } => {
-                crate::actors::ActorTemplate::load(&template)?;
-                let half = grid.0.size * 0.5;
-                let (x, z) = (pos.x.clamp(-half, half), pos.z.clamp(-half, half));
-                let kind = format!("actor:{template}");
-                let (e, tf) = spawner.spawn(&grid.0, &spec, &kind, x, z, 0.0).ok_or_else(|| format!("cannot spawn '{kind}'"))?;
-                spawner.commands.entity(e).insert(faction);
-                sh.record(format!("Spawn {template}"), vec![ObjState { entity: e, tf, alive: false }], vec![ObjState { entity: e, tf, alive: true }]);
-                sel.set_one(e);
-                Ok(format!("spawned actor {template} ({faction:?}) at ({x:.1}, {z:.1})"))
+            StudioCommand::Custom { name, args } => {
+                let f = extra.custom.get(&name).ok_or_else(|| format!("unknown custom command '{name}'"))?;
+                queue_world_cmd(&mut spawner.commands, "Custom", move |w| f(w, &args))
             }
             StudioCommand::SetGizmo { mode, snap_ground, align_normal } => {
                 if let Some(m) = mode {

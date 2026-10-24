@@ -1,10 +1,6 @@
-#[cfg(feature = "pf2e")]
-pub mod actors;
 pub mod arc_core;
 pub mod camera;
 pub mod editor_registry;
-#[cfg(feature = "pf2e")]
-pub mod encounter;
 pub mod gizmo_3d;
 pub mod level_builder;
 pub mod lighting;
@@ -24,8 +20,6 @@ pub mod navigation;
 pub mod studio;
 pub mod terrain_brush;
 pub mod ui_assets;
-#[cfg(feature = "pf2e")]
-pub mod ui_combat;
 pub mod ui_hud;
 pub mod ui_inspector;
 pub mod ui_outliner;
@@ -94,10 +88,5 @@ impl Plugin for BevyArcStudioPlugin {
                 movement::MovementPlugin,
                 world_io::WorldIoPlugin,
             ));
-        #[cfg(feature = "pf2e")]
-        app.add_plugins((actors::ActorsPlugin, encounter::EncounterPlugin, ui_combat::CombatUiPlugin));
     }
 }
-
-#[cfg(feature = "pf2e")]
-pub mod rules;

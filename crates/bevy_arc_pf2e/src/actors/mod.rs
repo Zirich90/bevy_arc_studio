@@ -7,17 +7,26 @@
 
 pub mod triggers;
 
+use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
-use crate::editor_registry::{EditorAppExt, spawn_kind};
+use bevy::reflect::PartialReflect;
+use bevy_arc_studio::arc_core::WorldSpec;
+use bevy_arc_studio::editor_registry::{EditorAppExt, spawn_kind};
+use bevy_arc_studio::gizmo_3d::{ObjState, SceneHistory};
+use bevy_arc_studio::mcp_commands::CustomCommandAppExt;
+use bevy_arc_studio::props::SpawnKindAppExt;
+use bevy_arc_studio::selection::EditorSelection;
+use bevy_arc_studio::studio::Spawner;
+use bevy_arc_studio::terrain_render::TerrainGrid;
 use bevy_egui::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::movement::Mover;
-use crate::props::{ObjectCategory, SceneObject, assets_dir};
+use bevy_arc_studio::movement::Mover;
+use bevy_arc_studio::props::{ObjectCategory, SceneObject, assets_dir};
 use crate::rules::{Abilities, Combatant, CheckResult, Conditions, Dice, Hp, Weapon};
 use crate::rules::actions::{MultipleAttackPenalty, TurnActionEconomy};
-use crate::ui::{TEAL, UiData, chip};
-use crate::world_io::SceneComponentAppExt;
+use bevy_arc_studio::ui::chip;
+use bevy_arc_studio::world_io::SceneComponentAppExt;
 
 // ───────────────────────────── Components ─────────────────────────────
 
@@ -57,7 +66,7 @@ pub struct Actor {
     pub name: String,
     /// Mirrors `SceneObject::id` (kept in sync, so duplicates and reloads stay unique).
     pub id: u32,
-    /// File stem in `assets/actors/`.
+    /// File stem in the actors folder (see `actors_dir`).
     pub template: String,
 }
 
@@ -250,20 +259,26 @@ impl ActorTemplate {
         ron::from_str(text).map_err(|e| e.to_string())
     }
 
-    /// Loads `assets/actors/<name>.ron`; `name` is a bare file stem.
+    /// Loads `<actors_dir>/<name>.ron`; `name` is a bare file stem.
     pub fn load(name: &str) -> Result<Self, String> {
         if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
             return Err(format!("invalid actor template name '{name}'"));
         }
-        let path = assets_dir().join("actors").join(format!("{name}.ron"));
+        let path = actors_dir().join(format!("{name}.ron"));
         let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         Self::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
     }
 }
 
-/// Stems of `assets/actors/*.ron`.
+/// Folder with the actor templates: a game's own `assets/actors` wins over the ones shipped with this crate.
+pub fn actors_dir() -> std::path::PathBuf {
+    let game = assets_dir().join("actors");
+    if game.is_dir() { game } else { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/actors") }
+}
+
+/// Stems of `*.ron` in [`actors_dir`].
 pub fn available_templates() -> Vec<String> {
-    let mut v: Vec<String> = std::fs::read_dir(assets_dir().join("actors"))
+    let mut v: Vec<String> = std::fs::read_dir(actors_dir())
         .map(|rd| rd.flatten().filter_map(|e| e.file_name().into_string().ok()).filter_map(|n| n.strip_suffix(".ron").map(str::to_string)).collect())
         .unwrap_or_default();
     v.sort();
@@ -401,7 +416,21 @@ pub struct ActorsPlugin;
 impl Plugin for ActorsPlugin {
     fn build(&self, app: &mut App) {
         register_types(app);
-        app.register_spawner_item("RPG (pf2e)", "Hero Fighter", spawn_kind("actor:hero_fighter"))
+        app.register_spawn_kind("actor:", |sc, kind| {
+            let name = &kind["actor:".len()..];
+            let t = ActorTemplate::load(name).ok()?;
+            let so = sc.scene_object(&t.name, ObjectCategory::Actor, Vec3::splat(1.0));
+            Some(spawn_actor(sc.commands, sc.meshes, sc.mats, so, name, &t, sc.tf))
+        })
+        .register_spawn_kind("trigger", |sc, _| {
+            let so = sc.scene_object("TriggerVolume", ObjectCategory::Trigger, Vec3::splat(1.0));
+            Some(triggers::spawn_trigger(sc.commands, sc.meshes, sc.mats, so, sc.tf, Default::default()))
+        })
+        .register_inspector_override::<Faction>(faction_inspector)
+        .register_inspector_override::<CharacterSheet>(sheet_inspector)
+        .register_inspector_override::<triggers::TriggerVolume>(trigger_inspector)
+        .register_custom_command("pf2e.spawn_actor", cmd_spawn_actor)
+        .register_spawner_item("RPG (pf2e)", "Hero Fighter", spawn_kind("actor:hero_fighter"))
             .register_spawner_item("RPG (pf2e)", "Hero Wizard", spawn_kind("actor:hero_wizard"))
             .register_spawner_item("RPG (pf2e)", "Goblin Warrior", spawn_kind("actor:goblin_warrior"))
             .register_spawner_item("RPG (pf2e)", "Dungeon Guard", spawn_kind("actor:dungeon_guard"))
@@ -441,71 +470,100 @@ fn sync_faction_disc(changed: Query<(&Faction, &Children), Changed<Faction>>, di
 
 // ───────────────────────────── Inspector ─────────────────────────────
 
-/// Right-inspector section for the selected entity's pf2e components.
-pub fn inspector(ui: &mut egui::Ui, d: &mut UiData, e: Entity) {
-    let Ok((actor, sheet, fac, inter, trig)) = d.rpg.get_mut(e) else { return };
-    if actor.is_none() && trig.is_none() {
-        return;
-    }
-    ui.separator();
-    if let Some(a) = actor {
-        ui.label(egui::RichText::new("Actor").strong().color(TEAL));
-        ui.label(format!("{}   id {}   template {}", a.name, a.id, a.template));
-    }
-    if let Some(mut f) = fac {
-        ui.horizontal(|ui| {
-            ui.label("Faction");
-            for v in Faction::ALL {
-                if chip(ui, *f == v, v.label()).clicked() {
-                    f.set_if_neq(v);
-                }
+/// `EditorRegistry` inspector override for [`Faction`]: one chip per variant.
+fn faction_inspector(ui: &mut egui::Ui, v: &mut dyn PartialReflect) -> bool {
+    let Some(f) = v.try_downcast_mut::<Faction>() else { return false };
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        for opt in Faction::ALL {
+            if chip(ui, *f == opt, opt.label()).clicked() && *f != opt {
+                *f = opt;
+                changed = true;
             }
-        });
-    }
-    if let Some(s) = sheet {
-        ui.label(egui::RichText::new("CharacterSheet").strong().color(TEAL));
-        let hp_color = if s.hp <= 0 { egui::Color32::from_rgb(255, 90, 80) } else { egui::Color32::from_rgb(120, 230, 150) };
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(format!("HP {}/{}", s.hp, s.hp_max)).strong().color(hp_color));
-            ui.label(format!("AC {}", s.ac));
-            ui.label(format!("Speed {} ft", s.speed_feet));
-            ui.label(format!("Lv {}", s.level));
-        });
-        if s.dying > 0 || s.wounded > 0 {
-            ui.label(format!("dying {}  wounded {}", s.dying, s.wounded));
         }
-        let [st, dx, co, it, wi, ch] = s.abilities;
-        ui.label(format!("Str {st}  Dex {dx}  Con {co}  Int {it}  Wis {wi}  Cha {ch}"));
-        ui.label(format!("Fort {:+}  Ref {:+}  Will {:+}", s.saves[0], s.saves[1], s.saves[2]));
-        let w = &s.weapon;
-        ui.label(format!("{} {:+}  {}d{} {:?}{}", w.name, s.attack_bonus, w.dice, w.sides, w.damage_type, if w.agile { "  agile" } else { "" }));
-        ui.label(format!(
-            "Reach {} ft{}{}{}",
-            s.reach(),
-            if s.reactive_strike { "  Reactive Strike" } else { "" },
-            if s.has_shield { "  Shield" } else { "" },
-            if s.spell_dc > 0 { format!("  Spell DC {}", s.spell_dc) } else { String::new() }
-        ));
+    });
+    changed
+}
+
+/// Read-only summary of a [`CharacterSheet`].
+fn sheet_inspector(ui: &mut egui::Ui, v: &mut dyn PartialReflect) -> bool {
+    let Some(s) = v.try_downcast_ref::<CharacterSheet>() else { return false };
+    let hp_color = if s.hp <= 0 { egui::Color32::from_rgb(255, 90, 80) } else { egui::Color32::from_rgb(120, 230, 150) };
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(format!("HP {}/{}", s.hp, s.hp_max)).strong().color(hp_color));
+        ui.label(format!("AC {}", s.ac));
+        ui.label(format!("Speed {} ft", s.speed_feet));
+        ui.label(format!("Lv {}", s.level));
+    });
+    if s.dying > 0 || s.wounded > 0 {
+        ui.label(format!("dying {}  wounded {}", s.dying, s.wounded));
     }
-    if let Some(i) = inter {
-        ui.label(format!("Interactable: {:?}", i.kind));
+    let [st, dx, co, it, wi, ch] = s.abilities;
+    ui.label(format!("Str {st}  Dex {dx}  Con {co}  Int {it}  Wis {wi}  Cha {ch}"));
+    ui.label(format!("Fort {:+}  Ref {:+}  Will {:+}", s.saves[0], s.saves[1], s.saves[2]));
+    let w = &s.weapon;
+    ui.label(format!("{} {:+}  {}d{} {:?}{}", w.name, s.attack_bonus, w.dice, w.sides, w.damage_type, if w.agile { "  agile" } else { "" }));
+    ui.label(format!(
+        "Reach {} ft{}{}{}",
+        s.reach(),
+        if s.reactive_strike { "  Reactive Strike" } else { "" },
+        if s.has_shield { "  Shield" } else { "" },
+        if s.spell_dc > 0 { format!("  Spell DC {}", s.spell_dc) } else { String::new() }
+    ));
+    false
+}
+
+fn trigger_inspector(ui: &mut egui::Ui, v: &mut dyn PartialReflect) -> bool {
+    let Some(tv) = v.try_downcast_mut::<triggers::TriggerVolume>() else { return false };
+    let triggers::TriggerShape::Cylinder { mut radius, mut height } = tv.shape;
+    let mut id = tv.event_id.clone();
+    ui.horizontal(|ui| {
+        ui.label("Cylinder");
+        ui.add(egui::DragValue::new(&mut radius).speed(0.05).prefix("r ").range(0.25..=60.0));
+        ui.add(egui::DragValue::new(&mut height).speed(0.05).prefix("h ").range(0.25..=60.0));
+    });
+    ui.horizontal(|ui| {
+        ui.label("event_id");
+        ui.add(egui::TextEdit::singleline(&mut id).desired_width(150.0));
+    });
+    let next = triggers::TriggerVolume { shape: triggers::TriggerShape::Cylinder { radius, height }, event_id: id };
+    if *tv == next {
+        return false;
     }
-    if let Some(mut tv) = trig {
-        ui.label(egui::RichText::new("TriggerVolume").strong().color(TEAL));
-        let triggers::TriggerShape::Cylinder { mut radius, mut height } = tv.shape;
-        let mut id = tv.event_id.clone();
-        ui.horizontal(|ui| {
-            ui.label("Cylinder");
-            ui.add(egui::DragValue::new(&mut radius).speed(0.05).prefix("r ").range(0.25..=60.0));
-            ui.add(egui::DragValue::new(&mut height).speed(0.05).prefix("h ").range(0.25..=60.0));
-        });
-        ui.horizontal(|ui| {
-            ui.label("event_id");
-            ui.add(egui::TextEdit::singleline(&mut id).desired_width(150.0));
-        });
-        let next = triggers::TriggerVolume { shape: triggers::TriggerShape::Cylinder { radius, height }, event_id: id };
-        tv.set_if_neq(next);
+    *tv = next;
+    true
+}
+
+// ───────────────────────────── Agent command ─────────────────────────────
+
+/// `StudioCommand::Custom { name: "pf2e.spawn_actor", args: {"template":"goblin_warrior","pos":[x,y,z],"faction":"Hostile"} }`:
+/// spawns `actors/<template>.ron` on the terrain below `pos` (y ignored); `faction` overrides the template's. One undo step.
+fn cmd_spawn_actor(w: &mut World, args: &str) -> Result<String, String> {
+    #[derive(Deserialize)]
+    struct Args {
+        template: String,
+        pos: [f32; 3],
+        #[serde(default)]
+        faction: Option<Faction>,
     }
+    let a: Args = serde_json::from_str(args).map_err(|e| format!("pf2e.spawn_actor args: {e}"))?;
+    ActorTemplate::load(&a.template)?;
+    let mut state = SystemState::<(Spawner, Res<TerrainGrid>, Res<WorldSpec>, ResMut<SceneHistory>, ResMut<EditorSelection>)>::new(w);
+    let msg = {
+        let (mut spawner, grid, spec, mut sh, mut sel) = state.get_mut(w).map_err(|e| e.to_string())?;
+        let half = grid.0.size * 0.5;
+        let (x, z) = (a.pos[0].clamp(-half, half), a.pos[2].clamp(-half, half));
+        let kind = format!("actor:{}", a.template);
+        let (e, tf) = spawner.spawn(&grid.0, &spec, &kind, x, z, 0.0).ok_or_else(|| format!("cannot spawn '{kind}'"))?;
+        if let Some(f) = a.faction {
+            spawner.commands.entity(e).insert(f);
+        }
+        sh.record(format!("Spawn {}", a.template), vec![ObjState { entity: e, tf, alive: false }], vec![ObjState { entity: e, tf, alive: true }]);
+        sel.set_one(e);
+        format!("spawned actor {} at ({x:.1}, {z:.1})", a.template)
+    };
+    state.apply(w);
+    Ok(msg)
 }
 
 #[cfg(test)]

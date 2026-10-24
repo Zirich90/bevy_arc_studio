@@ -10,9 +10,9 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{Actor, Faction, InteractionKind, Interactable};
-use crate::props::{ObjectCategory, SceneObject};
-use crate::selection::{Deleted, EditorSelection};
-use crate::studio::{StudioMode, StudioState};
+use bevy_arc_studio::props::{ObjectCategory, SceneObject};
+use bevy_arc_studio::selection::{Deleted, EditorSelection};
+use bevy_arc_studio::studio::{StudioMode, StudioState};
 
 pub const DEFAULT_RADIUS: f32 = 3.0;
 pub const DEFAULT_HEIGHT: f32 = 3.0;

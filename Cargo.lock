@@ -569,15 +569,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_arc_pf2e"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_arc_studio",
+ "bevy_egui",
+ "rand 0.8.8",
+ "ron",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bevy_arc_studio"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_arc_pf2e",
  "bevy_brp_extras",
  "bevy_egui",
  "noise",
  "rand 0.8.8",
- "ron",
  "serde",
  "serde_json",
 ]

@@ -57,9 +57,9 @@ pub struct Kinematics {
 #[derive(Resource, Default)]
 pub struct ActiveActor(pub Option<Entity>);
 
-/// Set while an encounter owns the Play-mode input (click-to-move and door clicks are routed through its action economy).
+/// Set by a game-rules plugin (e.g. a turn-based encounter) while it owns Play-mode input: click-to-move and door clicks are left to it.
 #[derive(Resource, Default)]
-pub struct CombatLock(pub bool);
+pub struct MoveInputLock(pub bool);
 
 #[derive(Resource)]
 pub struct NavMap {
@@ -113,7 +113,7 @@ pub struct MovementPlugin;
 impl Plugin for MovementPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NavMap>()
-            .init_resource::<CombatLock>()
+            .init_resource::<MoveInputLock>()
             .init_resource::<ActiveActor>()
             .init_resource::<PathPreview>()
             .register_type::<Mover>()
@@ -277,7 +277,7 @@ fn move_actors(
 // ───────────────────────────── Path helpers ─────────────────────────────
 
 /// Terrain-hugging samples along the polyline; flag marks difficult ground.
-pub(crate) fn sample_polyline(nav: &NavGrid, grid: &HeightfieldGrid, path: &NavPath, lift: f32) -> Vec<(Vec3, bool)> {
+pub fn sample_polyline(nav: &NavGrid, grid: &HeightfieldGrid, path: &NavPath, lift: f32) -> Vec<(Vec3, bool)> {
     let mut out = Vec::new();
     let lift_pt = |p: Vec2| Vec3::new(p.x, grid.sample_height(p.x, p.y) + lift, p.y);
     for w in path.points.windows(2) {
@@ -293,7 +293,7 @@ pub(crate) fn sample_polyline(nav: &NavGrid, grid: &HeightfieldGrid, path: &NavP
     out
 }
 
-pub(crate) fn ray_point_distance(ray: &Ray3d, p: Vec3) -> f32 {
+pub fn ray_point_distance(ray: &Ray3d, p: Vec3) -> f32 {
     let t = (p - ray.origin).dot(*ray.direction).max(0.0);
     p.distance(ray.origin + *ray.direction * t)
 }
@@ -323,7 +323,7 @@ fn play_input(
     mut commands: Commands,
     mut doors: Query<(&LevelTile, &mut Door), Without<Deleted>>,
     gset: Res<GridSettings>,
-    lock: Res<CombatLock>,
+    lock: Res<MoveInputLock>,
 ) {
     if active.0.is_none_or(|e| movers.get(e).is_err()) {
         active.0 = movers.iter().next().map(|(e, _)| e);
@@ -420,7 +420,7 @@ const GLOW_GREEN: Color = Color::srgb(0.25, 1.0, 0.45);
 const GLOW_YELLOW: Color = Color::srgb(1.0, 0.85, 0.2);
 const OVER_RED: Color = Color::srgb(1.0, 0.3, 0.25);
 
-pub(crate) fn ring(g: &mut Gizmos<PathGizmos>, grid: &HeightfieldGrid, c: Vec2, r: f32, color: Color) {
+pub fn ring(g: &mut Gizmos<PathGizmos>, grid: &HeightfieldGrid, c: Vec2, r: f32, color: Color) {
     let at = |a: f32| {
         let p = c + Vec2::from_angle(a) * r;
         Vec3::new(p.x, grid.sample_height(p.x, p.y) + PREVIEW_LIFT, p.y)
@@ -438,7 +438,7 @@ fn draw_paths(
     active: Res<ActiveActor>,
     preview: Res<PathPreview>,
     nav: Res<NavMap>,
-    lock: Res<CombatLock>,
+    lock: Res<MoveInputLock>,
     movers: Query<(Entity, &Transform, &Mover, Option<&WaypointsPath>)>,
     mut g: Gizmos<PathGizmos>,
 ) {

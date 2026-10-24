@@ -6,8 +6,8 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::actors::{CharacterSheet, Faction};
 use crate::encounter::{ActionMode, Combat, LogKind, Req, condition_tags};
-use crate::studio::{StudioMode, StudioState};
-use crate::ui::{AMBER, BORDER, EMERALD, TEAL, chip, studio_ui_system};
+use bevy_arc_studio::studio::{StudioMode, StudioState};
+use bevy_arc_studio::ui::{AMBER, BORDER, EMERALD, TEAL, chip, studio_ui_system};
 
 /// Action-point glyphs; the symbol font is loaded at runtime when the OS has one.
 #[derive(Resource)]

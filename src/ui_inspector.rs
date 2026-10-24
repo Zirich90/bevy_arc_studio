@@ -229,9 +229,6 @@ pub fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         track_ev(&ev, &mut d.sh, "Inspector edit", &mut cur, same);
     }
 
-    #[cfg(feature = "pf2e")]
-    crate::actors::inspector(ui, d, e);
-
     match crate::ui_reflect::draw(ui, &mut d.rview, &mut d.redits, &d.reg, &f.0) {
         Some(crate::ui_reflect::CompAction::Add(name)) => d.queue.push(Cmd::AddComponent { target: crate::operators::Target::Id(so_id), component: name, value: None }),
         Some(crate::ui_reflect::CompAction::Remove(name)) => d.queue.push(Cmd::RemoveComponent { target: crate::operators::Target::Id(so_id), component: name }),
