@@ -203,6 +203,17 @@ fn load_scene(
                     }
                 }
                 let (Some(kind), Some(tf)) = (kind, tf) else { continue };
+                if kind == "level" {
+                    let tile = rest.iter().filter(|c| c.represents::<crate::level_builder::LevelTile>()).find_map(|c| crate::level_builder::LevelTile::from_reflect(c.as_ref()));
+                    let door = rest.iter().filter(|c| c.represents::<crate::level_builder::Door>()).find_map(|c| crate::level_builder::Door::from_reflect(c.as_ref()));
+                    if let Some(tile) = tile {
+                        spawner.commands.queue(move |world: &mut World| {
+                            crate::level_builder::spawn_loaded_tile(world, tile, door);
+                        });
+                        n += 1;
+                    }
+                    continue;
+                }
                 let yaw = tf.rotation.to_euler(EulerRot::YXZ).0;
                 let Some((e, _)) = spawner.spawn(&grid.0, &spec, &kind, tf.translation.x, tf.translation.z, yaw) else { continue };
                 spawner.commands.entity(e).insert(tf);
@@ -274,6 +285,33 @@ mod tests {
         let e = app.world_mut().spawn((Transform::default(), UserProp { kind: "pine".into() }, Name::new("x"))).id();
         let dw = build_dynamic_world(app.world(), std::iter::once(e));
         assert_eq!(dw.entities[0].components.len(), 2);
+    }
+
+    #[test]
+    fn save_and_load_scene_preserves_level_tiles() {
+        use crate::level_builder::{Door, GridSettings, LevelTile, TileKind, spawn_loaded_tile};
+        let mut app = test_app();
+        app.register_type::<LevelTile>().register_scene_component::<LevelTile>().register_scene_component::<Door>();
+        app.init_resource::<GridSettings>().init_resource::<crate::props::NextObjectId>();
+        let tile = LevelTile { kind: TileKind::Doorway, grid_pos: IVec3::new(2, 0, -3), ..Default::default() };
+        let door = Door { is_open: true, is_locked: false };
+        let e = app.world_mut().spawn((Transform::default(), UserProp { kind: "level".into() }, tile, door)).id();
+
+        let dw = build_dynamic_world(app.world(), std::iter::once(e));
+        let registry = app.world().resource::<AppTypeRegistry>().clone();
+        let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
+        let mut server = app.world().resource::<AssetServer>().clone();
+        let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
+        let comps = &back.entities[0].components;
+        let t = comps.iter().filter(|c| c.represents::<LevelTile>()).find_map(|c| LevelTile::from_reflect(c.as_ref())).expect("tile saved");
+        let d = comps.iter().filter(|c| c.represents::<Door>()).find_map(|c| Door::from_reflect(c.as_ref()));
+        assert_eq!((t, d), (tile, Some(door)));
+
+        let n = spawn_loaded_tile(app.world_mut(), t, d);
+        let w = app.world();
+        assert_eq!(w.get::<LevelTile>(n), Some(&tile));
+        assert_eq!(w.get::<Door>(n), Some(&door));
+        assert!(w.get::<crate::props::SceneObject>(n).is_some());
     }
 
     #[test]

@@ -178,20 +178,20 @@ fn refresh_nav(
     if any || version.is_changed() || grid.is_changed() {
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
-    } else if !nav.dirty && (nav.water.is_nan() || spec.water_level != nav.water) {
+    } else if !nav.dirty && (nav.water.is_nan() || nav_water_level(&spec) != nav.water) {
         // a standing difference (never-built raster, new water level) must not keep restarting the debounce
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
     }
     if nav.dirty && time.elapsed_secs() - nav.changed_at >= REBUILD_DEBOUNCE {
-        rebuild(&mut nav, &grid.0, spec.water_level, &objs, &tiles, gset.cell_size);
+        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &objs, &tiles, gset.cell_size);
     }
 }
 
 /// Immediate rebuild (used by commands so queries never see a stale raster).
 fn force_rebuild(grid: Res<TerrainGrid>, spec: Res<WorldSpec>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: TileQuery, gset: Res<GridSettings>, mut nav: ResMut<NavMap>) {
     if nav.dirty || nav.grid.is_none() {
-        rebuild(&mut nav, &grid.0, spec.water_level, &objs, &tiles, gset.cell_size);
+        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &objs, &tiles, gset.cell_size);
     }
 }
 

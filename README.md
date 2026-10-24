@@ -12,6 +12,10 @@ Originally created to build levels for an upcoming RPG, it combines procedural t
 |---|---|
 | ![Level Builder](docs/screenshots/e4_level_builder.png) | ![Combat](docs/screenshots/e7_tactical_combat.png) |
 
+| Asset browser | Play-in-Editor (scene rollback) |
+|---|---|
+| ![Asset browser](docs/screenshots/e5_asset_browser.png) | ![Play mode](docs/screenshots/e6_play_mode.png) |
+
 | Misty dusk lake | Sunny alpine noon |
 |---|---|
 | ![Dusk lake](docs/screenshots/stage_02_dusk_lake.png) | ![Alpine noon](docs/screenshots/stage_02_alpine_noon.png) |
@@ -78,6 +82,15 @@ The prelude exports `BevyArcStudioPlugin`, `WorldSpec`, `HeightfieldGrid`, `Scen
 The editor is game-agnostic. Pathfinder 2e lives in the optional `bevy_arc_pf2e` crate: `app.add_plugins(BevyArcStudioPlugin::default()).add_plugins(bevy_arc_pf2e::Pf2ePlugin)`. The stock app (`cargo run`, crate `arc_studio_app`) has the code built in; the module file `modules/pf2e/module.json` (with its `actors/*.ron`) switches it on.
 Use `BevyArcStudioPlugin::with_spec(WorldSpec::from_preset(..))` to start from a preset.
 
+### Workspace layout
+
+| Path | Contents |
+|---|---|
+| `bevy_arc_studio` (root, `src/`) | the editor library: terrain, level builder, navigation, scene I/O, BRP commands |
+| `crates/arc_studio_app` | the stock binary (`cargo run`) with PF2e built in |
+| `crates/bevy_arc_pf2e` | optional Pathfinder 2e crate (actors, tactical combat) behind editor extension points |
+| `modules/<id>/module.json` | module files found by the *Modules* tab; switched on/off at runtime |
+
 ## Clean-Room AI Engineering & Provenance Audit
 
 The project was built by an AI agent from independent mathematical specifications, with every stage audited.
@@ -112,6 +125,10 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 | Конструктор уровней | Тактический бой PF2e (Play) |
 |---|---|
 | ![Level Builder](docs/screenshots/e4_level_builder.png) | ![Бой](docs/screenshots/e7_tactical_combat.png) |
+
+| Браузер ассетов | Play-in-Editor (откат сцены) |
+|---|---|
+| ![Браузер ассетов](docs/screenshots/e5_asset_browser.png) | ![Play](docs/screenshots/e6_play_mode.png) |
 
 ### Возможности
 
@@ -161,6 +178,15 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 app.add_plugins(BevyArcStudioPlugin::default());
 app.add_plugins(bevy_arc_pf2e::Pf2ePlugin); // опционально: модуль PF2e
 ```
+
+### Структура workspace
+
+| Путь | Содержимое |
+|---|---|
+| `bevy_arc_studio` (корень, `src/`) | библиотека редактора: рельеф, конструктор уровней, навигация, ввод-вывод сцены, команды BRP |
+| `crates/arc_studio_app` | стандартное приложение (`cargo run`) со встроенным PF2e |
+| `crates/bevy_arc_pf2e` | необязательный крейт Pathfinder 2e (актёры, тактический бой) через точки расширения редактора |
+| `modules/<id>/module.json` | файлы модулей, которые видит вкладка *Modules*; включаются/выключаются на лету |
 
 ### Clean-Room AI Engineering & Provenance Audit (аудит происхождения)
 

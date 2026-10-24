@@ -526,6 +526,16 @@ fn spawn_tile(w: &mut World, t: LevelTile, g: &GridSettings) -> (Entity, Transfo
     (e.id(), tf)
 }
 
+/// Recreate a saved tile (and its `Door` state) on load; visuals are attached by `attach_visuals` and the nav raster by `refresh_nav`.
+pub fn spawn_loaded_tile(w: &mut World, t: LevelTile, door: Option<Door>) -> Entity {
+    let g = w.resource::<GridSettings>().clone();
+    let (e, _) = spawn_tile(w, t, &g);
+    if let Some(d) = door {
+        w.entity_mut(e).insert(d);
+    }
+    e
+}
+
 pub fn tile_name(t: &LevelTile) -> String {
     format!("{:?} L{} ({}, {})", t.kind, t.grid_pos.y, t.grid_pos.x, t.grid_pos.z)
 }

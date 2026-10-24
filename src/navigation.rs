@@ -7,7 +7,7 @@ use std::collections::BinaryHeap;
 use bevy::math::Vec2;
 use serde::{Deserialize, Serialize};
 
-use crate::arc_core::{HeightfieldGrid, UnitScale};
+use crate::arc_core::{HeightfieldGrid, UnitScale, WorldSpec};
 
 pub const NAV_CELL: f32 = 0.5;
 pub const AGENT_RADIUS: f32 = 0.35;
@@ -121,6 +121,11 @@ impl Ord for Node {
     fn cmp(&self, o: &Self) -> Ordering {
         o.f.partial_cmp(&self.f).unwrap_or(Ordering::Equal) // min-heap
     }
+}
+
+/// Water level the nav raster sees: an empty grid scene has no water, so its flat floor stays walkable.
+pub fn nav_water_level(spec: &WorldSpec) -> f32 {
+    if spec.terrain_enabled { spec.water_level } else { f32::NEG_INFINITY }
 }
 
 impl NavGrid {
@@ -471,5 +476,15 @@ mod tests {
         assert_eq!(nav.at(Vec2::new(12.0, 0.0)), NavCell::Blocked, "steep");
         let dry = NavGrid::build(&h, -0.1, &[], AGENT_RADIUS);
         assert_eq!(dry.at(Vec2::new(0.0, 0.0)), NavCell::Free);
+    }
+
+    #[test]
+    fn empty_grid_ignores_water_level() {
+        let h = HeightfieldGrid::new(65, 32.0);
+        let spec = WorldSpec { terrain_enabled: false, water_level: 6.0, ..WorldSpec::default() };
+        let nav = NavGrid::build(&h, nav_water_level(&spec), &[], AGENT_RADIUS);
+        assert_eq!(nav.at(Vec2::ZERO), NavCell::Free);
+        let on = WorldSpec { terrain_enabled: true, ..spec };
+        assert_eq!(NavGrid::build(&h, nav_water_level(&on), &[], AGENT_RADIUS).at(Vec2::ZERO), NavCell::Blocked);
     }
 }
