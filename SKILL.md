@@ -54,6 +54,29 @@ Read results:
 | `SetCamera` | `{pivot:[x,y,z], yaw, pitch, distance}` |
 | `SaveScene` / `LoadScene` | `{path}` (JSON) |
 | `Screenshot` | `{path}` |
+| `SetPlayMode` | `{mode: "Edit"\|"Playing"\|"Paused"}` — Play snapshots the scene, Edit rolls it back |
+| `SetGizmo` | `{mode?, snap_ground?, align_normal?}` (`null` = unchanged) |
+| `SelectIds` | `{ids:[u32], additive}` (ids from `ListObjects`) |
+| `SetTransform` | `{id?, pos?, rot_deg?, scale?, drop_to_ground}` — undoable |
+| `Duplicate` | `{offset:[x,z]}` |
+| `SetSpec` | `{field, value}` — `WorldSpec` field by reflect path, bool as 0/1 — undoable |
+| `ListObjects`, `Describe`, `DescribeScene` | read-only; `Describe` returns the schema of every operator, `DescribeScene` `{filter?, limit?}` the hierarchy |
+| `SetComponent` / `AddComponent` / `RemoveComponent` | `{target, component, value}` (reflect-serde JSON string) — undoable |
+| `Reparent` | `{child, parent?}` — `null` parent = root; not undoable |
+| `SpawnActor` / `QueryPath` / `MoveActor` | test character on the navmesh; `QueryPath {from, to}` returns distance in metres/feet and reachability |
+| `BuildRoom` | `{min:[x,z], max:[x,z], floor, style}` — floor, corner pillars, perimeter walls; one undo step |
+| `BuildWallLine` | `{from:[x,z], to:[x,z], floor, style}` |
+| `PlaceLevelTile` | `{kind, pos:[x,storey,z], facing?, style?}` |
+| `PaintLevelTiles` | `{kind, cells:[[x,s,z]], style, erase}` |
+| `ToggleDoor` | `{pos:[x,s,z], open?}` — `null` toggles; locked doors refuse |
+| `SetGrid` | `{enabled?, cell_size?, floor_level?, floor_height?, angle_snap_deg?}` |
+| `SetGroundSnap` | `{enabled, site?:[x,z]}` — bind or unbind the building plane to the terrain |
+| `SetWaterBody` | `{x, z, level?}` — own water level of the basin at (x, z) (fills a moat, drains a pond); `null` removes it. Saved in scenes, used by navigation (wading) |
+| `SaveSelectionAsPrefab` / `SpawnPrefab` | `{path}` / `{path, position, rotation_y_deg}` |
+| `SetModule` / `RescanModules` / `ConnectModule` | see Modules below |
+| `Custom` | `{name, args}` — plugin commands, see below |
+
+Props (grass, pines, rocks, reeds) follow the sculpted terrain; grass and pines that end up under water are hidden.
 
 ## 4. Screenshots
 
@@ -81,3 +104,5 @@ A module is connected when its `modules/<id>/module.json` is found (on by defaul
 `{"Custom":{"name":"<plugin>.<verb>","args":"<json string>"}}` runs a command registered by a plugin through `CustomCommands`.
 With the PF2e module connected: `{"Custom":{"name":"pf2e.spawn_actor","args":"{\"template\":\"goblin_warrior\",\"pos\":[6,0,2],\"faction\":\"Hostile\"}"}}`
 (templates: `hero_fighter`, `hero_wizard`, `goblin_warrior`, `dungeon_guard`; `faction` optional). Spawn a trigger volume with `SpawnObject { kind: "trigger" }`.
+
+Tactical combat (PF2e, Play mode) is driven through the reflected resource `bevy_arc_pf2e::encounter::CombatInput`: push into `orders` one of `{"Stride":{"x":..,"z":..}}`, `{"Step":{..}}`, `{"Strike":{"target":<entity>}}`, `{"ArcaneBolt":{"target":..}}`, `{"Fireball":{"x":..,"z":..}}`, `{"Interact":{"x":..,"z":..}}`, `"RaiseShield"`, `"EndTurn"`, `{"Mode":<ActionMode>}`; `hover` stands in for the mouse cursor.

@@ -1,5 +1,9 @@
 # Bevy ArcStudio
 
+<video src="https://github.com/Zirich90/bevy_arc_studio/raw/main/docs/arcstudio_promo.mp4" controls muted width="100%"></video>
+
+[![Promo video](docs/screenshots/promo_01_castle_end.png)](docs/arcstudio_promo.mp4)
+
 **AI-first procedural 3D environment studio & editor GUI for Bevy 0.20** · `MIT OR Apache-2.0`
 
 English · [Русский](#русский)
@@ -30,9 +34,10 @@ Originally created to build levels for an upcoming RPG, it combines procedural t
 - Unified transactional undo/redo (world settings, objects, terrain strokes, reparenting, components).
 - Level Builder (`L`): modular tiles on a snap grid (floor, wall, doorway with swinging door, arch, pillar, stairs, roof, torch with a point light), multiple floors, rooms drawn by drag; navigation is rebuilt on change.
 - Asset Browser: `.glb`/`.gltf` models, prefabs (`.prefab.json`), scenes and the procedural/level kit, click to place.
-- AI control: every action is a `StudioCommand` pushed through a reflected resource over `bevy_remote` (BRP), screenshots via `brp_extras/screenshot`. See [SKILL.md](SKILL.md).
+- AI control: every action is a `StudioCommand` pushed through a reflected resource over `bevy_remote` (BRP), screenshots via `brp_extras/screenshot`. 48 commands (terrain, objects, camera, Level Builder, water, prefabs, modules, plugin commands); payloads in [SKILL.md](SKILL.md), live schema via `Describe`.
 - Play-in-Editor: `Play` / `Pause` / `Stop` in the toolbar. Play snapshots the whole scene (world settings, objects, tiles, doors, prefab instances, actors, editor camera, undo stacks); Stop restores it exactly, so nothing done while playing (moved characters, opened doors, spawned effects, changed HP) survives. Also available to agents as `StudioCommand::SetPlayMode { mode }`.
 - Prefabs: tiles of a spawned prefab follow its root when it is moved or rotated.
+- Water bodies: each basin can have its own water level (`SetWaterBody`), so a moat can be filled without raising the lake; levels are saved in scenes and navigation wades accordingly. Grass, pines, rocks and reeds follow the sculpted terrain, and grass and pines under water are hidden.
 - Pathfinding (Theta* + funnel) with click-to-move.
 - Extension points for game plugins: `EditorRegistry` (tools, panels, inspector overrides, spawner items), `SpawnKinds` (spawn handlers by kind), `CustomCommands` (`StudioCommand::Custom { name, args }`), scene-component registry.
 - **Pathfinder 2e plugin** (separate crate `crates/bevy_arc_pf2e`, built only on those extension points; the editor has no PF2e code): RON actor archetypes, factions, trigger volumes, and pilot tactical combat (distances in feet): initiative, 3-action turns, Stride / Step / Strike / Arcane Bolt / Fireball / Raise Shield / Interact, Reactive Strike gate that stops a Stride mid-route, enemy AI, Turn Order Bar, Tactical Hotbar and Combat Log. Agents drive it through the `CombatInput` order queue.
@@ -97,7 +102,7 @@ The project was built by an AI agent from independent mathematical specification
 
 - Manifest with SHA-256 hashes of the specs: [CLEAN_ROOM_PROOF.md](docs/clean_room_audit/CLEAN_ROOM_PROOF.md)
 - Math specifications: [01](docs/architecture/01_viewport_camera_math.md) · [02](docs/architecture/02_3d_gizmo_projection.md) · [03](docs/architecture/03_surface_snapping_and_picking.md) · [04](docs/architecture/04_procedural_terrain_and_splatmap.md) · [05](docs/architecture/05_transactional_undo_and_mcp_api.md)
-- Stage prompts: [00](docs/clean_room_audit/prompts/stage_00_prompt.md) · [01](docs/clean_room_audit/prompts/stage_01_prompt.md) · [02](docs/clean_room_audit/prompts/stage_02_prompt.md) · [03](docs/clean_room_audit/prompts/stage_03_prompt.md) · [04](docs/clean_room_audit/prompts/stage_04_prompt.md) · [05](docs/clean_room_audit/prompts/stage_05_prompt.md) · … all stages up to E7: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/)
+- Stage prompts: [00](docs/clean_room_audit/prompts/stage_00_prompt.md) · [01](docs/clean_room_audit/prompts/stage_01_prompt.md) · [02](docs/clean_room_audit/prompts/stage_02_prompt.md) · [03](docs/clean_room_audit/prompts/stage_03_prompt.md) · [04](docs/clean_room_audit/prompts/stage_04_prompt.md) · [05](docs/clean_room_audit/prompts/stage_05_prompt.md) · … all stages up to E9: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/)
 - Flight logs: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
 
 ## Project Status & Contributing
@@ -140,9 +145,10 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 - Единый транзакционный Undo/Redo (настройки мира, объекты, мазки рельефа, смена родителя, компоненты).
 - Level Builder (`L`): модульные тайлы на сетке (пол, стена, проём с открывающейся дверью, арка, колонна, лестница, крыша, факел с точечным светом), несколько этажей, комнаты протягиваются мышью; навигация перестраивается автоматически.
 - Asset Browser: модели `.glb`/`.gltf`, префабы (`.prefab.json`), сцены и процедурный набор/набор уровня, размещение по клику.
-- Управление ИИ-агентами: команды `StudioCommand` через рефлектируемый ресурс по `bevy_remote` (BRP), скриншоты через `brp_extras/screenshot`. См. [SKILL.md](SKILL.md).
+- Управление ИИ-агентами: команды `StudioCommand` через рефлектируемый ресурс по `bevy_remote` (BRP), скриншоты через `brp_extras/screenshot`. 48 команд (рельеф, объекты, камера, Level Builder, вода, префабы, модули, команды плагинов); форматы в [SKILL.md](SKILL.md), актуальная схема через `Describe`.
 - Play-in-Editor: кнопки `Play` / `Pause` / `Stop` в тулбаре. Play делает снимок всей сцены (настройки мира, объекты, тайлы, двери, инстансы префабов, акторы, камера редактора, стеки undo); Stop восстанавливает её точь-в-точь: сдвинутые персонажи, открытые двери, эффекты и изменённое HP не сохраняются. Для агентов: `StudioCommand::SetPlayMode { mode }`.
 - Префабы: тайлы заспавненного префаба следуют за его корнем при перемещении и повороте.
+- Водоёмы: у каждого бассейна свой уровень воды (`SetWaterBody`), поэтому ров можно залить, не поднимая озеро; уровни сохраняются в сцене, навигация учитывает брод. Трава, сосны, камни и тростник следуют за изменённым рельефом, трава и сосны под водой скрываются.
 - Поиск пути (Theta* + funnel), click-to-move.
 - Точки расширения для игровых плагинов: `EditorRegistry` (инструменты, панели, inspector overrides, пункты спавнера), `SpawnKinds` (обработчики спавна по `kind`), `CustomCommands` (`StudioCommand::Custom { name, args }`), реестр компонентов сцены.
 - **Плагин Pathfinder 2e** (отдельный крейт `crates/bevy_arc_pf2e`, только через эти точки расширения; в редакторе кода PF2e нет): RON-архетипы акторов, фракции, триггер-объёмы и пилотный тактический бой (расстояния в футах): инициатива, 3 действия за ход, Stride / Step / Strike / Arcane Bolt / Fireball / Raise Shield / Interact, Reactive Strike прерывает Stride на маршруте, ИИ врагов, Turn Order Bar, Tactical Hotbar и Combat Log. Для агентов — очередь приказов `CombatInput`.
@@ -192,7 +198,7 @@ app.add_plugins(bevy_arc_pf2e::Pf2ePlugin); // опционально: моду�
 
 - Манифест со слепками SHA-256 спецификаций: [CLEAN_ROOM_PROOF.md](docs/clean_room_audit/CLEAN_ROOM_PROOF.md)
 - Математические спецификации: [docs/architecture/01..05](docs/architecture/01_viewport_camera_math.md)
-- Промпты этапов: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/) (этапы 00–11, E0–E7)
+- Промпты этапов: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/) (этапы 00–11, E0–E9)
 - Бортовые журналы: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
 
 ### Статус проекта и участие

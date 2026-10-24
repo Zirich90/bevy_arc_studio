@@ -17,6 +17,11 @@
 | История | `Undo`, `Redo` | — |
 | Сцена и снимок | `SaveScene`, `LoadScene`, `Screenshot` | — |
 | Навигация | `SpawnActor`, `QueryPath`, `MoveActor` | нет |
+| Level Builder | `BuildRoom`, `BuildWallLine`, `PlaceLevelTile`, `PaintLevelTiles` (один шаг undo), `ToggleDoor` (нет) | да |
+| Сетка и земля | `SetGrid`, `SetGroundSnap` | нет |
+| Вода | `SetWaterBody { x, z, level }` (свой уровень бассейна, хранится в сцене, задаёт брод для навигации) | нет |
+| Префабы | `SaveSelectionAsPrefab` (нет), `SpawnPrefab` (да) | частично |
+| Модули | `SetModule`, `RescanModules`, `ConnectModule` | нет |
 | Самоописание | `Describe` | — |
 | Плагины | `Custom { name, args }` (реестр `CustomCommands`; PF2e: `pf2e.spawn_actor`) | зависит от обработчика |
 
