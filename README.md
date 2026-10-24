@@ -1,8 +1,8 @@
 # Bevy ArcStudio
 
-<video src="https://github.com/Zirich90/bevy_arc_studio/raw/main/docs/arcstudio_promo.mp4" controls muted width="100%"></video>
+![Promo](docs/arcstudio_promo.gif)
 
-[![Promo video](docs/screenshots/promo_01_castle_end.png)](docs/arcstudio_promo.mp4)
+[Full quality video (mp4)](docs/arcstudio_promo.mp4)
 
 **AI-first procedural 3D environment studio & editor GUI for Bevy 0.20** · `MIT OR Apache-2.0`
 
