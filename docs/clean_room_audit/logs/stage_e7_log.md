@@ -14,3 +14,4 @@
 - Screenshots: `docs/screenshots/e7_tactical_combat.png` (final), `e7_gate_preview.png` (route 15 ft + "Reactive Strike: Dungeon Guard"), `e7_after_stop.png`, `e7_play_start.png`.
 - Not verified / limits: Faction variants stay `Player`/`Hostile` (labelled Party/Enemy); actors are not path obstacles; a saved scene with level tiles reloads without tile components (LoadScene, seen during the run, not investigated); Asset Browser spawner entries registered but not visually checked; hotbar glyphs need a Windows symbol font (falls back to suit glyphs).
 - Verdict: **PASS**
+- Commit: `9f006f9` feat(editor): E7 pilot tactical PF2e combat with Reactive Strike ActionGate and combat UI (2026-10-24)
