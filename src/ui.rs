@@ -43,6 +43,8 @@ pub struct UiData<'w, 's> {
     pub rview: ResMut<'w, crate::ui_reflect::ReflectView>,
     pub redits: ResMut<'w, crate::ui_reflect::ReflectEdits>,
     pub reg: Res<'w, crate::editor_registry::EditorRegistry>,
+    pub gset: ResMut<'w, crate::level_builder::GridSettings>,
+    pub lbs: ResMut<'w, crate::level_builder::LevelBuilderState>,
     pub order: Res<'w, UndoOrder>,
     pub th: Res<'w, TerrainHistory>,
     pub grid: Res<'w, TerrainGrid>,

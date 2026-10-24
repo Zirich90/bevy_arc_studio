@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
 use crate::gizmo_3d::{GizmoMode, GizmoState, ObjState, SceneHistory};
+use crate::level_builder::{self as lb, TileKind, WallStyle};
 use crate::movement;
 use crate::operators::{self, CommandResults, DEFERRED, Target};
 use crate::props::{SceneObject, UserProp, assets_dir};
@@ -72,6 +73,18 @@ pub enum StudioCommand {
     RemoveComponent { target: Target, component: String },
     /// Move `child` under `parent` (None = root), keeping world position; not undoable.
     Reparent { child: Target, parent: Option<Target> },
+    /// Modular building: floor over the rectangle `min..=max` (grid cells, any corner order), pillars on corners, walls on the perimeter; one undo step.
+    BuildRoom { min: [i32; 2], max: [i32; 2], floor: i32, style: WallStyle },
+    /// Row of walls from `from` along the dominant axis to `to`; one undo step.
+    BuildWallLine { from: [i32; 2], to: [i32; 2], floor: i32, style: WallStyle },
+    /// One tile at grid cell `pos = [x, storey, z]`. Replaces the tile in the same slot (wall→doorway); `facing`/`style` None inherit the wall there.
+    PlaceLevelTile { kind: TileKind, pos: [i32; 3], facing: Option<u8>, style: Option<WallStyle> },
+    /// Brush stroke over many cells (floor paint, or `erase` = remove the wall layer / floor of each cell); one undo step.
+    PaintLevelTiles { kind: TileKind, cells: Vec<[i32; 3]>, style: WallStyle, erase: bool },
+    /// Open/close (`open: None` toggles) the door in a cell; locked doors refuse to open. Not undoable.
+    ToggleDoor { pos: [i32; 3], open: Option<bool> },
+    /// Snap grid and storey: `None` leaves a field unchanged. `floor_level` lifts the building plane to `Y = floor_level * floor_height`.
+    SetGrid { enabled: Option<bool>, cell_size: Option<f32>, floor_level: Option<i32>, floor_height: Option<f32>, angle_snap_deg: Option<f32> },
     /// pf2e: spawn `assets/actors/<template>.ron` on the terrain below `pos` (y ignored) with the given faction.
     #[cfg(feature = "pf2e")]
     SpawnActorFromTemplate { template: String, pos: Vec3, faction: crate::actors::Faction },
@@ -426,6 +439,14 @@ pub fn execute_commands(
             }
             StudioCommand::Reparent { child, parent } => {
                 queue_world_cmd(&mut spawner.commands, "Reparent", move |w| operators::reparent(w, &child, parent.as_ref()))
+            }
+            StudioCommand::BuildRoom { min, max, floor, style } => queue_world_cmd(&mut spawner.commands, "BuildRoom", move |w| lb::cmd_build_room(w, min, max, floor, style)),
+            StudioCommand::BuildWallLine { from, to, floor, style } => queue_world_cmd(&mut spawner.commands, "BuildWallLine", move |w| lb::cmd_build_wall_line(w, from, to, floor, style)),
+            StudioCommand::PlaceLevelTile { kind, pos, facing, style } => queue_world_cmd(&mut spawner.commands, "PlaceLevelTile", move |w| lb::cmd_place_tile(w, kind, pos, facing, style)),
+            StudioCommand::PaintLevelTiles { kind, cells, style, erase } => queue_world_cmd(&mut spawner.commands, "PaintLevelTiles", move |w| lb::cmd_paint_tiles(w, kind, cells, style, erase)),
+            StudioCommand::ToggleDoor { pos, open } => queue_world_cmd(&mut spawner.commands, "ToggleDoor", move |w| lb::cmd_toggle_door(w, pos, open)),
+            StudioCommand::SetGrid { enabled, cell_size, floor_level, floor_height, angle_snap_deg } => {
+                queue_world_cmd(&mut spawner.commands, "SetGrid", move |w| lb::cmd_set_grid(w, enabled, cell_size, floor_level, floor_height, angle_snap_deg))
             }
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));

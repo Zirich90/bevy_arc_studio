@@ -9,6 +9,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
+use crate::level_builder::{Door, GridSettings, LevelTile, tile_footprint};
 use crate::navigation::*;
 use crate::props::{ObjectCategory, SceneObject};
 use crate::selection::Deleted;
@@ -126,7 +127,7 @@ pub fn footprint_of(tf: &Transform, so: &SceneObject) -> Option<Footprint> {
     match so.category {
         ObjectCategory::Vegetation => (h.y > 1.5).then(|| Footprint::Circle { c, r: (h.x.max(h.z) * 0.22).max(0.25) }),
         ObjectCategory::Rock => Some(Footprint::Circle { c, r: h.x.max(h.z) * 0.85 }),
-        ObjectCategory::Actor | ObjectCategory::Trigger => None,
+        ObjectCategory::Actor | ObjectCategory::Trigger | ObjectCategory::Level => None,
         ObjectCategory::Camp => Some(Footprint::Circle { c, r: 1.2 }),
         ObjectCategory::Structure if so.name.contains("Pier") => None,
         ObjectCategory::Structure => Some(Footprint::Circle { c, r: h.x.max(h.z) * 0.6 }),
@@ -134,8 +135,11 @@ pub fn footprint_of(tf: &Transform, so: &SceneObject) -> Option<Footprint> {
     }
 }
 
-fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, objs: &Query<(&Transform, &SceneObject), Without<Deleted>>) {
-    let fps: Vec<Footprint> = objs.iter().filter_map(|(tf, so)| footprint_of(tf, so)).collect();
+type TileQuery<'w, 's> = Query<'w, 's, (&'static LevelTile, Option<&'static Door>, &'static Transform), Without<Deleted>>;
+
+fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, objs: &Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: &TileQuery, cell_size: f32) {
+    let mut fps: Vec<Footprint> = objs.iter().filter_map(|(tf, so)| footprint_of(tf, so)).collect();
+    fps.extend(tiles.iter().filter_map(|(t, d, tf)| tile_footprint(t, d, tf, cell_size)));
     nav.grid = Some(NavGrid::build(grid, water, &fps, AGENT_RADIUS));
     nav.dirty = false;
     nav.water = water;
@@ -150,24 +154,27 @@ fn refresh_nav(
     spec: Res<WorldSpec>,
     changed: Query<(), (With<SceneObject>, Or<(Added<SceneObject>, Changed<Transform>, Added<Deleted>)>)>,
     objs: Query<(&Transform, &SceneObject), Without<Deleted>>,
+    tiles: TileQuery,
+    doors: Query<(), Changed<Door>>,
+    gset: Res<GridSettings>,
     mut undeleted: RemovedComponents<Deleted>,
     mut gone: RemovedComponents<SceneObject>,
     mut nav: ResMut<NavMap>,
 ) {
-    let any = !changed.is_empty() || undeleted.read().count() > 0 || gone.read().count() > 0;
+    let any = !changed.is_empty() || !doors.is_empty() || undeleted.read().count() > 0 || gone.read().count() > 0;
     if any || version.is_changed() || grid.is_changed() || spec.water_level != nav.water {
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
     }
     if nav.dirty && time.elapsed_secs() - nav.changed_at >= REBUILD_DEBOUNCE {
-        rebuild(&mut nav, &grid.0, spec.water_level, &objs);
+        rebuild(&mut nav, &grid.0, spec.water_level, &objs, &tiles, gset.cell_size);
     }
 }
 
 /// Immediate rebuild (used by commands so queries never see a stale raster).
-fn force_rebuild(grid: Res<TerrainGrid>, spec: Res<WorldSpec>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, mut nav: ResMut<NavMap>) {
+fn force_rebuild(grid: Res<TerrainGrid>, spec: Res<WorldSpec>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: TileQuery, gset: Res<GridSettings>, mut nav: ResMut<NavMap>) {
     if nav.dirty || nav.grid.is_none() {
-        rebuild(&mut nav, &grid.0, spec.water_level, &objs);
+        rebuild(&mut nav, &grid.0, spec.water_level, &objs, &tiles, gset.cell_size);
     }
 }
 

@@ -327,7 +327,9 @@ fn start_drag(handle: Handle, view: &View, f: &Frame, ray: Ray3d, cursor: Vec2, 
     Some(d)
 }
 
-fn drag_update(d: &mut Drag, view: &View, ray: Ray3d, cursor: Vec2, ctrl: bool, snap_ground: bool, align: Option<f32>, grid: &HeightfieldGrid) -> Vec<(Entity, Transform)> {
+/// `snap`: level-builder grid steps `(move step in metres, rotate step in radians)`; they replace the Ctrl step while the grid is on.
+#[allow(clippy::too_many_arguments)]
+fn drag_update(d: &mut Drag, view: &View, ray: Ray3d, cursor: Vec2, ctrl: bool, snap_ground: bool, align: Option<f32>, grid: &HeightfieldGrid, snap: (Option<f32>, Option<f32>)) -> Vec<(Entity, Transform)> {
     let (ro, rd) = (ray.origin, *ray.direction);
     let o = d.origin;
     let mut out = Vec::with_capacity(d.starts.len());
@@ -364,6 +366,14 @@ fn drag_update(d: &mut Drag, view: &View, ray: Ray3d, cursor: Vec2, ctrl: bool, 
             for (e, s) in &d.starts {
                 let mut tf = *s;
                 tf.translation += d.last_delta;
+                if let Some(step) = snap.0 {
+                    // only axes the drag actually moved are rounded, so a pure X drag never shifts Z
+                    for c in [0, 2] {
+                        if d.last_delta[c].abs() > 1e-4 {
+                            tf.translation[c] = (tf.translation[c] / step).round() * step;
+                        }
+                    }
+                }
                 if snap_ground && !vertical {
                     let (x, z) = (tf.translation.x, tf.translation.z);
                     tf.translation.y = grid.sample_height(x, z);
@@ -384,7 +394,9 @@ fn drag_update(d: &mut Drag, view: &View, ray: Ray3d, cursor: Vec2, ctrl: bool, 
                 }
                 d.prev_raw = Some(raw);
             }
-            let angle = if ctrl {
+            let angle = if let Some(st) = snap.1 {
+                (d.acc / st).round() * st
+            } else if ctrl {
                 let st = ROT_SNAP_DEG.to_radians();
                 (d.acc / st).round() * st
             } else {
@@ -522,6 +534,7 @@ pub fn gizmo_system(
     mut objs: Query<(&mut Transform, &SceneObject), Without<Deleted>>,
     mut gizmos: Gizmos<HandleGizmos>,
     studio: Res<StudioState>,
+    gset: Res<crate::level_builder::GridSettings>,
 ) {
     let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
     let (camera, gtf, proj, ecam) = *cam;
@@ -589,7 +602,7 @@ pub fn gizmo_system(
         } else {
             if let (Some(c), Some(r)) = (cursor, ray) {
                 let align = gz.align_normal.then_some(gz.align_strength);
-                let res = drag_update(&mut d, &view, r, c, ctrl, shift || gz.snap_ground, align, grid);
+                let res = drag_update(&mut d, &view, r, c, ctrl, shift || gz.snap_ground, align, grid, (gset.move_step(ctrl), gset.rot_step_rad()));
                 for (e, t) in &res {
                     if let Ok((mut tf, _)) = objs.get_mut(*e) {
                         *tf = *t;

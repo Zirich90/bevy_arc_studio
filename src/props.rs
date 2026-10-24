@@ -27,6 +27,8 @@ pub enum ObjectCategory {
     Actor,
     /// pf2e trigger volume.
     Trigger,
+    /// Modular level tile (`LevelTile`); navigation footprints come from the tile, not the category.
+    Level,
 }
 
 /// Selectable root of every spawned object (stage 3 picking / inspector hook).
@@ -727,6 +729,12 @@ pub fn spawn_user_prop(
         "lantern" => {
             let tf = mul_tf(pos, rot);
             (spawn_lantern(commands, &mut cx, assets, meshes, tf), tf)
+        }
+        "level" => {
+            // bare root: `LevelTile` (restored from a scene file or inserted by the builder) drives the visuals
+            let tf = mul_tf(pos, rot);
+            let o = cx.obj("LevelTile", ObjectCategory::Level, Vec3::new(1.0, 1.75, 1.0));
+            (commands.spawn((Name::new("LevelTile"), o, tf, Visibility::default())).id(), tf)
         }
         k if k.starts_with("model:") => {
             let file = &k[6..];

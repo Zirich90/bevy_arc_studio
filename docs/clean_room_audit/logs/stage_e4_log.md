@@ -1,0 +1,11 @@
+# Stage E4 — LevelBuilderPlugin (2026-10-24)
+- Files: src/level_builder.rs (new), lib.rs, props.rs (ObjectCategory::Level, kind "level"), mcp_commands.rs (BuildRoom, BuildWallLine, PlaceLevelTile, PaintLevelTiles, ToggleDoor, SetGrid), operators.rs, ui.rs, gizmo_3d.rs (grid snap Move/Rotate), movement.rs (nav footprints from tiles + Door changes).
+- Components: LevelTile{kind,grid_pos,facing,style}, Door{is_open,is_locked}, resource GridSettings (defaults 2.0 / 3.5 / 15°); registered as scene components (save/load via UserProp "level").
+- Tool `Level Builder (L)` + panel: Room Box, Wall Line, Floor Brush, Eraser, Door, Arch, Stairs, Pillar, Torch; T rotates facing; Esc cancels. Door leaf swings 90° on is_open.
+- Nav: Wall/Pillar/closed Doorway block; open door, arch, floor, stairs free. Only storey 0 enters the 2D raster.
+- cargo check: 0 errors/warnings. cargo test: 45 lib tests pass (8 new: Room Box + single Undo, wall→door replace, door↔nav passability + lock, footprints, grid math, geometry per style, JSON roundtrip, wall line).
+- Scene built over BRP on empty grid (terrain_enabled=0): 2 rooms (Stone/Wood), doorway (open), 4 pillars, 5 torches, stairs, 2nd-floor room.
+- Screenshot: docs/screenshots/e4_level_builder.png — reviewed, no layout/render bugs.
+- Not verified: interactive mouse drag of tools, gizmo snap in live UI, save/load round-trip of tiles.
+- Extra vs spec: TileKind::Torch, PaintLevelTiles/SetGrid commands, stairs span 2 cells.
+- Verdict: PASS
