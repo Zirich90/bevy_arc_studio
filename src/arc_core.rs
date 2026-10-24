@@ -1052,6 +1052,11 @@ impl<S: Clone + PartialEq + Send + Sync + 'static> UndoHistory<S> {
         Some(s)
     }
 
+    /// Drop the redo stack (a fresh edit in any other history invalidates it).
+    pub fn clear_redo(&mut self) {
+        self.redo.clear();
+    }
+
     pub fn redo(&mut self) -> Option<S> {
         self.cancel();
         let e = self.redo.pop()?;

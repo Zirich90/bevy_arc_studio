@@ -221,30 +221,85 @@ pub fn process_history(
     }
 }
 
-fn track_order(wh: Res<UndoHistory<WorldSpec>>, sh: Res<SceneHistory>, th: Res<TerrainHistory>, ch: Res<crate::operators::ComponentHistory>, mut o: ResMut<UndoOrder>) {
-    let now = [(wh.undo_len(), wh.redo_len()), (sh.undo_len(), sh.redo_len()), (th.undo_len(), th.redo_len()), (ch.undo_len(), ch.redo_len())];
-    for (k, src) in [HistSrc::World, HistSrc::Scene, HistSrc::Terrain, HistSrc::Comp].into_iter().enumerate() {
-        let ((u, r), (lu, lr)) = (now[k], o.last[k]);
-        if u > lu {
-            for _ in lu..u {
-                if r < lr {
-                    if let Some(p) = o.redo.iter().rposition(|s| *s == src) {
-                        o.redo.remove(p);
+fn track_order(
+    mut wh: ResMut<UndoHistory<WorldSpec>>,
+    mut sh: ResMut<SceneHistory>,
+    mut th: ResMut<TerrainHistory>,
+    mut ch: ResMut<crate::operators::ComponentHistory>,
+    mut o: ResMut<UndoOrder>,
+) {
+    let lens = |wh: &UndoHistory<WorldSpec>, sh: &SceneHistory, th: &TerrainHistory, ch: &crate::operators::ComponentHistory| {
+        [(wh.undo_len(), wh.redo_len()), (sh.undo_len(), sh.redo_len()), (th.undo_len(), th.redo_len()), (ch.undo_len(), ch.redo_len())]
+    };
+    if o.sync(lens(&wh, &sh, &th, &ch)) {
+        // a fresh edit invalidates every redo, not just the one of the history it landed in
+        wh.clear_redo();
+        sh.clear_redo();
+        th.clear_redo();
+        ch.clear_redo();
+        o.sync(lens(&wh, &sh, &th, &ch));
+    }
+}
+
+impl UndoOrder {
+    /// Fold the per-history (undo_len, redo_len) pairs, in `HistSrc` order, into the global chronological stacks.
+    /// Returns true when a fresh edit (not an undo/redo) was recorded.
+    pub fn sync(&mut self, now: [(usize, usize); 4]) -> bool {
+        let mut fresh = false;
+        for (k, src) in [HistSrc::World, HistSrc::Scene, HistSrc::Terrain, HistSrc::Comp].into_iter().enumerate() {
+            let ((u, r), (lu, lr)) = (now[k], self.last[k]);
+            if u > lu {
+                for _ in lu..u {
+                    if r < lr {
+                        if let Some(p) = self.redo.iter().rposition(|s| *s == src) {
+                            self.redo.remove(p);
+                        }
+                    } else {
+                        self.redo.clear();
+                        fresh = true;
                     }
-                } else {
-                    o.redo.retain(|s| *s != src);
+                    self.stack.push(src);
                 }
-                o.stack.push(src);
-            }
-        } else if u < lu {
-            for _ in u..lu {
-                if let Some(p) = o.stack.iter().rposition(|s| *s == src) {
-                    o.stack.remove(p);
+            } else if u < lu {
+                for _ in u..lu {
+                    if let Some(p) = self.stack.iter().rposition(|s| *s == src) {
+                        self.stack.remove(p);
+                    }
+                    self.redo.push(src);
                 }
-                o.redo.push(src);
             }
+            self.last[k] = (u, r);
         }
-        o.last[k] = (u, r);
+        fresh
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mixed_chain_undoes_in_reverse_and_redoes_forward() {
+        let mut o = UndoOrder::default();
+        // world edit, comp edit, terrain stroke, scene edit (each in a different history)
+        o.sync([(1, 0), (0, 0), (0, 0), (0, 0)]);
+        o.sync([(1, 0), (0, 0), (0, 0), (1, 0)]);
+        o.sync([(1, 0), (0, 0), (1, 0), (1, 0)]);
+        o.sync([(1, 0), (1, 0), (1, 0), (1, 0)]);
+        assert_eq!(o.stack, [HistSrc::World, HistSrc::Comp, HistSrc::Terrain, HistSrc::Scene]);
+        // undo twice: scene, then terrain
+        o.sync([(1, 0), (0, 1), (1, 0), (1, 0)]);
+        o.sync([(1, 0), (0, 1), (0, 1), (1, 0)]);
+        assert_eq!(o.stack, [HistSrc::World, HistSrc::Comp]);
+        assert_eq!(o.redo, [HistSrc::Scene, HistSrc::Terrain]);
+        // redo pops the most recently undone first
+        assert_eq!(o.redo.last(), Some(&HistSrc::Terrain));
+        o.sync([(1, 0), (0, 1), (1, 0), (1, 0)]);
+        assert_eq!(o.stack.last(), Some(&HistSrc::Terrain));
+        // a new edit in another history clears the whole redo (the caller then clears the per-history redos)
+        assert!(o.sync([(2, 0), (0, 1), (1, 0), (1, 0)]));
+        assert!(o.redo.is_empty());
+        assert_eq!(o.stack.last(), Some(&HistSrc::World));
     }
 }
 

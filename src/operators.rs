@@ -233,11 +233,13 @@ pub struct CompSnap {
     pub entity: Entity,
     pub type_id: TypeId,
     pub value: Option<Box<dyn Reflect>>,
+    /// Components restored together with this one in a single undo step (e.g. `ChildOf` + `Transform` of a reparent).
+    pub also: Vec<CompSnap>,
 }
 
 impl Clone for CompSnap {
     fn clone(&self) -> Self {
-        Self { entity: self.entity, type_id: self.type_id, value: self.value.as_ref().and_then(|v| v.reflect_clone().ok()) }
+        Self { entity: self.entity, type_id: self.type_id, value: self.value.as_ref().and_then(|v| v.reflect_clone().ok()), also: self.also.clone() }
     }
 }
 
@@ -245,6 +247,7 @@ impl PartialEq for CompSnap {
     fn eq(&self, o: &Self) -> bool {
         self.entity == o.entity
             && self.type_id == o.type_id
+            && self.also == o.also
             && match (&self.value, &o.value) {
                 (None, None) => true,
                 (Some(a), Some(b)) => a.reflect_partial_eq(b.as_partial_reflect()).unwrap_or(false),
@@ -271,10 +274,17 @@ pub fn snap(w: &World, e: Entity, tid: TypeId) -> CompSnap {
         .get_type_data::<ReflectComponent>(tid)
         .and_then(|rc| w.get_entity(e).ok().and_then(|er| rc.reflect(er)))
         .and_then(|r| r.reflect_clone().ok());
-    CompSnap { entity: e, type_id: tid, value }
+    CompSnap { entity: e, type_id: tid, value, also: Vec::new() }
 }
 
 pub fn apply_snap(w: &mut World, s: &CompSnap) {
+    apply_one(w, s);
+    for a in &s.also {
+        apply_one(w, a);
+    }
+}
+
+fn apply_one(w: &mut World, s: &CompSnap) {
     let registry = w.resource::<AppTypeRegistry>().clone();
     let reg = registry.read();
     let Some(rc) = reg.get_type_data::<ReflectComponent>(s.type_id) else { return };
@@ -404,9 +414,16 @@ pub fn remove_component(w: &mut World, target: &Target, component: &str) -> Resu
     Ok(format!("removed {component}"))
 }
 
-/// Move `child` under `parent` (or to the root), keeping its world transform. Not undoable.
+fn hierarchy_snap(w: &World, e: Entity) -> CompSnap {
+    let mut s = snap(w, e, TypeId::of::<ChildOf>());
+    s.also.push(snap(w, e, TypeId::of::<Transform>()));
+    s
+}
+
+/// Move `child` under `parent` (or to the root), keeping its world transform. One undo step restores parent and local transform.
 pub fn reparent(w: &mut World, child: &Target, parent: Option<&Target>) -> Result<String, String> {
     let c = resolve(w, child)?;
+    let before = hierarchy_snap(w, c);
     let p = parent.map(|t| resolve(w, t)).transpose()?;
     if let Some(p) = p {
         let mut anc = Some(p);
@@ -434,6 +451,8 @@ pub fn reparent(w: &mut World, child: &Target, parent: Option<&Target>) -> Resul
         };
         w.entity_mut(c).insert(Transform::from_matrix(local));
     }
+    let after = hierarchy_snap(w, c);
+    record_edit(w, "Reparent", before, after, false);
     let path = path_of(w, c);
     Ok(format!("reparented -> {path}"))
 }
@@ -586,5 +605,26 @@ mod tests {
         assert!(pa.starts_with("Camp/Tent#"), "{pa}");
         assert_eq!(resolve(w, &Target::Path(pa)).unwrap(), a);
         assert!(reparent(w, &Target::Entity(root), Some(&Target::Entity(a))).is_err());
+    }
+
+    #[test]
+    fn reparent_undo_restores_parent_and_local_transform() {
+        let mut app = app();
+        app.register_type::<ChildOf>().register_type::<Transform>();
+        let w = app.world_mut();
+        let tf = Transform::from_xyz(10.0, 0.0, 0.0);
+        let root = w.spawn((Name::new("Camp"), tf, GlobalTransform::from(tf))).id();
+        let tf = Transform::from_xyz(1.0, 0.0, 0.0);
+        let a = w.spawn((Name::new("Tent"), tf, GlobalTransform::from(tf))).id();
+        reparent(w, &Target::Entity(a), Some(&Target::Entity(root))).unwrap();
+        assert_eq!(w.get::<ChildOf>(a).map(|c| c.parent()), Some(root));
+        assert!((w.get::<Transform>(a).unwrap().translation.x + 9.0).abs() < 1e-4);
+        let s = w.resource_mut::<ComponentHistory>().undo().unwrap();
+        apply_snap(w, &s);
+        assert!(w.get::<ChildOf>(a).is_none());
+        assert!((w.get::<Transform>(a).unwrap().translation.x - 1.0).abs() < 1e-4);
+        let s = w.resource_mut::<ComponentHistory>().redo().unwrap();
+        apply_snap(w, &s);
+        assert_eq!(w.get::<ChildOf>(a).map(|c| c.parent()), Some(root));
     }
 }
