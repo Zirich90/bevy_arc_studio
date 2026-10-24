@@ -27,6 +27,17 @@ pub enum InspectorTab {
     Brushes,
 }
 
+impl InspectorTab {
+    /// Panel id in `EditorRegistry` (kept so BRP `SetTab` stays stable).
+    pub fn panel_id(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Objects => "objects",
+            Self::Brushes => "brushes",
+        }
+    }
+}
+
 #[derive(Reflect, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum CamStyle {
     #[default]
@@ -38,7 +49,10 @@ pub enum CamStyle {
 #[reflect(Resource)]
 pub struct StudioState {
     pub mode: StudioMode,
-    pub tab: InspectorTab,
+    /// Id of the open inspector panel in `EditorRegistry`.
+    pub tab: String,
+    /// Id of the active viewport tool in `EditorRegistry` (`select` = gizmo).
+    pub tool: String,
     pub cam_style: CamStyle,
     pub search: String,
     pub hide_scatter: bool,
@@ -54,7 +68,8 @@ impl Default for StudioState {
     fn default() -> Self {
         Self {
             mode: StudioMode::Editor,
-            tab: InspectorTab::Global,
+            tab: "global".into(),
+            tool: "select".into(),
             cam_style: CamStyle::Orbit,
             search: String::new(),
             hide_scatter: true,
@@ -71,10 +86,10 @@ impl Default for StudioState {
 impl StudioState {
     /// Gizmo + click selection are live (editor mode, not sculpting).
     pub fn gizmo_active(&self) -> bool {
-        self.mode == StudioMode::Editor && self.tab != InspectorTab::Brushes
+        self.mode == StudioMode::Editor && self.tool == crate::editor_registry::TOOL_SELECT
     }
     pub fn brush_active(&self) -> bool {
-        self.mode == StudioMode::Editor && self.tab == InspectorTab::Brushes
+        self.mode == StudioMode::Editor && self.tool == crate::world_environment::TOOL_TERRAIN_BRUSH
     }
 }
 
@@ -307,16 +322,21 @@ mod tests {
 #[allow(clippy::type_complexity)]
 fn apply_view_toggles(
     studio: Res<StudioState>,
+    spec: Res<WorldSpec>,
     mut water: Query<&mut Visibility, With<Water>>,
-    mut props: Query<(&SceneObject, &mut Visibility), (Without<Water>, Without<Deleted>)>,
+    mut terrain: Query<&mut Visibility, (With<TerrainMesh>, Without<Water>)>,
+    mut props: Query<(&SceneObject, &mut Visibility), (Without<Water>, Without<TerrainMesh>, Without<Deleted>)>,
     added: Query<(), Added<SceneObject>>,
 ) {
-    if !studio.is_changed() && added.is_empty() {
+    if !studio.is_changed() && !spec.is_changed() && added.is_empty() {
         return;
     }
     let vis = |on: bool| if on { Visibility::Inherited } else { Visibility::Hidden };
     for mut v in &mut water {
-        v.set_if_neq(vis(studio.show_water));
+        v.set_if_neq(vis(studio.show_water && spec.terrain_enabled));
+    }
+    for mut v in &mut terrain {
+        v.set_if_neq(vis(spec.terrain_enabled));
     }
     for (so, mut v) in &mut props {
         if matches!(so.name.as_str(), "GrassClump" | "Reeds") {

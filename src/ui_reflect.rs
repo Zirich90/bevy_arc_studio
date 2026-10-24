@@ -8,6 +8,7 @@ use bevy::reflect::enums::{DynamicEnum, DynamicVariant, VariantInfo};
 use bevy::reflect::{PartialReflect, ReflectMut};
 use bevy_egui::egui;
 
+use crate::editor_registry::EditorRegistry;
 use crate::operators::{COALESCE_SECS, CompClock, ComponentHistory, flush_comp_history, record_edit, snap};
 use crate::selection::EditorSelection;
 use crate::studio::HistoryRequest;
@@ -98,24 +99,65 @@ fn sync_reflect(world: &mut World) {
     *world.resource_mut::<ReflectView>() = view;
 }
 
-pub fn draw(ui: &mut egui::Ui, view: &mut ReflectView, edits: &mut ReflectEdits, filter: &str) {
-    let Some(e) = view.entity else { return };
+/// Component-list action requested from the inspector; the caller turns it into an undoable `StudioCommand`.
+pub enum CompAction {
+    Add(String),
+    Remove(String),
+}
+
+/// Components that define the object itself; they have no `[×]`.
+const PROTECTED: &[&str] = &["SceneObject", "UserProp"];
+
+pub fn draw(ui: &mut egui::Ui, view: &mut ReflectView, edits: &mut ReflectEdits, reg: &EditorRegistry, filter: &str) -> Option<CompAction> {
+    let e = view.entity?;
+    let mut action = None;
     ui.separator();
-    ui.label(egui::RichText::new("Components (reflect)").strong().color(TEAL));
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Components").strong().color(TEAL));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.menu_button("+ Add Component", |ui| {
+                let missing: Vec<_> = reg.scene_components().iter().filter(|c| !view.comps.iter().any(|v| v.type_id == c.type_id)).collect();
+                if missing.is_empty() {
+                    ui.weak("all registered components present");
+                }
+                for c in missing {
+                    if ui.button(&c.name).clicked() {
+                        action = Some(CompAction::Add(c.name.clone()));
+                        ui.close();
+                    }
+                }
+            });
+        });
+    });
     for c in view.comps.iter_mut() {
         if !filter.is_empty() && !c.name.to_lowercase().contains(filter) {
             continue;
         }
         let mut changed = false;
-        egui::CollapsingHeader::new(&c.name).id_salt((e, c.type_id)).default_open(false).show(ui, |ui| {
-            changed = edit(ui, c.value.as_partial_reflect_mut(), "", 0);
-        });
+        let id = ui.make_persistent_id((e, c.type_id));
+        let custom = reg.inspector_override(c.type_id);
+        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+            .show_header(ui, |ui| {
+                ui.label(egui::RichText::new(&c.name).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !PROTECTED.contains(&c.name.as_str()) && ui.small_button("×").on_hover_text("Remove component").clicked() {
+                        action = Some(CompAction::Remove(c.name.clone()));
+                    }
+                });
+            })
+            .body(|ui| {
+                changed = match custom {
+                    Some(f) => f(ui, c.value.as_partial_reflect_mut()),
+                    None => edit(ui, c.value.as_partial_reflect_mut(), "", 0),
+                };
+            });
         if changed {
             if let Ok(v) = c.value.reflect_clone() {
                 edits.0.push((e, c.type_id, v));
             }
         }
     }
+    action
 }
 
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui) -> bool) -> bool {

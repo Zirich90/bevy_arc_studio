@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::hash::Hash;
 
-use bevy::prelude::{EulerRot, Quat, Reflect, ReflectResource, Resource, Vec2, Vec3};
+use bevy::prelude::{EulerRot, Quat, Reflect, ReflectDefault, ReflectResource, Resource, Vec2, Vec3};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -40,8 +40,11 @@ pub enum WorldPreset {
 }
 
 #[derive(Resource, Reflect, Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[reflect(Resource)]
+#[reflect(Resource, Default)]
 pub struct WorldSpec {
+    /// false = `Empty Grid Scene`: no procedural terrain, lake or scatter; a flat infinite grid at Y = 0 instead.
+    #[serde(default = "default_true")]
+    pub terrain_enabled: bool,
     // terrain
     pub seed: u32,
     pub size: f32,
@@ -82,9 +85,14 @@ pub struct WorldSpec {
     pub grass_density: f32,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl Default for WorldSpec {
     fn default() -> Self {
         Self {
+            terrain_enabled: true,
             seed: 1337,
             size: 256.0,
             resolution: 257,
@@ -703,6 +711,9 @@ fn ground_rot(normal: Vec3, yaw: f32, tilt: f32) -> Quat {
 }
 
 pub fn generate_scatter_plan(spec: &WorldSpec, grid: &HeightfieldGrid) -> Vec<ScatterItem> {
+    if !spec.terrain_enabled {
+        return Vec::new();
+    }
     let mut rng = StdRng::seed_from_u64(spec.seed as u64 ^ 0x9E37_79B9);
     let half = grid.size * 0.5 - 2.0;
     let camp = spec.camp_pos();

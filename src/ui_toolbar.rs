@@ -3,6 +3,7 @@
 use bevy_egui::egui;
 
 use crate::arc_core::WorldPreset;
+use crate::editor_registry::TOOL_SELECT;
 use crate::gizmo_3d::GizmoMode;
 use crate::mcp_commands::StudioCommand as Cmd;
 use crate::studio::{CamStyle, StudioMode};
@@ -23,8 +24,15 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
             }
             vsep(ui);
             for (label, m) in [("Select (Q)", GizmoMode::Select), ("Move (W)", GizmoMode::Move), ("Rotate (E)", GizmoMode::Rotate), ("Scale (R)", GizmoMode::Scale)] {
-                if chip(ui, d.gz.mode == m, label).clicked() {
+                if chip(ui, d.studio.tool == TOOL_SELECT && d.gz.mode == m, label).clicked() {
                     d.gz.mode = m;
+                    d.reg.activate_tool(&mut d.studio, TOOL_SELECT);
+                }
+            }
+            for t in d.reg.tools().iter().filter(|t| t.id != TOOL_SELECT).cloned().collect::<Vec<_>>() {
+                let label = t.hotkey.map_or_else(|| t.label.to_string(), |k| format!("{} ({})", t.label, key_label(k)));
+                if chip(ui, d.studio.tool == t.id, &label).on_hover_text(t.hint).clicked() {
+                    d.reg.activate_tool(&mut d.studio, t.id);
                 }
             }
             if chip(ui, d.gz.snap_ground, "Snap to Ground").clicked() {
@@ -80,4 +88,8 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
         });
     });
     out.response.rect.bottom()
+}
+
+fn key_label(k: bevy::input::keyboard::KeyCode) -> String {
+    format!("{k:?}").trim_start_matches("Key").to_string()
 }

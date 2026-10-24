@@ -53,6 +53,8 @@ impl SceneComponentAppExt for App {
     fn register_scene_component<T: Component + Reflect + GetTypeRegistration>(&mut self) -> &mut Self {
         self.register_type::<T>();
         self.world_mut().get_resource_or_insert_with(SceneComponentRegistry::default).ids.push(TypeId::of::<T>());
+        // also listed in the inspector's [+ Add Component] menu
+        self.world_mut().get_resource_or_insert_with(crate::editor_registry::EditorRegistry::default).register_scene_component::<T>();
         self
     }
 }

@@ -187,7 +187,7 @@ pub fn execute_commands(
                 Ok(format!("mode {m:?}"))
             }
             StudioCommand::SetTab(t) => {
-                studio.tab = t;
+                studio.tab = t.panel_id().to_string();
                 Ok(format!("tab {t:?}"))
             }
             StudioCommand::SetBrush { kind, radius, strength } => {

@@ -42,6 +42,7 @@ pub struct UiData<'w, 's> {
     pub draft: ResMut<'w, ui_inspector::InspectorDraft>,
     pub rview: ResMut<'w, crate::ui_reflect::ReflectView>,
     pub redits: ResMut<'w, crate::ui_reflect::ReflectEdits>,
+    pub reg: Res<'w, crate::editor_registry::EditorRegistry>,
     pub order: Res<'w, UndoOrder>,
     pub th: Res<'w, TerrainHistory>,
     pub grid: Res<'w, TerrainGrid>,
@@ -99,6 +100,7 @@ fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Loc
         top = ui_toolbar::draw(&mut ui, &mut d);
         ui_inspector::draw(&mut ui, &mut d);
         ui_outliner::draw(&mut ui, &mut d, &mut outliner);
+        ui_inspector::draw_docks(&mut ui, &mut d);
     }
     if (d.studio.toolbar_h - top).abs() > 0.5 {
         d.studio.toolbar_h = top;

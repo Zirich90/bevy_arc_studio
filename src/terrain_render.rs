@@ -26,6 +26,7 @@ struct GeoKey {
     terrain: (u32, u32, [u32; 7], u32, u32),
     lake: ([f32; 2], [f32; 2], [f32; 4]),
     biome: [f32; 4],
+    enabled: bool,
 }
 
 impl GeoKey {
@@ -40,6 +41,7 @@ impl GeoKey {
             ),
             lake: (s.lake_center, s.camp_pos().to_array(), [s.lake_radius, s.lake_depth, s.water_level, s.clearing_radius]),
             biome: [s.forest_density, s.boulder_density, s.grass_density, 0.0],
+            enabled: s.terrain_enabled,
         }
     }
 }
@@ -54,6 +56,12 @@ impl Plugin for TerrainRenderPlugin {
 
 pub fn generate_world(spec: &WorldSpec) -> HeightfieldGrid {
     let mut grid = HeightfieldGrid::generate(spec);
+    if !spec.terrain_enabled {
+        // Empty Grid Scene: flat ground at Y = 0 so snapping / raycasts keep working.
+        grid.heights.fill(0.0);
+        grid.erosion_mask.fill(0.0);
+        return grid;
+    }
     grid.erode_hydraulic(spec.erosion_droplets, spec.seed as u64);
     grid.erode_thermal(spec.thermal_iterations, 35.0);
     grid.clamp_heights(spec.max_height);
@@ -165,7 +173,7 @@ fn rebuild_on_spec_change(
     if new == *key && !has_pending {
         return;
     }
-    let terrain_changed = new.terrain != key.terrain || new.lake != key.lake;
+    let terrain_changed = new.terrain != key.terrain || new.lake != key.lake || new.enabled != key.enabled;
     *key = new;
     if terrain_changed {
         grid.0 = generate_world(&spec);

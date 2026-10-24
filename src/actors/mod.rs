@@ -8,6 +8,7 @@
 pub mod triggers;
 
 use bevy::prelude::*;
+use crate::editor_registry::{EditorAppExt, spawn_kind};
 use bevy_egui::egui;
 use serde::{Deserialize, Serialize};
 
@@ -292,6 +293,9 @@ pub struct ActorsPlugin;
 impl Plugin for ActorsPlugin {
     fn build(&self, app: &mut App) {
         register_types(app);
+        app.register_spawner_item("RPG (pf2e)", "Fighter", spawn_kind("actor:hero_fighter"))
+            .register_spawner_item("RPG (pf2e)", "Goblin", spawn_kind("actor:goblin_warrior"))
+            .register_spawner_item("RPG (pf2e)", "Trigger Volume", spawn_kind("trigger"));
         app.add_plugins(triggers::TriggersPlugin).add_systems(Update, (sync_actor_ids, sync_faction_disc));
     }
 }

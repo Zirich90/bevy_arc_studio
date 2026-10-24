@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
-use crate::gizmo_3d::{ObjState, SceneHistory, gizmo_system};
+use crate::gizmo_3d::{ObjState, SceneHistory};
 use crate::props::SceneObject;
 use crate::selection::{Deleted, SelectionGizmos};
 use crate::studio::{Spawner, StudioState, TerrainHistory};
@@ -101,18 +101,18 @@ pub struct TerrainBrushPlugin;
 
 impl Plugin for TerrainBrushPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BrushState>().register_type::<BrushState>().register_type::<BrushKind>().add_systems(Update, brush_system.after(gizmo_system));
+        app.init_resource::<BrushState>().register_type::<BrushState>().register_type::<BrushKind>();
     }
 }
 
 #[derive(bevy::ecs::system::SystemParam)]
-struct Hists<'w> {
+pub(crate) struct Hists<'w> {
     th: ResMut<'w, TerrainHistory>,
     sh: ResMut<'w, SceneHistory>,
 }
 
 #[derive(Default)]
-struct StrokeData {
+pub(crate) struct StrokeData {
     active: bool,
     before: Option<Vec<f32>>,
     target: f32,
@@ -123,7 +123,7 @@ struct StrokeData {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn brush_system(
+pub(crate) fn brush_system(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,

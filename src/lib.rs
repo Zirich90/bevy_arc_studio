@@ -2,6 +2,7 @@
 pub mod actors;
 pub mod arc_core;
 pub mod camera;
+pub mod editor_registry;
 pub mod gizmo_3d;
 pub mod lighting;
 pub mod props;
@@ -22,6 +23,7 @@ pub mod ui_inspector;
 pub mod ui_outliner;
 pub mod ui_reflect;
 pub mod ui_toolbar;
+pub mod world_environment;
 pub mod world_io;
 
 pub mod prelude {
@@ -71,19 +73,15 @@ impl Plugin for BevyArcStudioPlugin {
         app.init_resource::<arc_core::UndoHistory<arc_core::WorldSpec>>()
             .register_type::<arc_core::WorldSpec>()
             .register_type::<camera::EditorCamera>()
+            .add_plugins((editor_registry::EditorRegistryPlugin, world_environment::WorldEnvironmentPlugin))
             .add_plugins((
-                terrain_render::TerrainRenderPlugin,
-                water::WaterPlugin,
-                props::PropsPlugin,
                 scene::ScenePlugin,
                 camera::EditorCameraPlugin,
-                lighting::LightingPlugin,
                 ui::UiPlugin,
                 ui_reflect::ReflectInspectorPlugin,
                 selection::SelectionPlugin,
                 gizmo_3d::Gizmo3dPlugin,
                 studio::StudioPlugin,
-                terrain_brush::TerrainBrushPlugin,
                 mcp_commands::McpCommandsPlugin,
                 movement::MovementPlugin,
                 world_io::WorldIoPlugin,

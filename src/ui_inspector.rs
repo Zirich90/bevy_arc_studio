@@ -1,4 +1,5 @@
-//! Right inspector (~360 px): live search + tabs Global Settings / Objects & Spawner / Terrain Brushes.
+//! Right inspector (~360 px): live search + tabs for every `EditorRegistry` panel (Global Settings and Terrain Brushes come from
+//! `WorldEnvironmentPlugin`); the core contributes the Objects & Spawner panel with the universal component inspector.
 
 use std::ops::RangeInclusive;
 
@@ -9,23 +10,23 @@ use crate::arc_core::*;
 use crate::gizmo_3d::ObjState;
 use crate::mcp_commands::StudioCommand as Cmd;
 use crate::props::assets_dir;
-use crate::studio::{InspectorTab, StudioState};
-use crate::terrain_brush::BrushKind;
+use crate::editor_registry::PanelLocation;
+use crate::studio::StudioState;
 use crate::ui::*;
 
 /// Pending (not yet released) edit of geometry-affecting WorldSpec fields — terrain regenerates once, on release.
 #[derive(Resource, Default)]
 pub struct InspectorDraft(pub Option<WorldSpec>);
 
-struct Filter(String);
+pub struct Filter(pub String);
 
 impl Filter {
-    fn ok(&self, label: &str) -> bool {
+    pub fn ok(&self, label: &str) -> bool {
         self.0.is_empty() || label.to_lowercase().contains(&self.0)
     }
 }
 
-fn section(ui: &mut egui::Ui, f: &Filter, title: &str, labels: &[&str], body: impl FnOnce(&mut egui::Ui)) {
+pub fn section(ui: &mut egui::Ui, f: &Filter, title: &str, labels: &[&str], body: impl FnOnce(&mut egui::Ui)) {
     if !(f.ok(title) || labels.iter().any(|l| f.ok(l))) {
         return;
     }
@@ -36,39 +37,16 @@ fn section(ui: &mut egui::Ui, f: &Filter, title: &str, labels: &[&str], body: im
     h.show(ui, body);
 }
 
-fn srow<N: egui::emath::Numeric>(ui: &mut egui::Ui, f: &Filter, ev: &mut Ev, label: &str, v: &mut N, range: RangeInclusive<N>) {
+pub fn srow<N: egui::emath::Numeric>(ui: &mut egui::Ui, f: &Filter, ev: &mut Ev, label: &str, v: &mut N, range: RangeInclusive<N>) {
     if f.ok(label) {
         ev.note(&ui.add(egui::Slider::new(v, range).text(label)));
     }
 }
 
-fn crow(ui: &mut egui::Ui, f: &Filter, ev: &mut Ev, label: &str, v: &mut bool) {
+pub fn crow(ui: &mut egui::Ui, f: &Filter, ev: &mut Ev, label: &str, v: &mut bool) {
     if f.ok(label) {
         ev.note(&ui.checkbox(v, label));
     }
-}
-
-fn merge_geo(dst: &mut WorldSpec, s: &WorldSpec) {
-    dst.seed = s.seed;
-    dst.size = s.size;
-    dst.resolution = s.resolution;
-    dst.base_height = s.base_height;
-    dst.mountain_height = s.mountain_height;
-    dst.max_height = s.max_height;
-    dst.noise_frequency = s.noise_frequency;
-    dst.warp_amount = s.warp_amount;
-    dst.erosion_droplets = s.erosion_droplets;
-    dst.thermal_iterations = s.thermal_iterations;
-    dst.lake_center = s.lake_center;
-    dst.lake_radius = s.lake_radius;
-    dst.lake_depth = s.lake_depth;
-    dst.water_level = s.water_level;
-    dst.shore_foam = s.shore_foam;
-    dst.camp_center = s.camp_center;
-    dst.clearing_radius = s.clearing_radius;
-    dst.forest_density = s.forest_density;
-    dst.boulder_density = s.boulder_density;
-    dst.grass_density = s.grass_density;
 }
 
 pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
@@ -79,121 +57,44 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
         if q != d.studio.search {
             d.studio.search = q;
         }
-        let tab = d.studio.tab;
-        ui.horizontal(|ui| {
-            for (label, t) in [("Global Settings", InspectorTab::Global), ("Objects & Spawner", InspectorTab::Objects), ("Terrain Brushes", InspectorTab::Brushes)] {
-                if chip(ui, tab == t, label).clicked() {
-                    d.studio.tab = t;
+        let panels = d.reg.panels(PanelLocation::RightInspector);
+        let Some(current) = panels.iter().find(|p| p.id == d.studio.tab).or(panels.first()).cloned() else {
+            ui.weak("No inspector panels registered.");
+            return;
+        };
+        ui.horizontal_wrapped(|ui| {
+            for p in &panels {
+                if chip(ui, current.id == p.id, p.title).clicked() {
+                    d.studio.tab = p.id.to_string();
                 }
             }
         });
         ui.separator();
         egui::ScrollArea::vertical().id_salt("inspector_scroll").auto_shrink([false, false]).show(ui, |ui| {
             let f = Filter(d.studio.search.to_lowercase());
-            match d.studio.tab {
-                InspectorTab::Global => global_tab(ui, d, &f),
-                InspectorTab::Objects => objects_tab(ui, d, &f),
-                InspectorTab::Brushes => brushes_tab(ui, d, &f),
-            }
+            (current.render)(ui, d, &f);
         });
     });
 }
 
-// ───────────────────────────── Global Settings ─────────────────────────────
-
-fn global_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
-    let mut geo = d.draft.0.clone().unwrap_or_else(|| (*d.spec).clone());
-    let mut live = (*d.spec).clone();
-    let (mut gev, mut lev) = (Ev::default(), Ev::default());
-
-    section(ui, f, "Terrain & Erosion", &["seed", "size", "resolution", "base height", "mountain height", "max height", "noise frequency", "domain warp", "erosion droplets", "thermal iterations"], |ui| {
-        if f.ok("seed") {
-            ui.horizontal(|ui| {
-                ui.label("seed");
-                gev.note(&ui.add(egui::DragValue::new(&mut geo.seed).speed(1.0)));
-            });
+/// Registered panels of the left / bottom docks (nothing is drawn while a dock has no panels).
+pub fn draw_docks(ui: &mut egui::Ui, d: &mut UiData) {
+    let frame = || egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
+    for (loc, name) in [(PanelLocation::Left, "registry_left"), (PanelLocation::Bottom, "registry_bottom")] {
+        let panels = d.reg.panels(loc);
+        if panels.is_empty() {
+            continue;
         }
-        srow(ui, f, &mut gev, "size", &mut geo.size, 64.0..=1024.0);
-        srow(ui, f, &mut gev, "resolution", &mut geo.resolution, 65..=513);
-        srow(ui, f, &mut gev, "base height", &mut geo.base_height, 0.0..=60.0);
-        srow(ui, f, &mut gev, "mountain height", &mut geo.mountain_height, 0.0..=150.0);
-        srow(ui, f, &mut gev, "max height", &mut geo.max_height, 20.0..=200.0);
-        srow(ui, f, &mut gev, "noise frequency", &mut geo.noise_frequency, 0.5..=8.0);
-        srow(ui, f, &mut gev, "domain warp", &mut geo.warp_amount, 0.0..=0.5);
-        srow(ui, f, &mut gev, "erosion droplets", &mut geo.erosion_droplets, 0..=150_000);
-        srow(ui, f, &mut gev, "thermal iterations", &mut geo.thermal_iterations, 0..=80);
-    });
-    section(ui, f, "Lake & Water", &["lake x", "lake z", "lake radius", "lake depth", "water level", "shore foam", "camp x", "camp z", "clearing radius"], |ui| {
-        srow(ui, f, &mut gev, "lake x", &mut geo.lake_center[0], -120.0..=120.0);
-        srow(ui, f, &mut gev, "lake z", &mut geo.lake_center[1], -120.0..=120.0);
-        srow(ui, f, &mut gev, "lake radius", &mut geo.lake_radius, 5.0..=80.0);
-        srow(ui, f, &mut gev, "lake depth", &mut geo.lake_depth, 0.0..=15.0);
-        srow(ui, f, &mut gev, "water level", &mut geo.water_level, 0.0..=30.0);
-        srow(ui, f, &mut gev, "shore foam", &mut geo.shore_foam, 0.0..=1.0);
-        srow(ui, f, &mut gev, "camp x", &mut geo.camp_center[0], -120.0..=120.0);
-        srow(ui, f, &mut gev, "camp z", &mut geo.camp_center[1], -120.0..=120.0);
-        srow(ui, f, &mut gev, "clearing radius", &mut geo.clearing_radius, 3.0..=30.0);
-    });
-    section(ui, f, "Sun & Atmosphere", &["time of day", "auto sun", "sun speed", "sun intensity", "shadows", "bloom", "reflections"], |ui| {
-        if f.ok("time of day") {
-            let r = ui.add(egui::Slider::new(&mut live.time_of_day, 0.0..=24.0).text("time of day").custom_formatter(|v, _| hhmm(v as f32)));
-            lev.note(&r);
-        }
-        crow(ui, f, &mut lev, "auto sun", &mut live.auto_sun);
-        srow(ui, f, &mut lev, "sun speed", &mut live.sun_speed, 0.01..=2.0);
-        srow(ui, f, &mut lev, "sun intensity", &mut live.sun_intensity, 0.0..=2.0);
-        crow(ui, f, &mut lev, "shadows", &mut live.shadows);
-        crow(ui, f, &mut lev, "bloom", &mut live.bloom);
-        crow(ui, f, &mut lev, "reflections", &mut live.reflections);
-    });
-    section(ui, f, "Fog & God Rays", &["fog", "fog density", "fog color", "god rays"], |ui| {
-        crow(ui, f, &mut lev, "fog", &mut live.fog_enabled);
-        if f.ok("fog density") {
-            lev.note(&ui.add(egui::Slider::new(&mut live.fog_density, 0.0..=0.03).text("fog density").fixed_decimals(4)));
-        }
-        if f.ok("fog color") {
-            ui.horizontal(|ui| {
-                let mut c = live.fog_color;
-                let r = egui::color_picker::color_edit_button_rgb(ui, &mut c);
-                ui.label("fog color");
-                if r.changed() {
-                    live.fog_color = c;
-                }
-                lev.note(&r);
-            });
-        }
-        crow(ui, f, &mut lev, "god rays", &mut live.god_rays);
-    });
-    section(ui, f, "Biome Foliage", &["forest density", "boulder density", "grass density"], |ui| {
-        srow(ui, f, &mut gev, "forest density", &mut geo.forest_density, 0.0..=1.0);
-        srow(ui, f, &mut gev, "boulder density", &mut geo.boulder_density, 0.0..=1.0);
-        srow(ui, f, &mut gev, "grass density", &mut geo.grass_density, 0.0..=1.0);
-    });
-
-    // live (cheap) fields: transactional preview, one undo entry per drag
-    if lev.changed || lev.finish {
-        let mut cur = (*d.spec).clone();
-        track_ev(&lev, &mut d.wh, "World settings", &mut cur, live);
-        if lev.changed {
-            *d.spec = cur;
-        }
-    }
-    // geometry fields: draft until release, then one regeneration + one undo entry
-    if gev.changed {
-        d.draft.0 = Some(geo);
-    }
-    if d.draft.0.is_some() {
-        ui.colored_label(egui::Color32::from_rgb(240, 190, 80), "Terrain edit pending: release the slider to regenerate (sculpting is reset).");
-    }
-    if gev.finish {
-        if let Some(g) = d.draft.0.take() {
-            let before = (*d.spec).clone();
-            let mut next = before.clone();
-            merge_geo(&mut next, &g);
-            next.sanitize();
-            if d.wh.record("Terrain / world", before, next.clone()) {
-                *d.spec = next;
+        let f = Filter(d.studio.search.to_lowercase());
+        let body = |ui: &mut egui::Ui, d: &mut UiData| {
+            for p in &panels {
+                egui::CollapsingHeader::new(egui::RichText::new(p.title).strong().color(TEAL)).id_salt(p.id).default_open(true).show(ui, |ui| (p.render)(ui, d, &f));
             }
+        };
+        if loc == PanelLocation::Left {
+            egui::Panel::left(name).frame(frame()).show(ui, |ui| body(ui, d));
+        } else {
+            egui::Panel::bottom(name).frame(frame()).show(ui, |ui| body(ui, d));
         }
     }
 }
@@ -211,23 +112,18 @@ fn spawn_point(d: &UiData) -> (f32, f32) {
     }
 }
 
-fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
+pub fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     ui.label(egui::RichText::new("Spawn at scene center").strong().color(TEAL));
     let (sx, sz) = spawn_point(d);
-    ui.horizontal_wrapped(|ui| {
-        for (label, kind) in [("+ Pine", "pine"), ("+ Boulder", "boulder"), ("+ Campfire", "campfire"), ("+ Pier", "pier"), ("+ Lantern", "lantern")] {
-            if chip(ui, false, label).clicked() {
-                d.queue.push(Cmd::SpawnObject { kind: kind.into(), x: sx, z: sz, yaw: 0.0 });
-            }
+    for cat in d.reg.spawner_categories() {
+        if cat != d.reg.spawner_items()[0].category {
+            ui.label(egui::RichText::new(cat).strong().color(TEAL));
         }
-    });
-    #[cfg(feature = "pf2e")]
-    {
-        ui.label(egui::RichText::new("RPG (pf2e)").strong().color(TEAL));
+        let items: Vec<_> = d.reg.spawner_items().iter().filter(|i| i.category == cat).cloned().collect();
         ui.horizontal_wrapped(|ui| {
-            for (label, kind) in [("+ Spawn Fighter", "actor:hero_fighter"), ("+ Spawn Goblin", "actor:goblin_warrior"), ("+ Spawn Trigger Volume", "trigger")] {
-                if chip(ui, false, label).clicked() {
-                    d.queue.push(Cmd::SpawnObject { kind: kind.into(), x: sx, z: sz, yaw: 0.0 });
+            for it in items {
+                if chip(ui, false, &format!("+ {}", it.label)).clicked() {
+                    (it.spawn)(&mut d.queue, sx, sz);
                 }
             }
         });
@@ -297,6 +193,7 @@ fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     };
     let Ok((_, mut tf, so, _)) = d.objs.get_mut(e) else { return };
     ui.label(egui::RichText::new(format!("{}  #{}", so.name, so.id)).strong().size(14.0));
+    let so_id = so.id;
     let before_tf = *tf;
     let mut pos = tf.translation.to_array();
     let (ry, rx, rz) = tf.rotation.to_euler(EulerRot::YXZ);
@@ -335,7 +232,11 @@ fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     #[cfg(feature = "pf2e")]
     crate::actors::inspector(ui, d, e);
 
-    crate::ui_reflect::draw(ui, &mut d.rview, &mut d.redits, &f.0);
+    match crate::ui_reflect::draw(ui, &mut d.rview, &mut d.redits, &d.reg, &f.0) {
+        Some(crate::ui_reflect::CompAction::Add(name)) => d.queue.push(Cmd::AddComponent { target: crate::operators::Target::Id(so_id), component: name, value: None }),
+        Some(crate::ui_reflect::CompAction::Remove(name)) => d.queue.push(Cmd::RemoveComponent { target: crate::operators::Target::Id(so_id), component: name }),
+        None => {}
+    }
 
     // PointLight child
     let mut stack = vec![e];
@@ -385,42 +286,6 @@ fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
             }
         }
     }
-}
-
-// ───────────────────────────── Terrain Brushes ─────────────────────────────
-
-fn brushes_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
-    ui.label(egui::RichText::new("Brush").strong().color(TEAL));
-    ui.horizontal_wrapped(|ui| {
-        for k in BrushKind::ALL {
-            if f.ok(k.label()) && chip(ui, d.brush.kind == k, k.label()).clicked() {
-                d.brush.kind = k;
-            }
-        }
-    });
-    let (mut r, mut s) = (d.brush.radius, d.brush.strength);
-    if f.ok("brush radius") && ui.add(egui::Slider::new(&mut r, 2.0..=45.0).text("Brush Radius (m)")).changed() {
-        d.brush.radius = r;
-    }
-    if f.ok("strength") && ui.add(egui::Slider::new(&mut s, 0.5..=20.0).text("Strength")).changed() {
-        d.brush.strength = s;
-    }
-    ui.separator();
-    let help = match d.brush.kind {
-        BrushKind::Raise => "Hold LMB on the terrain: raises ground (m/s = Strength).",
-        BrushKind::Lower => "Hold LMB: digs the ground.",
-        BrushKind::Smooth => "Hold LMB: relaxes bumps inside the ring.",
-        BrushKind::Flatten => "Hold LMB: levels to the height where the stroke began.",
-        BrushKind::PaintPines => "Hold LMB: scatters pines (one undo step per stroke).",
-        BrushKind::EraseProps => "Hold LMB: removes every prop inside the ring.",
-    };
-    ui.label(help);
-    ui.weak("RMB+WASD fly · MMB / Alt+LMB orbit · wheel zoom");
-    match d.brush.hover {
-        Some(h) => ui.weak(format!("cursor: x {:.1}  y {:.1}  z {:.1}", h.x, h.y, h.z)),
-        None => ui.weak("cursor: -"),
-    };
-    ui.weak(format!("sculpt steps: {} undo / {} redo", d.th.undo_len(), d.th.redo_len()));
 }
 
 #[allow(dead_code)]
