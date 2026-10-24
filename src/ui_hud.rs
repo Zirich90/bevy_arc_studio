@@ -19,7 +19,8 @@ pub fn draw(ctx: &egui::Context, d: &mut UiData) {
     let ents = d.diag.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT).and_then(|x| x.value()).unwrap_or(0.0);
     let props = d.objs.iter().count();
     let lights = d.light_count.iter().count();
-    let pos = egui::pos2(10.0, d.studio.toolbar_h + 10.0);
+    let left = if d.studio.mode == StudioMode::Editor { crate::ui_outliner::OUTLINER_W + 16.0 } else { 10.0 };
+    let pos = egui::pos2(left, d.studio.toolbar_h + 10.0);
     let frame = egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(8, 11, 16, 205)).stroke(egui::Stroke::new(1.0, BORDER)).corner_radius(10).inner_margin(egui::Margin::same(10));
     egui::Area::new(egui::Id::new("studio_hud")).fixed_pos(pos).order(egui::Order::Foreground).show(ctx, |ui| {
         frame.show(ui, |ui| {

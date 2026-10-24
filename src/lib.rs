@@ -19,6 +19,7 @@ pub mod studio;
 pub mod terrain_brush;
 pub mod ui_hud;
 pub mod ui_inspector;
+pub mod ui_outliner;
 pub mod ui_reflect;
 pub mod ui_toolbar;
 pub mod world_io;

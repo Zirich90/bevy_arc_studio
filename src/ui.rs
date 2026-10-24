@@ -15,7 +15,7 @@ use crate::selection::{Deleted, EditorSelection};
 use crate::studio::*;
 use crate::terrain_brush::BrushState;
 use crate::terrain_render::TerrainGrid;
-use crate::{ui_hud, ui_inspector, ui_toolbar};
+use crate::{ui_hud, ui_inspector, ui_outliner, ui_toolbar};
 
 pub const TEAL: egui::Color32 = egui::Color32::from_rgb(38, 198, 180);
 pub const PANEL_BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(11, 14, 19, 224);
@@ -50,6 +50,7 @@ pub struct UiData<'w, 's> {
     pub cam: Query<'w, 's, &'static EditorCamera>,
     pub objs: Query<'w, 's, (Entity, &'static mut Transform, &'static SceneObject, Option<&'static UserProp>), Without<Deleted>>,
     pub children: Query<'w, 's, &'static Children>,
+    pub parents: Query<'w, 's, &'static ChildOf>,
     pub lights: Query<'w, 's, (&'static mut PointLight, Option<&'static mut NightLight>)>,
     #[cfg(feature = "pf2e")]
     pub rpg: Query<
@@ -85,7 +86,7 @@ fn apply_style(ctx: &egui::Context) {
     });
 }
 
-fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut styled: Local<bool>) {
+fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<bool>) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     if !*styled {
         apply_style(ctx);
@@ -97,6 +98,7 @@ fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut styled: Local
         let mut ui = egui::Ui::new(ctx.clone(), "viewport".into(), egui::UiBuilder::new().layer_id(egui::LayerId::background()).max_rect(ctx.viewport_rect()));
         top = ui_toolbar::draw(&mut ui, &mut d);
         ui_inspector::draw(&mut ui, &mut d);
+        ui_outliner::draw(&mut ui, &mut d, &mut outliner);
     }
     if (d.studio.toolbar_h - top).abs() > 0.5 {
         d.studio.toolbar_h = top;
