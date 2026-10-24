@@ -206,13 +206,19 @@ fn rebuild_water(
     mut seen: Local<u32>,
     mut sculpt_dirty: Local<bool>,
     mut last: Local<f32>,
+    mut snap: Local<Vec<WaterBody>>,
     spec: Res<WorldSpec>,
     grid: Res<TerrainGrid>,
     bodies: Res<WaterBodies>,
     mut q: Query<(&mut Water, &Mesh3d, &mut Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    *sculpt_dirty |= grid.is_changed() || bodies.is_changed();
+    // the UI holds the resource mutably, so is_changed() fires every frame it is open: compare the data instead
+    let moved = *snap != bodies.items;
+    if moved {
+        snap.clone_from(&bodies.items);
+    }
+    *sculpt_dirty |= grid.is_changed() || moved;
     let sculpt_due = *sculpt_dirty && time.elapsed_secs() - *last >= 0.25;
     if *seen == version.0 && !sculpt_due {
         return;
@@ -221,7 +227,8 @@ fn rebuild_water(
     *sculpt_dirty = false;
     *last = time.elapsed_secs();
     for (mut w, h, mut tf) in &mut q {
-        let (mesh, nw) = build_water_mesh(&spec, &grid.0, &bodies.items);
+        let (mut mesh, nw) = build_water_mesh(&spec, &grid.0, &bodies.items);
+        ripple(&mut mesh, &nw, time.elapsed_secs());
         let _ = meshes.insert(&h.0, mesh);
         *w = nw;
         tf.translation.y = spec.water_level;
@@ -236,19 +243,24 @@ fn animate_water(time: Res<Time>, q: Query<(&Water, &Mesh3d)>, mut meshes: ResMu
     *last = t;
     for (w, h) in &q {
         let Some(mut mesh) = meshes.get_mut(&h.0) else { continue };
-        let mut pos = Vec::with_capacity(w.nx * w.nz);
-        let mut nrm = Vec::with_capacity(w.nx * w.nz);
-        for j in 0..w.nz {
-            for i in 0..w.nx {
-                let (x, z) = (w.origin.x + i as f32 * w.cell, w.origin.y + j as f32 * w.cell);
-                let (y, dx, dz) = wave(x, z, t);
-                pos.push([x, y + w.base[j * w.nx + i], z]);
-                nrm.push(Vec3::new(-dx, 1.0, -dz).normalize().to_array());
-            }
-        }
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
+        ripple(&mut mesh, w, t);
     }
+}
+
+/// Write the animated surface into `mesh`; a freshly rebuilt mesh gets it too, so a rebuild never flashes a flat surface.
+fn ripple(mesh: &mut Mesh, w: &Water, t: f32) {
+    let mut pos = Vec::with_capacity(w.nx * w.nz);
+    let mut nrm = Vec::with_capacity(w.nx * w.nz);
+    for j in 0..w.nz {
+        for i in 0..w.nx {
+            let (x, z) = (w.origin.x + i as f32 * w.cell, w.origin.y + j as f32 * w.cell);
+            let (y, dx, dz) = wave(x, z, t);
+            pos.push([x, y + w.base[j * w.nx + i], z]);
+            nrm.push(Vec3::new(-dx, 1.0, -dz).normalize().to_array());
+        }
+    }
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
 }
 
 /// Give the basin at world (x, z) its own water level (creating the body if needed); `None` removes the body again.
