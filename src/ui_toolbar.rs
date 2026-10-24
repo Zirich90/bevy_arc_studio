@@ -11,18 +11,35 @@ use crate::ui::*;
 
 /// Draws the panel; returns its bottom edge (screen y) so the HUD can sit underneath.
 pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
-    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::symmetric(10, 6));
+    let mode = d.studio.mode;
+    let (accent, banner) = match mode {
+        StudioMode::Playing => (EMERALD, Some("PLAY MODE ACTIVE (Changes will revert on Stop)")),
+        StudioMode::Paused => (AMBER, Some("PAUSED - PLAY MODE ACTIVE (Changes will revert on Stop)")),
+        StudioMode::Edit => (BORDER, None),
+    };
+    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(if banner.is_some() { 2.5 } else { 1.0 }, accent)).inner_margin(egui::Margin::symmetric(10, 6));
     let out = egui::Panel::top("toolbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("ARC STUDIO").strong().color(TEAL).size(13.0));
-            vsep(ui);
-            if chip(ui, d.studio.mode == StudioMode::Editor, "Editor Mode (Tab)").clicked() {
-                d.studio.mode = StudioMode::Editor;
+            ui.add_space(((ui.available_width() - 370.0) / 2.0).max(8.0));
+            if chip(ui, mode == StudioMode::Playing, "▶ Play (F5)").clicked() {
+                d.studio.mode = StudioMode::Playing;
             }
-            if chip(ui, d.studio.mode == StudioMode::Play, "Play Mode (Full Screen)").clicked() {
-                d.studio.mode = StudioMode::Play;
+            if chip(ui, mode == StudioMode::Paused, "⏸ Pause (F6)").clicked() && mode.in_session() {
+                d.studio.mode = if mode == StudioMode::Paused { StudioMode::Playing } else { StudioMode::Paused };
             }
-            vsep(ui);
+            if chip(ui, false, "■ Stop (Shift+F5)").clicked() {
+                d.studio.mode = StudioMode::Edit;
+            }
+            if let Some(b) = banner {
+                ui.add_space(12.0);
+                ui.label(egui::RichText::new(b).strong().color(accent).size(12.5));
+            }
+        });
+        if mode.in_session() {
+            return;
+        }
+        ui.horizontal(|ui| {
             for (label, m) in [("Select (Q)", GizmoMode::Select), ("Move (W)", GizmoMode::Move), ("Rotate (E)", GizmoMode::Rotate), ("Scale (R)", GizmoMode::Scale)] {
                 if chip(ui, d.studio.tool == TOOL_SELECT && d.gz.mode == m, label).clicked() {
                     d.gz.mode = m;

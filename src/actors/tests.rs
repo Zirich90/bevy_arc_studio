@@ -109,7 +109,7 @@ fn fighter_enters_and_leaves_goblin_trigger_zone() {
         .unwrap();
     let fighter = spawn_from_template(&mut app, "hero_fighter", 1, Vec3::new(0.0, 1.0, 0.0));
 
-    app.world_mut().resource_mut::<StudioState>().mode = StudioMode::Play;
+    app.world_mut().resource_mut::<StudioState>().mode = StudioMode::Playing;
     app.update();
     assert!(drain::<TriggerEnterEvent>(&mut app).is_empty());
 
@@ -133,7 +133,7 @@ fn hostile_and_editor_mode_do_not_trigger() {
     let fighter = spawn_from_template(&mut app, "hero_fighter", 1, pos);
     app.update(); // editor mode
     assert!(drain::<TriggerEnterEvent>(&mut app).is_empty());
-    app.world_mut().resource_mut::<StudioState>().mode = StudioMode::Play;
+    app.world_mut().resource_mut::<StudioState>().mode = StudioMode::Playing;
     app.update();
     let evs = drain::<TriggerEnterEvent>(&mut app);
     assert_eq!(evs.len(), 1);
@@ -147,7 +147,7 @@ fn deleted_actor_leaves_zone() {
     let pos = Vec3::ZERO;
     app.world_mut().spawn((Transform::from_translation(pos), TriggerVolume::new(3.0, 3.0, "z")));
     let fighter = spawn_from_template(&mut app, "hero_fighter", 1, pos);
-    app.world_mut().resource_mut::<StudioState>().mode = StudioMode::Play;
+    app.world_mut().resource_mut::<StudioState>().mode = StudioMode::Playing;
     app.update();
     assert_eq!(drain::<TriggerEnterEvent>(&mut app).len(), 1);
     app.world_mut().entity_mut(fighter).insert(Deleted);

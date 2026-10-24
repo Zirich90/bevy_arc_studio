@@ -129,7 +129,7 @@ pub fn track_triggers(
     mut enter: MessageWriter<TriggerEnterEvent>,
     mut exit: MessageWriter<TriggerExitEvent>,
 ) {
-    let play = studio.mode == StudioMode::Play;
+    let play = studio.mode == StudioMode::Playing;
     for (te, ttf, vol, mut occ) in &mut volumes {
         if !play {
             if !occ.0.is_empty() {
@@ -166,7 +166,7 @@ fn log_trigger_events(mut enter: MessageReader<TriggerEnterEvent>, mut exit: Mes
 
 /// Editor mode: wire cylinder around every volume (brighter when selected).
 fn draw_trigger_outlines(studio: Res<StudioState>, sel: Res<EditorSelection>, volumes: Query<(Entity, &Transform, &TriggerVolume), Without<Deleted>>, mut g: Gizmos<TriggerGizmos>) {
-    if studio.mode != StudioMode::Editor {
+    if studio.mode != StudioMode::Edit {
         return;
     }
     for (e, tf, v) in &volumes {
@@ -186,7 +186,7 @@ fn draw_trigger_outlines(studio: Res<StudioState>, sel: Res<EditorSelection>, vo
 }
 
 fn marker_visibility(studio: Res<StudioState>, mut q: Query<&mut Visibility, With<TriggerMarker>>) {
-    let v = if studio.mode == StudioMode::Editor { Visibility::Inherited } else { Visibility::Hidden };
+    let v = if studio.mode == StudioMode::Edit { Visibility::Inherited } else { Visibility::Hidden };
     for mut vis in &mut q {
         vis.set_if_neq(v);
     }

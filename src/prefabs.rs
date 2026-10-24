@@ -3,7 +3,7 @@
 //! Format: entities relative to a pivot (centre of the selection's footprint, snapped to a grid cell, at the lowest point). Free
 //! objects keep local transforms and hierarchy; `LevelTile`s store cell offsets, so a spawn re-snaps them to the grid and rotates
 //! them in quarter turns. A spawned instance is a root `PrefabInstance` node holding the free objects as children; tiles stay
-//! world-space grid cells (the tile system owns their transforms) and are grouped by the Scenetree like any other tile.
+//! grid cells grouped by the Scenetree like any other tile, but follow the root (`PrefabTile` link, E6).
 //! `SaveSelectionAsPrefab` / `SpawnPrefab` are `StudioCommand`s; a spawn is one `SceneHistory` step.
 
 use std::f32::consts::FRAC_PI_2;
@@ -30,6 +30,17 @@ pub const PREFAB_VERSION: u32 = 1;
 #[reflect(Component, Default)]
 pub struct PrefabInstance {
     pub prefab_path: String,
+}
+
+/// Runtime link of a tile to the `PrefabInstance` that placed it (E6): moving or turning the root re-places the tile.
+/// `rel` is the saved pivot-relative tile; `base_level`/`root_y` are the storey and root height at spawn. Not saved with the scene,
+/// so tiles of a reloaded instance become independent again.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct PrefabTile {
+    pub root: Entity,
+    pub rel: LevelTile,
+    pub base_level: i32,
+    pub root_y: f32,
 }
 
 /// Runtime marker: the free objects of this instance exist (absent right after a scene load, which triggers re-instancing).
@@ -287,11 +298,12 @@ pub fn spawn_prefab(w: &mut World, root: &Path, path: &str, pos: Vec3, yaw_deg: 
     let placed: Vec<LevelTile> = file.entities.iter().filter_map(|e| e.tile.as_ref()).map(|t| place_tile(t, base, quarter)).collect();
     let (mut before, mut after, added, _) = lb::apply_edits_raw(w, placed.iter().map(|t| Edit::Place(*t)).collect());
     for (pe, t) in file.entities.iter().filter(|e| e.tile.is_some()).zip(&placed) {
+        let found = w.query_filtered::<(Entity, &LevelTile), Without<Deleted>>().iter(w).find(|(_, o)| *o == t).map(|(e, _)| e);
+        let Some(e) = found else { continue };
+        let rel = pe.tile.unwrap_or_default();
+        w.entity_mut(e).insert(PrefabTile { root: root_e, rel, base_level: base.y, root_y: y });
         if let (Some(d), TileKind::Doorway) = (pe.door, t.kind) {
-            let found = w.query_filtered::<(Entity, &LevelTile), Without<Deleted>>().iter(w).find(|(_, o)| *o == t).map(|(e, _)| e);
-            if let Some(e) = found {
-                w.entity_mut(e).insert(d);
-            }
+            w.entity_mut(e).insert(d);
         }
     }
     for (e, tf) in &spawned {
@@ -323,6 +335,33 @@ fn rehydrate(mut commands: Commands, roots: Query<(Entity, &PrefabInstance), (Wi
     }
 }
 
+/// Where `rel` lands for a root at `root`: pivot cell from its position, storey from its height, quarter turns from its yaw.
+pub fn tile_for_root(rel: &LevelTile, root: &Transform, g: &GridSettings, base_level: i32, root_y0: f32) -> LevelTile {
+    let level = base_level + ((root.translation.y - root_y0) / g.floor_height.max(0.01)).round() as i32;
+    let base = g.world_to_cell(root.translation, level);
+    place_tile(rel, base, quarter_turns(root.rotation.to_euler(EulerRot::YXZ).0.to_degrees()))
+}
+
+/// E6: tiles follow their prefab root (grid position, facing and world transform), which also refreshes navigation.
+#[allow(clippy::type_complexity)]
+fn sync_prefab_tiles(
+    g: Res<GridSettings>,
+    roots: Query<&Transform, (With<PrefabInstance>, Changed<Transform>, Without<PrefabTile>)>,
+    mut tiles: Query<(&PrefabTile, &mut LevelTile, &mut Transform), Without<Deleted>>,
+) {
+    if roots.is_empty() {
+        return;
+    }
+    for (link, mut tile, mut tf) in &mut tiles {
+        let Ok(root) = roots.get(link.root) else { continue };
+        let want = tile_for_root(&link.rel, root, &g, link.base_level, link.root_y);
+        if *tile != want {
+            *tile = want;
+            *tf = lb::tile_transform(&want, &g);
+        }
+    }
+}
+
 pub fn cmd_save_selection(w: &mut World, path: &str, selected: Vec<Entity>) -> Result<String, String> {
     save_entities(w, &assets_dir(), path, selected)
 }
@@ -340,7 +379,7 @@ pub struct PrefabsPlugin;
 
 impl Plugin for PrefabsPlugin {
     fn build(&self, app: &mut App) {
-        app.register_scene_component::<PrefabInstance>().add_systems(Update, rehydrate);
+        app.register_scene_component::<PrefabInstance>().add_systems(Update, (rehydrate, sync_prefab_tiles));
     }
 }
 
@@ -348,6 +387,7 @@ impl Plugin for PrefabsPlugin {
 mod tests {
     use super::*;
     use crate::level_builder::WallStyle;
+    use bevy::ecs::system::RunSystemOnce;
 
     fn tile(kind: TileKind, p: [i32; 3], facing: u8) -> LevelTile {
         LevelTile { kind, grid_pos: IVec3::from(p), facing, style: WallStyle::WoodTavern }
@@ -434,6 +474,21 @@ mod tests {
         assert_eq!(now.iter().filter(|t| t.grid_pos.x >= 9).count(), live.len());
         let roots = w.query::<&PrefabInstance>().iter(&w).count();
         assert_eq!(roots, 1);
+
+        // E6: moving / turning the root carries its tiles (and only its tiles) along
+        let root = w.query_filtered::<Entity, With<PrefabInstance>>().single(&w).unwrap();
+        let before: Vec<LevelTile> = w.query_filtered::<&LevelTile, With<PrefabTile>>().iter(&w).copied().collect();
+        assert_eq!(before.len(), live.len());
+        w.get_mut::<Transform>(root).unwrap().translation.x += 8.0;
+        w.run_system_once(sync_prefab_tiles).unwrap();
+        let moved: Vec<LevelTile> = w.query_filtered::<&LevelTile, With<PrefabTile>>().iter(&w).copied().collect();
+        assert!(before.iter().zip(&moved).all(|(a, b)| b.grid_pos == a.grid_pos + IVec3::new(4, 0, 0)));
+        let original = w.query_filtered::<&LevelTile, (Without<PrefabTile>, Without<Deleted>)>().iter(&w).filter(|t| t.grid_pos.x <= 2).count();
+        assert_eq!(original, live.len(), "tiles of the source room stay put");
+        w.get_mut::<Transform>(root).unwrap().rotation = Quat::from_rotation_y(FRAC_PI_2);
+        w.run_system_once(sync_prefab_tiles).unwrap();
+        let facings: Vec<u8> = w.query_filtered::<&LevelTile, With<PrefabTile>>().iter(&w).map(|t| t.facing).collect();
+        assert!(facings.iter().any(|f| *f == 1));
 
         let undo = w.resource_mut::<SceneHistory>().undo().unwrap();
         assert!(undo.iter().all(|s| !s.alive));

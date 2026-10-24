@@ -15,8 +15,18 @@ use crate::water::Water;
 #[derive(Reflect, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum StudioMode {
     #[default]
-    Editor,
-    Play,
+    Edit,
+    /// Game systems run; changes are rolled back on Stop.
+    Playing,
+    /// Game systems frozen; camera and inspection stay live.
+    Paused,
+}
+
+impl StudioMode {
+    /// Play-in-Editor session active (Playing or Paused).
+    pub fn in_session(self) -> bool {
+        self != Self::Edit
+    }
 }
 
 #[derive(Reflect, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -67,7 +77,7 @@ pub struct StudioState {
 impl Default for StudioState {
     fn default() -> Self {
         Self {
-            mode: StudioMode::Editor,
+            mode: StudioMode::Edit,
             tab: "global".into(),
             tool: "select".into(),
             cam_style: CamStyle::Orbit,
@@ -86,10 +96,10 @@ impl Default for StudioState {
 impl StudioState {
     /// Gizmo + click selection are live (editor mode, not sculpting).
     pub fn gizmo_active(&self) -> bool {
-        self.mode == StudioMode::Editor && self.tool == crate::editor_registry::TOOL_SELECT
+        self.mode == StudioMode::Edit && self.tool == crate::editor_registry::TOOL_SELECT
     }
     pub fn brush_active(&self) -> bool {
-        self.mode == StudioMode::Editor && self.tool == crate::world_environment::TOOL_TERRAIN_BRUSH
+        self.mode == StudioMode::Edit && self.tool == crate::world_environment::TOOL_TERRAIN_BRUSH
     }
 }
 
@@ -104,7 +114,7 @@ pub enum HistSrc {
 }
 
 /// Global chronological order of edits across the three histories (what `Undo` / `Redo` act on next).
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct UndoOrder {
     pub stack: Vec<HistSrc>,
     pub redo: Vec<HistSrc>,
@@ -159,6 +169,7 @@ impl Plugin for StudioPlugin {
             .init_resource::<HistoryRequest>()
             .register_type::<StudioState>()
             .register_type::<StudioMode>()
+            .add_plugins(crate::play_mode::PlayModePlugin)
             .register_type::<InspectorTab>()
             .register_type::<CamStyle>()
             .add_systems(Update, (studio_hotkeys, process_history, track_order, apply_view_toggles).chain());
@@ -166,7 +177,7 @@ impl Plugin for StudioPlugin {
 }
 
 fn studio_hotkeys(keys: Res<ButtonInput<KeyCode>>, mut studio: ResMut<StudioState>, mut req: ResMut<HistoryRequest>, mut sel: ResMut<EditorSelection>, mut egui: EguiContexts) {
-    if studio.mode == StudioMode::Play {
+    if studio.mode == StudioMode::Playing {
         sel.clear();
     }
     if egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false) {
@@ -175,7 +186,21 @@ fn studio_hotkeys(keys: Res<ButtonInput<KeyCode>>, mut studio: ResMut<StudioStat
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     if keys.just_pressed(KeyCode::Tab) {
-        studio.mode = if studio.mode == StudioMode::Editor { StudioMode::Play } else { StudioMode::Editor };
+        studio.mode = if studio.mode == StudioMode::Edit { StudioMode::Playing } else { StudioMode::Edit };
+    }
+    if keys.just_pressed(KeyCode::F5) {
+        studio.mode = match (shift, studio.mode) {
+            (true, _) => StudioMode::Edit,
+            (false, StudioMode::Playing) => StudioMode::Playing,
+            _ => StudioMode::Playing,
+        };
+    }
+    if keys.just_pressed(KeyCode::F6) {
+        studio.mode = match studio.mode {
+            StudioMode::Playing => StudioMode::Paused,
+            StudioMode::Paused => StudioMode::Playing,
+            m => m,
+        };
     }
     if ctrl && keys.just_pressed(KeyCode::KeyZ) && !shift {
         req.undo = true;

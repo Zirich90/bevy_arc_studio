@@ -28,6 +28,8 @@ pub enum StudioCommand {
     SetQuality(QualityPreset),
     SetTime(f32),
     SetMode(StudioMode),
+    /// Play-in-Editor: `Playing` snapshots the scene, `Edit` (Stop) rolls it back, `Paused` freezes game systems.
+    SetPlayMode { mode: StudioMode },
     SetTab(InspectorTab),
     SetBrush { kind: BrushKind, radius: f32, strength: f32 },
     /// kind: pine | boulder | campfire | pier | lantern | model:<file.glb in assets/models | path/under/assets.glb>
@@ -199,6 +201,7 @@ pub fn execute_commands(
                 *spec = next;
                 Ok(format!("time {t:.2}"))
             }
+            StudioCommand::SetPlayMode { mode } => queue_world_cmd(&mut spawner.commands, "SetPlayMode", move |w| crate::play_mode::cmd_set_play_mode(w, mode)),
             StudioCommand::SetMode(m) => {
                 studio.mode = m;
                 Ok(format!("mode {m:?}"))
@@ -529,6 +532,7 @@ mod tests {
                 StudioCommand::SelectIds { ids: vec![1, 2], additive: false },
                 StudioCommand::Duplicate { offset: [2.0, 0.0] },
                 StudioCommand::ListObjects,
+                StudioCommand::SetPlayMode { mode: StudioMode::Paused },
                 StudioCommand::Describe,
                 StudioCommand::DescribeScene { filter: Some("Pine".into()), limit: None },
                 StudioCommand::SetComponent { target: Target::Path("Camp/Tent#1".into()), component: "Name".into(), value: "\"x\"".into() },

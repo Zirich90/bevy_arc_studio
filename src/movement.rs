@@ -112,7 +112,7 @@ impl Plugin for MovementPlugin {
                 cfg.depth_bias = -0.3;
                 cfg.line.width = 5.0;
             })
-            .add_systems(Update, (refresh_nav, play_input, move_actors, draw_paths).chain())
+            .add_systems(Update, (refresh_nav, play_input, move_actors.run_if(|s: Res<StudioState>| s.mode != StudioMode::Paused), draw_paths).chain())
             .add_systems(EguiPrimaryContextPass, draw_path_label);
     }
 }
@@ -301,6 +301,8 @@ fn play_input(
     mut active: ResMut<ActiveActor>,
     mut preview: ResMut<PathPreview>,
     mut commands: Commands,
+    mut doors: Query<(&LevelTile, &mut Door), Without<Deleted>>,
+    gset: Res<GridSettings>,
 ) {
     if active.0.is_none_or(|e| movers.get(e).is_err()) {
         active.0 = movers.iter().next().map(|(e, _)| e);
@@ -308,7 +310,7 @@ fn play_input(
     let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
     let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
     let cursor = window.cursor_position();
-    let (Some(cursor), Some(navgrid), false, StudioMode::Play) = (cursor, nav.grid.as_ref(), blocked, studio.mode) else {
+    let (Some(cursor), Some(navgrid), false, StudioMode::Playing) = (cursor, nav.grid.as_ref(), blocked, studio.mode) else {
         preview.0 = None;
         return;
     };
@@ -318,6 +320,30 @@ fn play_input(
         return;
     };
     let clicked = mouse.just_pressed(MouseButton::Left) && !alt;
+
+    // click on a door opens / closes it (locked doors stay shut)
+    if clicked {
+        let (o, d) = (ray.origin, *ray.direction);
+        let cs = gset.cell_size;
+        let hit = doors
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (t, _))| {
+                let c = gset.cell_center(t.grid_pos);
+                let (lo, hi) = (c - Vec3::new(cs * 0.5, 0.0, cs * 0.5), c + Vec3::new(cs * 0.5, gset.floor_height, cs * 0.5));
+                crate::level_builder::ray_aabb(o, d, lo, hi).map(|dist| (i, dist))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((i, _)) = hit {
+            if let Some((_, mut door)) = doors.iter_mut().nth(i) {
+                if !door.is_open && door.is_locked {
+                    return;
+                }
+                door.is_open = !door.is_open;
+                return;
+            }
+        }
+    }
 
     // click on an actor selects it
     if clicked {
@@ -392,7 +418,7 @@ fn draw_paths(
 ) {
     let lift = |p: Vec3| Vec3::new(p.x, grid.0.sample_height(p.x, p.z) + PREVIEW_LIFT, p.z);
     for (e, tf, mv, wp) in &movers {
-        if studio.mode == StudioMode::Play && active.0 == Some(e) {
+        if studio.mode == StudioMode::Playing && active.0 == Some(e) {
             ring(&mut g, &grid.0, xz(tf.translation), mv.radius + 0.25, GLOW_GREEN);
         }
         // remaining route of a walking actor
@@ -407,7 +433,7 @@ fn draw_paths(
             }
         }
     }
-    let Some(p) = preview.0.as_ref().filter(|_| studio.mode == StudioMode::Play) else { return };
+    let Some(p) = preview.0.as_ref().filter(|_| studio.mode == StudioMode::Playing) else { return };
     if p.path.is_none() {
         ring(&mut g, &grid.0, Vec2::new(p.hit.x, p.hit.z), 0.45, OVER_RED);
         return;
@@ -423,7 +449,7 @@ fn draw_paths(
 }
 
 fn draw_path_label(mut contexts: EguiContexts, studio: Res<StudioState>, preview: Res<PathPreview>) {
-    let Some(p) = preview.0.as_ref().filter(|_| studio.mode == StudioMode::Play) else { return };
+    let Some(p) = preview.0.as_ref().filter(|_| studio.mode == StudioMode::Playing) else { return };
     let Ok(ctx) = contexts.ctx_mut() else { return };
     let (text, color) = if p.path.is_none() {
         ("No path".to_string(), egui::Color32::from_rgb(255, 90, 80))

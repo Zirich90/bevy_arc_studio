@@ -242,7 +242,7 @@ impl EditorAppExt for App {
     fn register_tool<M>(&mut self, def: ToolDef, update: impl IntoScheduleConfigs<ScheduleSystem, M>) -> &mut Self {
         let id = def.id;
         reg_mut(self).register_tool(def);
-        self.add_systems(Update, update.run_if(move |s: Res<StudioState>| s.mode == StudioMode::Editor && s.tool == id));
+        self.add_systems(Update, update.run_if(move |s: Res<StudioState>| s.mode == StudioMode::Edit && s.tool == id));
         self
     }
 
@@ -305,7 +305,7 @@ fn tool_hotkeys(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseBut
     if egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false) || mouse.pressed(MouseButton::Right) || keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight, KeyCode::AltLeft, KeyCode::AltRight]) {
         return;
     }
-    if studio.mode != StudioMode::Editor {
+    if studio.mode != StudioMode::Edit {
         return;
     }
     // Q/W/E/R are the gizmo modes (handled in gizmo_3d) and always return to the select tool.

@@ -19,6 +19,8 @@ Originally created to build levels for an upcoming RPG, it combines procedural t
 - Editor: 3D move/rotate/scale gizmo, picking, surface snapping, terrain brushes (6 kinds), inspector, `.glb` import, reflect scene save/load (`.scn.json` + `.heights`, extensible via `register_scene_component::<T>()`), feet↔world `UnitScale`.
 - Unified transactional undo/redo (world settings, objects, terrain strokes).
 - AI control: every action is a `StudioCommand` pushed through a reflected resource over `bevy_remote` (BRP), screenshots via `brp_extras/screenshot`. See [SKILL.md](SKILL.md).
+- Play-in-Editor: `Play` / `Pause` / `Stop` in the toolbar. Play snapshots the whole scene (world settings, objects, tiles, doors, prefab instances, actors, editor camera, undo stacks); Stop restores it exactly, so nothing done while playing (moved characters, opened doors, spawned effects, changed HP) survives. Also available to agents as `StudioCommand::SetPlayMode { mode }`.
+- Prefabs and level kit: tiles of a spawned prefab follow its root when it is moved or rotated, navigation is rebuilt.
 - Pure, unit-tested math core in `src/arc_core.rs`, independent of ECS rendering.
 
 ## Hotkeys
@@ -28,7 +30,8 @@ Originally created to build levels for an upcoming RPG, it combines procedural t
 | `Q` / `W` / `E` / `R` | Select / Move / Rotate / Scale |
 | `F` | Focus selected object |
 | `Shift` (while dragging) | Surface Snap |
-| `Tab` | Toggle Play / Editor |
+| `F5` / `F6` / `Shift+F5` | Play / Pause (resume) / Stop (rollback) |
+| `Tab` | Toggle Play / Stop |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | RMB + `WASD` | Fly mode |
 | `Delete` | Delete selected |
@@ -97,6 +100,8 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 - Редактор: 3D-гизмо (перенос/поворот/масштаб), пикинг, Surface Snap, 6 кистей рельефа, инспектор, импорт `.glb`, сохранение/загрузка сцены в JSON.
 - Единый транзакционный Undo/Redo (настройки мира, объекты, мазки рельефа).
 - Управление ИИ-агентами: команды `StudioCommand` через рефлектируемый ресурс по `bevy_remote` (BRP), скриншоты через `brp_extras/screenshot`. См. [SKILL.md](SKILL.md).
+- Play-in-Editor: кнопки `Play` / `Pause` / `Stop` в тулбаре. Play делает снимок всей сцены (настройки мира, объекты, тайлы, двери, инстансы префабов, акторы, камера редактора, стеки undo); Stop восстанавливает её точь-в-точь: сдвинутые персонажи, открытые двери, эффекты и изменённое HP не сохраняются. Для агентов: `StudioCommand::SetPlayMode { mode }`.
+- Префабы и конструктор уровней: тайлы заспавненного префаба следуют за его корнем при перемещении и повороте, навигация перестраивается.
 - Чистое математическое ядро `src/arc_core.rs` с юнит-тестами, без зависимости от ECS-рендера.
 
 ### Горячие клавиши
@@ -106,7 +111,8 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 | `Q` / `W` / `E` / `R` | Выбор / Перенос / Поворот / Масштаб |
 | `F` | Фокус на выбранном объекте |
 | `Shift` (при перетаскивании) | Surface Snap |
-| `Tab` | Play / Editor |
+| `F5` / `F6` / `Shift+F5` | Play / Pause (продолжить) / Stop (откат) |
+| `Tab` | Play / Stop |
 | `Ctrl+Z` / `Ctrl+Y` | Отмена / Повтор |
 | ПКМ + `WASD` | Режим полёта (Fly) |
 | `Delete` | Удалить выбранное |

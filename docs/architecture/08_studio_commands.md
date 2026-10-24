@@ -5,7 +5,7 @@
 
 | Группа | Команды | Откат |
 |---|---|---|
-| Режим и вид | `SetMode`, `SetTab`, `SetQuality`, `ApplyPreset`, `SetTime` | нет |
+| Режим и вид | `SetMode`, `SetPlayMode { mode: Edit|Playing|Paused }` (снимок и откат сцены сразу, результат в `log`), `SetTab`, `SetQuality`, `ApplyPreset`, `SetTime` | нет |
 | Камера | `SetCameraStyle`, `SetCamera`, `FocusSelected` | нет |
 | Террейн | `SetBrush`, `Sculpt` | да |
 | Мир | `SetSpec { field, value }` (поле `WorldSpec` по reflect-пути) | да |

@@ -1,0 +1,1 @@
+Stage E6: Play-in-Editor (Edit/Playing/Paused) with PlayModeSnapshot rollback, prefab tile sync, toolbar Play/Pause/Stop. See user prompt in chat; accept: unit tests of full cycle, screenshot docs/screenshots/e6_play_mode.png, log stage_e6_log.md PASS.

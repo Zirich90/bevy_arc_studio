@@ -39,6 +39,9 @@ pub struct SceneComponentRegistry {
 }
 
 impl SceneComponentRegistry {
+    pub fn ids(&self) -> &[TypeId] {
+        &self.ids
+    }
     pub fn contains(&self, id: TypeId) -> bool {
         self.ids.contains(&id)
     }

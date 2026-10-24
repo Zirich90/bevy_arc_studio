@@ -17,6 +17,8 @@ use crate::terrain_brush::BrushState;
 use crate::terrain_render::TerrainGrid;
 use crate::{ui_assets, ui_hud, ui_inspector, ui_outliner, ui_toolbar};
 
+pub const EMERALD: egui::Color32 = egui::Color32::from_rgb(52, 211, 120);
+pub const AMBER: egui::Color32 = egui::Color32::from_rgb(245, 176, 40);
 pub const TEAL: egui::Color32 = egui::Color32::from_rgb(38, 198, 180);
 pub const PANEL_BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(11, 14, 19, 224);
 pub const BORDER: egui::Color32 = egui::Color32::from_rgba_premultiplied(30, 34, 40, 90);
@@ -97,11 +99,10 @@ fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Loc
         apply_style(ctx);
         *styled = true;
     }
-    let play = d.studio.mode == StudioMode::Play;
-    let mut top = 0.0;
+    let play = d.studio.mode == StudioMode::Playing;
+    let mut ui = egui::Ui::new(ctx.clone(), "viewport".into(), egui::UiBuilder::new().layer_id(egui::LayerId::background()).max_rect(ctx.viewport_rect()));
+    let top = ui_toolbar::draw(&mut ui, &mut d);
     if !play {
-        let mut ui = egui::Ui::new(ctx.clone(), "viewport".into(), egui::UiBuilder::new().layer_id(egui::LayerId::background()).max_rect(ctx.viewport_rect()));
-        top = ui_toolbar::draw(&mut ui, &mut d);
         ui_inspector::draw(&mut ui, &mut d);
         ui_outliner::draw(&mut ui, &mut d, &mut outliner);
         ui_assets::draw(&mut ui, &mut d);

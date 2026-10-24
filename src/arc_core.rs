@@ -983,7 +983,7 @@ struct OpenTxn<S> {
 }
 
 /// Transactional history: Begin → UpdatePreview* → Commit collapses into one entry.
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Clone)]
 pub struct UndoHistory<S: Clone + PartialEq + Send + Sync + 'static> {
     undo: Vec<UndoEntry<S>>,
     redo: Vec<UndoEntry<S>>,
