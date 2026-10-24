@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "name": "yard_props",
+  "cell_size": 2.0,
+  "entities": [
+    {
+      "parent": null,
+      "kind": "model:Duck.glb",
+      "name": "Duck",
+      "pos": [
+        2.0,
+        0.0,
+        2.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "parent": null,
+      "kind": "model:showcase/castle/tower-square-base.glb",
+      "name": "tower-square-base",
+      "pos": [
+        -2.0,
+        0.04541707,
+        2.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "parent": null,
+      "kind": "lantern",
+      "name": "Lantern",
+      "pos": [
+        2.0,
+        0.08461416,
+        -2.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

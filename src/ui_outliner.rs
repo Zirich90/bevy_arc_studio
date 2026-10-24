@@ -24,6 +24,8 @@ struct Node {
     name: String,
     id: u32,
     kids: Vec<Entity>,
+    /// `"Wall L0"` for level tiles: siblings sharing it collapse into one group.
+    tile_key: Option<String>,
 }
 
 fn drag_payload_over_root(ui: &egui::Ui) -> bool {
@@ -32,7 +34,7 @@ fn drag_payload_over_root(ui: &egui::Ui) -> bool {
 
 pub fn draw(ui: &mut egui::Ui, d: &mut UiData, st: &mut OutlinerState) {
     // flat snapshot: objects, their object-parent, children sorted by id
-    let mut nodes: HashMap<Entity, Node> = d.objs.iter().map(|(e, _, so, _)| (e, Node { name: so.name.clone(), id: so.id, kids: Vec::new() })).collect();
+    let mut nodes: HashMap<Entity, Node> = d.objs.iter().map(|(e, _, so, _)| (e, Node { name: so.name.clone(), id: so.id, kids: Vec::new(), tile_key: d.tiles.get(e).ok().map(|t| format!("{:?} L{}", t.kind, t.grid_pos.y)) })).collect();
     let mut roots: Vec<Entity> = Vec::new();
     let mut order: Vec<(Entity, u32)> = nodes.iter().map(|(e, n)| (*e, n.id)).collect();
     order.sort_by_key(|(_, id)| *id);
@@ -67,25 +69,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData, st: &mut OutlinerState) {
         egui::ScrollArea::vertical().id_salt("outliner_scroll").auto_shrink([false, false]).show(ui, |ui| {
             if filter.is_empty() {
                 // same-named roots collapse into one "Name ×N" group (scatter forests have thousands)
-                let mut groups: Vec<(&str, Vec<Entity>)> = Vec::new();
-                for r in &roots {
-                    let name = nodes[r].name.as_str();
-                    match groups.iter_mut().find(|(n, _)| *n == name) {
-                        Some((_, v)) => v.push(*r),
-                        None => groups.push((name, vec![*r])),
-                    }
-                }
-                for (name, members) in groups {
-                    if members.len() == 1 {
-                        row(ui, members[0], &nodes, d, st, &mut acts);
-                    } else {
-                        egui::CollapsingHeader::new(format!("{name} ×{}", members.len())).id_salt(("outliner_group", name)).default_open(false).show(ui, |ui| {
-                            for m in members {
-                                row(ui, m, &nodes, d, st, &mut acts);
-                            }
-                        });
-                    }
-                }
+                list(ui, &roots, true, ("root", Entity::PLACEHOLDER), &nodes, d, st, &mut acts);
             } else {
                 for (e, _) in &order {
                     if nodes[e].name.to_lowercase().contains(&filter) {
@@ -122,11 +106,34 @@ fn row(ui: &mut egui::Ui, e: Entity, nodes: &HashMap<Entity, Node>, d: &mut UiDa
     let id = ui.make_persistent_id(("outliner", e));
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| leaf(ui, e, &n.name, &shown, d, st, acts))
-        .body(|ui| {
-            for k in &n.kids {
-                row(ui, *k, nodes, d, st, acts);
+        .body(|ui| list(ui, &n.kids, false, ("kids", e), nodes, d, st, acts));
+}
+
+/// Rows of `ents`; level tiles of one storey and kind (and, with `by_name`, same-named objects) fold into `▸ Key ×N` groups.
+#[allow(clippy::too_many_arguments)]
+fn list(ui: &mut egui::Ui, ents: &[Entity], by_name: bool, scope: (&str, Entity), nodes: &HashMap<Entity, Node>, d: &mut UiData, st: &mut OutlinerState, acts: &mut Acts) {
+    let mut groups: Vec<(&str, Vec<Entity>)> = Vec::new();
+    for e in ents {
+        let n = &nodes[e];
+        let key = n.tile_key.as_deref().or(by_name.then_some(n.name.as_str()));
+        match key.and_then(|k| groups.iter().position(|(g, m)| *g == k && m.len() < usize::MAX)) {
+            Some(i) => groups[i].1.push(*e),
+            None => groups.push((key.unwrap_or(""), vec![*e])),
+        }
+    }
+    for (key, members) in groups {
+        if members.len() == 1 || key.is_empty() {
+            for m in members {
+                row(ui, m, nodes, d, st, acts);
             }
-        });
+        } else {
+            egui::CollapsingHeader::new(format!("{key} ×{}", members.len())).id_salt(("outliner_group", scope.0, scope.1, key)).default_open(false).show(ui, |ui| {
+                for m in members {
+                    row(ui, m, nodes, d, st, acts);
+                }
+            });
+        }
+    }
 }
 
 /// `name` is the real object name (rename buffer, change detection); `shown` is the row text.

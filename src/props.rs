@@ -367,6 +367,11 @@ pub fn assets_dir() -> std::path::PathBuf {
     env.chain(cwd).chain(exe.clone()).find(|p| p.is_dir()).or(exe).unwrap_or_else(|| "assets".into())
 }
 
+/// `Duck.glb` → `models/Duck.glb`; a path with a folder (`showcase/castle/gate.glb`) is relative to `assets/`.
+pub fn model_asset_path(file: &str) -> String {
+    if file.contains('/') { file.to_string() } else { format!("models/{file}") }
+}
+
 /// Discover `assets/models/*.glb` / `.gltf` and request the first scene of each through the AssetServer.
 fn load_models(server: Res<AssetServer>, mut lib: ResMut<ModelLibrary>) {
     let Ok(rd) = std::fs::read_dir(assets_dir().join("models")) else { return };
@@ -736,12 +741,19 @@ pub fn spawn_user_prop(
             let o = cx.obj("LevelTile", ObjectCategory::Level, Vec3::new(1.0, 1.75, 1.0));
             (commands.spawn((Name::new("LevelTile"), o, tf, Visibility::default())).id(), tf)
         }
+        "prefab" => {
+            // bare root: `PrefabInstance` (set by SpawnPrefab or restored from a scene file) re-creates the members
+            let tf = mul_tf(pos, rot);
+            let o = cx.obj("Prefab", ObjectCategory::Structure, Vec3::splat(2.0));
+            (commands.spawn((Name::new("Prefab"), o, tf, Visibility::default())).id(), tf)
+        }
         k if k.starts_with("model:") => {
             let file = &k[6..];
-            let stem = file.rsplit_once('.').map_or(file, |(s, _)| s).to_string();
+            let leaf = file.rsplit('/').next().unwrap_or(file);
+            let stem = leaf.rsplit_once('.').map_or(leaf, |(s, _)| s).to_string();
             let tf = mul_tf(pos, rot);
             let o = cx.obj(&stem, ObjectCategory::Model, Vec3::splat(1.0));
-            let scene = server.load(GltfAssetLabel::Scene(0).from_asset(format!("models/{file}")));
+            let scene = server.load(GltfAssetLabel::Scene(0).from_asset(model_asset_path(file)));
             (commands.spawn((Name::new(stem), o, WorldAssetRoot(scene), tf)).id(), tf)
         }
         #[cfg(feature = "pf2e")]

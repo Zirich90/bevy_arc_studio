@@ -15,7 +15,7 @@ use crate::gizmo_3d::{GizmoMode, GizmoState, ObjState, SceneHistory};
 use crate::level_builder::{self as lb, TileKind, WallStyle};
 use crate::movement;
 use crate::operators::{self, CommandResults, DEFERRED, Target};
-use crate::props::{SceneObject, UserProp, assets_dir};
+use crate::props::{SceneObject, UserProp, assets_dir, model_asset_path};
 use crate::selection::{Deleted, EditorSelection, object_box};
 use crate::studio::*;
 use crate::terrain_brush::{BrushKind, BrushState, height_dab, union_rect};
@@ -30,7 +30,7 @@ pub enum StudioCommand {
     SetMode(StudioMode),
     SetTab(InspectorTab),
     SetBrush { kind: BrushKind, radius: f32, strength: f32 },
-    /// kind: pine | boulder | campfire | pier | lantern | model:<file.glb>
+    /// kind: pine | boulder | campfire | pier | lantern | model:<file.glb in assets/models | path/under/assets.glb>
     SpawnObject { kind: String, x: f32, z: f32, yaw: f32 },
     /// Hold a height brush at (x, z) for `seconds` (dab rate 30 Hz).
     Sculpt { kind: BrushKind, x: f32, z: f32, radius: f32, strength: f32, seconds: f32 },
@@ -85,6 +85,10 @@ pub enum StudioCommand {
     ToggleDoor { pos: [i32; 3], open: Option<bool> },
     /// Snap grid and storey: `None` leaves a field unchanged. `floor_level` lifts the building plane to `Y = floor_level * floor_height`.
     SetGrid { enabled: Option<bool>, cell_size: Option<f32>, floor_level: Option<i32>, floor_height: Option<f32>, angle_snap_deg: Option<f32> },
+    /// Save the selected objects (with descendants) as `assets/prefabs/<name>.prefab.json`; `path` may be a bare name. Not a scene edit.
+    SaveSelectionAsPrefab { path: String },
+    /// Instance a prefab at `position` (grid / ground snapped per settings) turned by `rotation_y_deg`; one undo step.
+    SpawnPrefab { path: String, position: Vec3, rotation_y_deg: f32 },
     /// pf2e: spawn `assets/actors/<template>.ron` on the terrain below `pos` (y ignored) with the given faction.
     #[cfg(feature = "pf2e")]
     SpawnActorFromTemplate { template: String, pos: Vec3, faction: crate::actors::Faction },
@@ -211,8 +215,8 @@ pub fn execute_commands(
             }
             StudioCommand::SpawnObject { kind, x, z, yaw } => {
                 if let Some(file) = kind.strip_prefix("model:") {
-                    if !assets_dir().join("models").join(file).exists() {
-                        return Err(format!("model not found: assets/models/{file}"));
+                    if !assets_dir().join(model_asset_path(file)).exists() {
+                        return Err(format!("model not found: assets/{}", model_asset_path(file)));
                     }
                 }
                 let half = grid.0.size * 0.5;
@@ -445,6 +449,13 @@ pub fn execute_commands(
             StudioCommand::PlaceLevelTile { kind, pos, facing, style } => queue_world_cmd(&mut spawner.commands, "PlaceLevelTile", move |w| lb::cmd_place_tile(w, kind, pos, facing, style)),
             StudioCommand::PaintLevelTiles { kind, cells, style, erase } => queue_world_cmd(&mut spawner.commands, "PaintLevelTiles", move |w| lb::cmd_paint_tiles(w, kind, cells, style, erase)),
             StudioCommand::ToggleDoor { pos, open } => queue_world_cmd(&mut spawner.commands, "ToggleDoor", move |w| lb::cmd_toggle_door(w, pos, open)),
+            StudioCommand::SaveSelectionAsPrefab { path } => {
+                let selected: Vec<Entity> = sel.selected.iter().copied().collect();
+                queue_world_cmd(&mut spawner.commands, "SaveSelectionAsPrefab", move |w| crate::prefabs::cmd_save_selection(w, &path, selected))
+            }
+            StudioCommand::SpawnPrefab { path, position, rotation_y_deg } => {
+                queue_world_cmd(&mut spawner.commands, "SpawnPrefab", move |w| crate::prefabs::cmd_spawn_prefab(w, &path, position, rotation_y_deg))
+            }
             StudioCommand::SetGrid { enabled, cell_size, floor_level, floor_height, angle_snap_deg } => {
                 queue_world_cmd(&mut spawner.commands, "SetGrid", move |w| lb::cmd_set_grid(w, enabled, cell_size, floor_level, floor_height, angle_snap_deg))
             }
@@ -524,6 +535,8 @@ mod tests {
                 StudioCommand::AddComponent { target: Target::Id(4), component: "Visibility".into(), value: None },
                 StudioCommand::RemoveComponent { target: Target::Name("Pine".into()), component: "Visibility".into() },
                 StudioCommand::Reparent { child: Target::Id(1), parent: None },
+                StudioCommand::SaveSelectionAsPrefab { path: "tavern_corner".into() },
+                StudioCommand::SpawnPrefab { path: "tavern_corner".into(), position: Vec3::new(4.0, 0.0, -2.0), rotation_y_deg: 90.0 },
             ],
             log: vec![],
         };

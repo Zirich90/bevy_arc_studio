@@ -15,10 +15,12 @@ pub mod ui;
 pub mod water;
 pub mod mcp_commands;
 pub mod operators;
+pub mod prefabs;
 pub mod movement;
 pub mod navigation;
 pub mod studio;
 pub mod terrain_brush;
+pub mod ui_assets;
 pub mod ui_hud;
 pub mod ui_inspector;
 pub mod ui_outliner;
@@ -74,7 +76,7 @@ impl Plugin for BevyArcStudioPlugin {
         app.init_resource::<arc_core::UndoHistory<arc_core::WorldSpec>>()
             .register_type::<arc_core::WorldSpec>()
             .register_type::<camera::EditorCamera>()
-            .add_plugins((editor_registry::EditorRegistryPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin))
+            .add_plugins((editor_registry::EditorRegistryPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin, prefabs::PrefabsPlugin, ui_assets::AssetBrowserPlugin))
             .add_plugins((
                 scene::ScenePlugin,
                 camera::EditorCameraPlugin,

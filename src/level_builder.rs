@@ -526,12 +526,22 @@ fn spawn_tile(w: &mut World, t: LevelTile, g: &GridSettings) -> (Entity, Transfo
     (e.id(), tf)
 }
 
-fn tile_name(t: &LevelTile) -> String {
+pub fn tile_name(t: &LevelTile) -> String {
     format!("{:?} L{} ({}, {})", t.kind, t.grid_pos.y, t.grid_pos.x, t.grid_pos.z)
 }
 
 /// Apply edits as ONE `SceneHistory` entry. Returns a summary line.
 pub fn apply_edits(w: &mut World, label: &str, edits: Vec<Edit>) -> Result<String, String> {
+    let (before, after, added, removed) = apply_edits_raw(w, edits);
+    if before.is_empty() {
+        return Err("nothing to change".into());
+    }
+    w.resource_mut::<SceneHistory>().record(label, before, after);
+    Ok(format!("{label}: +{added} tiles, -{removed} replaced/erased"))
+}
+
+/// Apply edits without recording; returns the (before, after) object states and the (added, removed) counts.
+pub fn apply_edits_raw(w: &mut World, edits: Vec<Edit>) -> (Vec<ObjState>, Vec<ObjState>, usize, usize) {
     let g = w.resource::<GridSettings>().clone();
     let mut live = live_tiles(w);
     let (mut before, mut after) = (Vec::new(), Vec::new());
@@ -576,11 +586,7 @@ pub fn apply_edits(w: &mut World, label: &str, edits: Vec<Edit>) -> Result<Strin
             }
         }
     }
-    if before.is_empty() {
-        return Err("nothing to change".into());
-    }
-    w.resource_mut::<SceneHistory>().record(label, before, after);
-    Ok(format!("{label}: +{added} tiles, -{removed} replaced/erased"))
+    (before, after, added, removed)
 }
 
 pub fn cmd_build_room(w: &mut World, min: [i32; 2], max: [i32; 2], floor: i32, style: WallStyle) -> Result<String, String> {
@@ -618,17 +624,23 @@ pub fn cmd_paint_tiles(w: &mut World, kind: TileKind, cells: Vec<[i32; 3]>, styl
     apply_edits(w, if erase { "Erase Tiles" } else { "Paint Tiles" }, edits)
 }
 
-/// Open / close / toggle (`open: None`) the door in a cell. Not part of undo history; locked doors refuse to open.
+/// Open / close / toggle (`open: None`) the door in a cell (one undo step per state change); locked doors refuse to open.
 pub fn cmd_toggle_door(w: &mut World, pos: [i32; 3], open: Option<bool>) -> Result<String, String> {
     let pos = IVec3::from(pos);
     let found = w.query_filtered::<(Entity, &LevelTile), (With<Door>, Without<Deleted>)>().iter(w).find(|(_, t)| t.grid_pos == pos && t.kind == TileKind::Doorway).map(|(e, _)| e);
     let e = found.ok_or_else(|| format!("no door at ({}, {}, {})", pos.x, pos.y, pos.z))?;
-    let mut door = w.get_mut::<Door>(e).ok_or("door component missing")?;
-    let want = open.unwrap_or(!door.is_open);
-    if want && door.is_locked {
+    let (cur, locked) = w.get::<Door>(e).map(|d| (d.is_open, d.is_locked)).ok_or("door component missing")?;
+    let want = open.unwrap_or(!cur);
+    if want && locked {
         return Err("door is locked".into());
     }
-    door.is_open = want;
+    if cur != want {
+        let tid = std::any::TypeId::of::<Door>();
+        let before = crate::operators::snap(w, e, tid);
+        w.get_mut::<Door>(e).ok_or("door component missing")?.is_open = want;
+        let after = crate::operators::snap(w, e, tid);
+        crate::operators::record_edit(w, "Toggle Door", before, after, false);
+    }
     Ok(format!("door at ({}, {}, {}) {}", pos.x, pos.y, pos.z, if want { "open" } else { "closed" }))
 }
 
@@ -690,6 +702,45 @@ impl LevelKit {
 
 #[derive(Component)]
 struct TileVisual;
+
+/// Outliner grouping node: `level: None` = the building root, `Some(n)` = storey `n` under it. Not saved; rebuilt for loaded tiles.
+#[derive(Component)]
+struct LevelGroup {
+    level: Option<i32>,
+}
+
+/// Parent every ungrouped tile under `Level Building / Floor N` so the scene tree stays readable (tile transforms are world-space; groups are identity).
+fn group_level_tiles(
+    mut commands: Commands,
+    mut next: ResMut<NextObjectId>,
+    tiles: Query<(Entity, &LevelTile), Without<ChildOf>>,
+    groups: Query<(Entity, &LevelGroup)>,
+) {
+    if tiles.is_empty() {
+        return;
+    }
+    let mut found: Vec<(Option<i32>, Entity)> = groups.iter().map(|(e, g)| (g.level, e)).collect();
+    let mut group = |commands: &mut Commands, level: Option<i32>, parent: Option<Entity>| -> Entity {
+        if let Some((_, e)) = found.iter().find(|(l, _)| *l == level) {
+            return *e;
+        }
+        next.0 += 1;
+        let name = level.map_or("Level Building".to_string(), |l| format!("Floor {l}"));
+        let so = SceneObject { id: next.0, name: name.clone(), category: ObjectCategory::Level, aabb_half_extents: Vec3::ONE };
+        let mut e = commands.spawn((Name::new(name), so, LevelGroup { level }, Transform::IDENTITY, Visibility::default()));
+        if let Some(p) = parent {
+            e.insert(ChildOf(p));
+        }
+        let id = e.id();
+        found.push((level, id));
+        id
+    };
+    for (e, t) in &tiles {
+        let root = group(&mut commands, None, None);
+        let floor = group(&mut commands, Some(t.grid_pos.y), Some(root));
+        commands.entity(e).insert(ChildOf(floor));
+    }
+}
 
 /// Pivot of a door leaf; rotates towards 90° when the owning `Door` is open.
 #[derive(Component)]
@@ -805,7 +856,7 @@ impl Plugin for LevelBuilderPlugin {
                 level_tool_system.after(gizmo_system),
             )
             .add_systems(Startup, build_kit)
-            .add_systems(Update, (attach_visuals, animate_doors).chain());
+            .add_systems(Update, (group_level_tiles, attach_visuals, animate_doors).chain());
     }
 }
 
@@ -1054,7 +1105,7 @@ mod tests {
 
     fn app() -> App {
         let mut app = App::new();
-        app.init_resource::<GridSettings>().init_resource::<SceneHistory>().init_resource::<NextObjectId>();
+        app.init_resource::<GridSettings>().init_resource::<SceneHistory>().init_resource::<NextObjectId>().init_resource::<Time>().init_resource::<crate::operators::ComponentHistory>().register_type::<Door>();
         app
     }
 
@@ -1096,6 +1147,20 @@ mod tests {
         assert!(cmd_place_tile(app.world_mut(), TileKind::Doorway, [1, 0, 0], None, None).is_err(), "identical tile = no-op");
         undo(&mut app);
         assert_eq!(app.world_mut().query_filtered::<&LevelTile, Without<Deleted>>().iter(app.world()).filter(|t| t.kind == TileKind::Wall).count(), 4);
+    }
+
+    #[test]
+    fn toggle_door_is_one_undo_step_and_noop_when_unchanged() {
+        let mut app = app();
+        cmd_place_tile(app.world_mut(), TileKind::Doorway, [0, 0, 0], None, None).unwrap();
+        let is_open = |app: &mut App| app.world_mut().query::<&Door>().single(app.world()).unwrap().is_open;
+        cmd_toggle_door(app.world_mut(), [0, 0, 0], Some(false)).unwrap();
+        assert_eq!(app.world().resource::<crate::operators::ComponentHistory>().undo_len(), 0, "closing a closed door records nothing");
+        cmd_toggle_door(app.world_mut(), [0, 0, 0], None).unwrap();
+        assert!(is_open(&mut app));
+        let snap = app.world_mut().resource_mut::<crate::operators::ComponentHistory>().undo().expect("toggle recorded");
+        crate::operators::apply_snap(app.world_mut(), &snap);
+        assert!(!is_open(&mut app));
     }
 
     #[test]

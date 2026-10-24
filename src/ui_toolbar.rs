@@ -48,6 +48,9 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
             if chip(ui, d.studio.cam_style == CamStyle::Fly, "Fly Cam").clicked() {
                 d.queue.push(Cmd::SetCameraStyle(CamStyle::Fly));
             }
+            if chip(ui, d.assets.open, "Assets").on_hover_text("Asset Browser: models, prefabs, scenes, level kit").clicked() {
+                d.assets.open = !d.assets.open;
+            }
             if chip(ui, false, "Focus (F)").clicked() {
                 d.queue.push(Cmd::FocusSelected);
             }

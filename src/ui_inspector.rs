@@ -101,7 +101,7 @@ pub fn draw_docks(ui: &mut egui::Ui, d: &mut UiData) {
 
 // ───────────────────────────── Objects & Spawner ─────────────────────────────
 
-fn spawn_point(d: &UiData) -> (f32, f32) {
+pub(crate) fn spawn_point(d: &UiData) -> (f32, f32) {
     let half = d.grid.0.size * 0.5 - 4.0;
     match d.cam.single() {
         Ok(c) => {

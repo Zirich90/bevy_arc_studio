@@ -15,7 +15,7 @@ use crate::selection::{Deleted, EditorSelection};
 use crate::studio::*;
 use crate::terrain_brush::BrushState;
 use crate::terrain_render::TerrainGrid;
-use crate::{ui_hud, ui_inspector, ui_outliner, ui_toolbar};
+use crate::{ui_assets, ui_hud, ui_inspector, ui_outliner, ui_toolbar};
 
 pub const TEAL: egui::Color32 = egui::Color32::from_rgb(38, 198, 180);
 pub const PANEL_BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(11, 14, 19, 224);
@@ -52,6 +52,8 @@ pub struct UiData<'w, 's> {
     pub diag: Res<'w, DiagnosticsStore>,
     pub cam: Query<'w, 's, &'static EditorCamera>,
     pub objs: Query<'w, 's, (Entity, &'static mut Transform, &'static SceneObject, Option<&'static UserProp>), Without<Deleted>>,
+    pub assets: ResMut<'w, crate::ui_assets::AssetBrowserState>,
+    pub tiles: Query<'w, 's, &'static crate::level_builder::LevelTile>,
     pub children: Query<'w, 's, &'static Children>,
     pub parents: Query<'w, 's, &'static ChildOf>,
     pub lights: Query<'w, 's, (&'static mut PointLight, Option<&'static mut NightLight>)>,
@@ -102,6 +104,7 @@ fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Loc
         top = ui_toolbar::draw(&mut ui, &mut d);
         ui_inspector::draw(&mut ui, &mut d);
         ui_outliner::draw(&mut ui, &mut d, &mut outliner);
+        ui_assets::draw(&mut ui, &mut d);
         ui_inspector::draw_docks(&mut ui, &mut d);
     }
     if (d.studio.toolbar_h - top).abs() > 0.5 {
