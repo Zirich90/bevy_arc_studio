@@ -46,7 +46,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
                     d.reg.activate_tool(&mut d.studio, TOOL_SELECT);
                 }
             }
-            for t in d.reg.tools().iter().filter(|t| t.id != TOOL_SELECT).cloned().collect::<Vec<_>>() {
+            for t in d.reg.tools().into_iter().filter(|t| t.id != TOOL_SELECT).cloned().collect::<Vec<_>>() {
                 let label = t.hotkey.map_or_else(|| t.label.to_string(), |k| format!("{} ({})", t.label, key_label(k)));
                 if chip(ui, d.studio.tool == t.id, &label).on_hover_text(t.hint).clicked() {
                     d.reg.activate_tool(&mut d.studio, t.id);

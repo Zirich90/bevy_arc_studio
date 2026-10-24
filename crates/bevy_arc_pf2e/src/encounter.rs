@@ -16,6 +16,7 @@ use crate::actors::{Actor, CharacterSheet, Faction};
 use bevy_arc_studio::arc_core::{HeightfieldGrid, UnitScale};
 use bevy_arc_studio::camera::EditorCamera;
 use bevy_arc_studio::level_builder::{Door, GridSettings, LevelTile};
+use bevy_arc_studio::modules::module_active;
 use bevy_arc_studio::movement::{ActiveActor, MoveInputLock, NavMap, PathGizmos, WaypointsPath, ray_point_distance, ring, sample_polyline};
 use bevy_arc_studio::navigation::{NavGrid, NavPath};
 use crate::rules::actions::MultipleAttackPenalty;
@@ -606,6 +607,12 @@ fn act_fireball(combat: &mut Combat, actors: &mut Actors, units: &UnitScale, cas
 
 // ───────────────────────────── Systems ─────────────────────────────
 
+/// Put the world back into editor-only state when the module is switched off.
+pub fn reset_encounter(w: &mut World) {
+    *w.resource_mut::<Combat>() = Combat::default();
+    w.resource_mut::<MoveInputLock>().0 = false;
+}
+
 fn playing(s: Res<StudioState>) -> bool {
     s.mode == StudioMode::Playing
 }
@@ -1001,8 +1008,7 @@ impl Plugin for EncounterPlugin {
             .register_type::<CombatInput>()
             .register_type::<CombatOrder>()
             .register_type::<ActionMode>()
-            .add_systems(Startup, |mut u: ResMut<UnitScale>| *u = UnitScale::REAL)
-            .add_systems(Update, (lifecycle, move_driver.run_if(playing), player_input.run_if(playing), enemy_ai.run_if(playing), draw_combat.run_if(playing)).chain());
+            .add_systems(Update, (lifecycle, move_driver.run_if(playing), player_input.run_if(playing), enemy_ai.run_if(playing), draw_combat.run_if(playing)).chain().run_if(module_active(crate::MODULE_ID)));
     }
 }
 

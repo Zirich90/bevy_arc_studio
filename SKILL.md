@@ -71,3 +71,13 @@ Wait ~1 s after the last command (terrain/shadows settle), then **look at the im
 - Each stroke / edit is one undo entry; roll back mistakes with `Undo`.
 - Inspect `log` for errors after every batch; never assume a command succeeded.
 - Raw entity access (`world.query`, `world.mutate_components`) works on `SceneObject`, `Transform`, `Name`.
+
+## Modules
+
+A module is connected when its `modules/<id>/module.json` is found (on by default). `{"SetModule":{"id":"pf2e","enabled":false}}` switches it off/on, `"RescanModules"` re-reads the folder, `{"ConnectModule":{"path":"D:/mods/foo/module.json"}}` copies a module file or folder into `modules/` and rescans. Module commands, spawn kinds and inspector overrides exist only while it is on. `SetTab` only knows the three built-in tabs; set `StudioState.tab` (`"modules"`) with `world.mutate_resources` to show a module/registry tab.
+
+## Plugin commands
+
+`{"Custom":{"name":"<plugin>.<verb>","args":"<json string>"}}` runs a command registered by a plugin through `CustomCommands`.
+With the PF2e module connected: `{"Custom":{"name":"pf2e.spawn_actor","args":"{\"template\":\"goblin_warrior\",\"pos\":[6,0,2],\"faction\":\"Hostile\"}"}}`
+(templates: `hero_fighter`, `hero_wizard`, `goblin_warrior`, `dungeon_guard`; `faction` optional). Spawn a trigger volume with `SpawnObject { kind: "trigger" }`.

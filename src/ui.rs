@@ -45,6 +45,7 @@ pub struct UiData<'w, 's> {
     pub rview: ResMut<'w, crate::ui_reflect::ReflectView>,
     pub redits: ResMut<'w, crate::ui_reflect::ReflectEdits>,
     pub reg: Res<'w, crate::editor_registry::EditorRegistry>,
+    pub modules: Res<'w, crate::modules::ModuleRegistry>,
     pub gset: ResMut<'w, crate::level_builder::GridSettings>,
     pub lbs: ResMut<'w, crate::level_builder::LevelBuilderState>,
     pub order: Res<'w, UndoOrder>,

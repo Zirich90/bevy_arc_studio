@@ -289,6 +289,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc_studio_app"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_arc_pf2e",
+ "bevy_arc_studio",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -586,7 +595,6 @@ name = "bevy_arc_studio"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "bevy_arc_pf2e",
  "bevy_brp_extras",
  "bevy_egui",
  "noise",

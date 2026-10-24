@@ -2,3 +2,4 @@
 err.txt
 out.txt
 # docs/ (specs, prompts, logs, screenshots) is intentionally tracked
+modules/state.json

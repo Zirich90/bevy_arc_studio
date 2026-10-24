@@ -119,7 +119,7 @@ pub fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         if cat != d.reg.spawner_items()[0].category {
             ui.label(egui::RichText::new(cat).strong().color(TEAL));
         }
-        let items: Vec<_> = d.reg.spawner_items().iter().filter(|i| i.category == cat).cloned().collect();
+        let items: Vec<_> = d.reg.spawner_items().into_iter().filter(|i| i.category == cat).cloned().collect();
         ui.horizontal_wrapped(|ui| {
             for it in items {
                 if chip(ui, false, &format!("+ {}", it.label)).clicked() {

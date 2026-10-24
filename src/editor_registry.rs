@@ -2,6 +2,7 @@
 //! spawner items through `EditorRegistry`; the core UI iterates the registry instead of hard-coding any of them.
 
 use std::any::TypeId;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use bevy::ecs::schedule::IntoScheduleConfigs;
@@ -38,11 +39,13 @@ pub struct PanelDef {
     pub render: PanelFn,
     /// Tabs sort by `(order, registration index)`.
     pub order: i32,
+    /// Module that contributed the panel (`None` = editor core); hidden while that module is inactive.
+    pub owner: Option<String>,
 }
 
 impl PanelDef {
     pub fn new(id: &'static str, title: &'static str, location: PanelLocation, render: PanelFn) -> Self {
-        Self { id, title, location, render, order: 100 }
+        Self { id, title, location, render, order: 100, owner: None }
     }
     pub fn order(mut self, order: i32) -> Self {
         self.order = order;
@@ -59,11 +62,12 @@ pub struct ToolDef {
     /// Inspector panel opened with the tool; opening that panel activates the tool as well.
     pub panel: Option<&'static str>,
     pub on_activate: fn(&mut StudioState),
+    pub owner: Option<String>,
 }
 
 impl ToolDef {
     pub fn new(id: &'static str, label: &'static str) -> Self {
-        Self { id, label, hotkey: None, hint: "", panel: None, on_activate: |_| {} }
+        Self { id, label, hotkey: None, hint: "", panel: None, on_activate: |_| {}, owner: None }
     }
     pub fn hotkey(mut self, key: KeyCode) -> Self {
         self.hotkey = Some(key);
@@ -94,6 +98,7 @@ pub struct SpawnerItem {
     pub category: &'static str,
     pub label: &'static str,
     pub spawn: SpawnFn,
+    pub owner: Option<String>,
 }
 
 #[derive(Resource, Default)]
@@ -101,20 +106,30 @@ pub struct EditorRegistry {
     panels: Vec<PanelDef>,
     tools: Vec<ToolDef>,
     scene_components: Vec<SceneComponentDef>,
-    overrides: Vec<(TypeId, InspectorFn)>,
+    overrides: Vec<(TypeId, InspectorFn, Option<String>)>,
     spawners: Vec<SpawnerItem>,
+    /// Owner stamped on everything registered while a module is being built (see `modules::AppModuleExt`).
+    pub scope: Option<String>,
+    /// Modules that are currently off: their contributions are hidden from every accessor.
+    pub inactive: HashSet<String>,
 }
 
 impl EditorRegistry {
     /// Re-registering an id replaces the earlier definition (keeps plugin reloads / tests idempotent).
-    pub fn register_panel(&mut self, def: PanelDef) {
+    fn live(&self, owner: &Option<String>) -> bool {
+        owner.as_ref().is_none_or(|o| !self.inactive.contains(o))
+    }
+
+    pub fn register_panel(&mut self, mut def: PanelDef) {
+        def.owner = self.scope.clone();
         match self.panels.iter_mut().find(|p| p.id == def.id) {
             Some(p) => *p = def,
             None => self.panels.push(def),
         }
     }
 
-    pub fn register_tool(&mut self, def: ToolDef) {
+    pub fn register_tool(&mut self, mut def: ToolDef) {
+        def.owner = self.scope.clone();
         match self.tools.iter_mut().find(|t| t.id == def.id) {
             Some(t) => *t = def,
             None => self.tools.push(def),
@@ -130,41 +145,42 @@ impl EditorRegistry {
 
     pub fn register_inspector_override<T: Component + Reflect>(&mut self, f: InspectorFn) {
         let id = TypeId::of::<T>();
-        match self.overrides.iter_mut().find(|(t, _)| *t == id) {
-            Some(o) => o.1 = f,
-            None => self.overrides.push((id, f)),
+        match self.overrides.iter_mut().find(|(t, ..)| *t == id) {
+            Some(o) => (o.1, o.2) = (f, self.scope.clone()),
+            None => self.overrides.push((id, f, self.scope.clone())),
         }
     }
 
     pub fn register_spawner_item(&mut self, category: &'static str, label: &'static str, spawn: SpawnFn) {
         if let Some(s) = self.spawners.iter_mut().find(|s| s.category == category && s.label == label) {
             s.spawn = spawn;
+            s.owner = self.scope.clone();
         } else {
-            self.spawners.push(SpawnerItem { category, label, spawn });
+            self.spawners.push(SpawnerItem { category, label, spawn, owner: self.scope.clone() });
         }
     }
 
     /// Panels of one location, sorted by `(order, registration index)`.
     pub fn panels(&self, loc: PanelLocation) -> Vec<PanelDef> {
-        let mut v: Vec<PanelDef> = self.panels.iter().filter(|p| p.location == loc).cloned().collect();
+        let mut v: Vec<PanelDef> = self.panels.iter().filter(|p| p.location == loc && self.live(&p.owner)).cloned().collect();
         v.sort_by_key(|p| p.order); // stable: registration order breaks ties
         v
     }
 
     pub fn panel(&self, id: &str) -> Option<&PanelDef> {
-        self.panels.iter().find(|p| p.id == id)
+        self.panels.iter().find(|p| p.id == id && self.live(&p.owner))
     }
 
-    pub fn tools(&self) -> &[ToolDef] {
-        &self.tools
+    pub fn tools(&self) -> Vec<&ToolDef> {
+        self.tools.iter().filter(|t| self.live(&t.owner)).collect()
     }
 
     pub fn tool(&self, id: &str) -> Option<&ToolDef> {
-        self.tools.iter().find(|t| t.id == id)
+        self.tools.iter().find(|t| t.id == id && self.live(&t.owner))
     }
 
     pub fn tool_for_panel(&self, panel: &str) -> Option<&ToolDef> {
-        self.tools.iter().find(|t| t.panel == Some(panel))
+        self.tools.iter().find(|t| t.panel == Some(panel) && self.live(&t.owner))
     }
 
     pub fn scene_components(&self) -> &[SceneComponentDef] {
@@ -172,17 +188,17 @@ impl EditorRegistry {
     }
 
     pub fn inspector_override(&self, id: TypeId) -> Option<InspectorFn> {
-        self.overrides.iter().find(|(t, _)| *t == id).map(|(_, f)| *f)
+        self.overrides.iter().find(|(t, _, o)| *t == id && self.live(o)).map(|(_, f, _)| *f)
     }
 
-    pub fn spawner_items(&self) -> &[SpawnerItem] {
-        &self.spawners
+    pub fn spawner_items(&self) -> Vec<&SpawnerItem> {
+        self.spawners.iter().filter(|s| self.live(&s.owner)).collect()
     }
 
     /// Spawner categories in first-registration order.
     pub fn spawner_categories(&self) -> Vec<&'static str> {
         let mut out: Vec<&'static str> = Vec::new();
-        for s in &self.spawners {
+        for s in self.spawners.iter().filter(|s| self.live(&s.owner)) {
             if !out.contains(&s.category) {
                 out.push(s.category);
             }

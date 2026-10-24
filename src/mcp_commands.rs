@@ -93,6 +93,12 @@ pub enum StudioCommand {
     SaveSelectionAsPrefab { path: String },
     /// Instance a prefab at `position` (grid / ground snapped per settings) turned by `rotation_y_deg`; one undo step.
     SpawnPrefab { path: String, position: Vec3, rotation_y_deg: f32 },
+    /// Switch a module (its `module.json` found in `modules/`) on or off. Not undoable.
+    SetModule { id: String, enabled: bool },
+    /// Re-read the `modules/` folder for module files.
+    RescanModules,
+    /// Copy a `module.json` (or a module folder) from `path` into `modules/` and rescan.
+    ConnectModule { path: String },
     /// Command contributed by a plugin through [`CustomCommands`]; `args` is a JSON document the handler parses itself.
     Custom { name: String, args: String },
 }
@@ -100,19 +106,24 @@ pub enum StudioCommand {
 pub type CustomCommandFn = Arc<dyn Fn(&mut World, &str) -> Result<String, String> + Send + Sync>;
 
 /// Plugin-contributed `StudioCommand::Custom` handlers, looked up by `name` (use `"<plugin>.<verb>"`).
+/// Handlers of an inactive module (see `modules`) are not found.
 #[derive(Resource, Default, Clone)]
-pub struct CustomCommands(Vec<(String, CustomCommandFn)>);
+pub struct CustomCommands {
+    entries: Vec<(String, CustomCommandFn, Option<String>)>,
+    pub scope: Option<String>,
+    pub inactive: std::collections::HashSet<String>,
+}
 
 impl CustomCommands {
     pub fn register(&mut self, name: &str, f: CustomCommandFn) {
-        match self.0.iter_mut().find(|(n, _)| n == name) {
-            Some(e) => e.1 = f,
-            None => self.0.push((name.to_string(), f)),
+        match self.entries.iter_mut().find(|(n, ..)| n == name) {
+            Some(e) => (e.1, e.2) = (f, self.scope.clone()),
+            None => self.entries.push((name.to_string(), f, self.scope.clone())),
         }
     }
 
     pub fn get(&self, name: &str) -> Option<CustomCommandFn> {
-        self.0.iter().find(|(n, _)| n == name).map(|(_, f)| f.clone())
+        self.entries.iter().find(|(n, _, o)| n == name && o.as_ref().is_none_or(|o| !self.inactive.contains(o))).map(|(_, f, _)| f.clone())
     }
 }
 
@@ -361,6 +372,9 @@ pub fn execute_commands(
             StudioCommand::MoveActor { entity, to } => {
                 queue_world_cmd(&mut spawner.commands, "MoveActor", move |w| movement::cmd_move_actor(w, entity, to))
             }
+            StudioCommand::SetModule { id, enabled } => queue_world_cmd(&mut spawner.commands, "SetModule", move |w| crate::modules::set_module(w, &id, enabled)),
+            StudioCommand::RescanModules => queue_world_cmd(&mut spawner.commands, "RescanModules", crate::modules::rescan),
+            StudioCommand::ConnectModule { path } => queue_world_cmd(&mut spawner.commands, "ConnectModule", move |w| crate::modules::connect_module(w, &path)),
             StudioCommand::Custom { name, args } => {
                 let f = extra.custom.get(&name).ok_or_else(|| format!("unknown custom command '{name}'"))?;
                 queue_world_cmd(&mut spawner.commands, "Custom", move |w| f(w, &args))

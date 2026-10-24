@@ -1,0 +1,15 @@
+# Stage E9 log — Modules tab (module files on disk, on/off)
+
+- Timestamp: 2026-10-24
+- Prompt: `docs/clean_room_audit/prompts/stage_e9_prompt.md`
+- Model: a module = compiled-in code (`register_module`) + module file `modules/<id>/module.json` (id/name/version/description). File found => connected (on by default); the tab only switches on/off (`modules/state.json`, git-ignored), `Rescan`, `Add` (copy a module.json or folder from any path into `modules/`). File without code is listed as "no code in this build"; code without file stays inactive.
+- `src/modules.rs`: `ModuleRegistry` (defs/found/enabled), `modules_dir()` (BEVY_ASSET_ROOT, cwd + parents, exe, CARGO_MANIFEST_DIR), `rescan`, `set_module`, `connect_module`, `module_active`, Modules panel; commands `SetModule { id, enabled }`, `RescanModules`, `ConnectModule { path }`.
+- Owner filtering in `EditorRegistry`, `SpawnKinds`, `CustomCommands`; module systems gated by `module_active`.
+- PF2e: `modules/pf2e/module.json` + `modules/pf2e/actors/*.ron` (moved from the crate; `actors_dir()` = game `assets/actors` else module folder); hooks reset `Combat`/`MoveInputLock`/`UnitScale`.
+- Workspace: `crates/arc_studio_app` (bins `bevy_arc_studio` default, `showcase`) links editor + PF2e.
+- `cargo check --workspace --tests`: 0 errors; `cargo test --workspace --message-format=short -q`: all pass (4 module tests: file connect + toggle + removal, no-code manifest, connect from file/folder, state JSON).
+- Live run (`cargo run`, BRP + mouse): PF2e found at start and on (`actor:hero_fighter` spawned); `ConnectModule` from a scratchpad `module.json` -> "module file 'demo' connected (no code for it in this build); modules: 2 found, 1 active"; Modules tab lists "Demo Module - no code in this build" and "Pathfinder 2e - on"; mouse click on On -> "module Pathfinder 2e: off", button shows Off. Screenshots: `docs/screenshots/e9_modules_available.png`, `e9_modules_connected.png`.
+- Second live pass (BRP + mouse; clicks via BRP need the cursor to hover a frame first, so each button took two clicks): restart with a saved Off -> state.json `{"pf2e": false}` survives, `actor:` spawn refused, tab shows "Pathfinder 2e off" (`e9_modules_restart_off.png`); Add field (typed `E:/zdemo/module.json`, clicked Add) -> "module file 'demo' connected (no code ...)", Demo Module listed, field cleared (`e9_modules_add.png`); deleted `modules/demo` on disk, clicked Rescan -> "modules: 1 found, 0 active", Demo gone (`e9_modules_rescan.png`).
+- Combat toggle in Play: module on + 3 actors + Play -> turn bar, hotbar, combat log (`e9_toggle_combat_on.png`); module switched off mid-play -> combat UI gone, Play continues (`e9_toggle_combat_off.png`); switched on again -> fresh combat with new initiative (`e9_toggle_combat_back_on.png`); Stop -> "scene restored".
+- Not verified: `cargo run --bin showcase` after the bin move; Level Builder tools while a module is off. Side effect seen: an earlier mis-click hit the terrain "size" slider (app restarted, nothing saved). Left on disk: `E:\zdemo\module.json` (test file, removal was blocked by the safety check).
+- Verdict: **PASS** (with the gaps above)

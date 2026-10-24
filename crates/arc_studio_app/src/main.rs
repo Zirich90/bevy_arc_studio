@@ -17,5 +17,7 @@ fn main() {
                 .set(AssetPlugin { file_path: bevy_arc_studio::props::assets_dir().to_string_lossy().into_owned(), ..default() }),
         )
         .add_plugins(plugin)
+        // optional modules: compiled in, connected from the editor's Modules tab
+        .add_plugins(bevy_arc_pf2e::Pf2ePlugin)
         .run();
 }

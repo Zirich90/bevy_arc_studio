@@ -9,6 +9,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use bevy_arc_studio::modules::module_active;
 use super::{Actor, Faction, InteractionKind, Interactable};
 use bevy_arc_studio::props::{ObjectCategory, SceneObject};
 use bevy_arc_studio::selection::{Deleted, EditorSelection};
@@ -94,7 +95,7 @@ impl Plugin for TriggersPlugin {
                 cfg.depth_bias = -0.2;
                 cfg.line.width = 3.0;
             })
-            .add_systems(Update, (sync_trigger_extents, track_triggers, log_trigger_events, draw_trigger_outlines, marker_visibility).chain());
+            .add_systems(Update, (sync_trigger_extents, track_triggers, log_trigger_events, draw_trigger_outlines, marker_visibility).chain().run_if(module_active(crate::MODULE_ID)));
     }
 }
 

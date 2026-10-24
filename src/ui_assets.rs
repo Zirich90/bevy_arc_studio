@@ -299,7 +299,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
                 });
             }
             Tab::Kit => {
-                let items: Vec<_> = d.reg.spawner_items().iter().filter(|i| filter.is_empty() || i.label.to_lowercase().contains(&filter)).cloned().collect();
+                let items: Vec<_> = d.reg.spawner_items().into_iter().filter(|i| filter.is_empty() || i.label.to_lowercase().contains(&filter)).cloned().collect();
                 let level = d.gset.floor_level;
                 let cell = IVec2::new((sx / d.gset.cell_size).round() as i32, (sz / d.gset.cell_size).round() as i32);
                 egui::ScrollArea::vertical().id_salt("assets_kit").auto_shrink([false, false]).show(ui, |ui| {

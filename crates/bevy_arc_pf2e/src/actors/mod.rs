@@ -14,6 +14,7 @@ use bevy_arc_studio::arc_core::WorldSpec;
 use bevy_arc_studio::editor_registry::{EditorAppExt, spawn_kind};
 use bevy_arc_studio::gizmo_3d::{ObjState, SceneHistory};
 use bevy_arc_studio::mcp_commands::CustomCommandAppExt;
+use bevy_arc_studio::modules::module_active;
 use bevy_arc_studio::props::SpawnKindAppExt;
 use bevy_arc_studio::selection::EditorSelection;
 use bevy_arc_studio::studio::Spawner;
@@ -270,10 +271,10 @@ impl ActorTemplate {
     }
 }
 
-/// Folder with the actor templates: a game's own `assets/actors` wins over the ones shipped with this crate.
+/// Folder with the actor templates: a game's own `assets/actors` wins over the ones in the module folder `modules/pf2e/actors`.
 pub fn actors_dir() -> std::path::PathBuf {
     let game = assets_dir().join("actors");
-    if game.is_dir() { game } else { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/actors") }
+    if game.is_dir() { game } else { bevy_arc_studio::modules::modules_dir().join(crate::MODULE_ID).join("actors") }
 }
 
 /// Stems of `*.ron` in [`actors_dir`].
@@ -435,7 +436,7 @@ impl Plugin for ActorsPlugin {
             .register_spawner_item("RPG (pf2e)", "Goblin Warrior", spawn_kind("actor:goblin_warrior"))
             .register_spawner_item("RPG (pf2e)", "Dungeon Guard", spawn_kind("actor:dungeon_guard"))
             .register_spawner_item("RPG (pf2e)", "Trigger Volume", spawn_kind("trigger"));
-        app.add_plugins(triggers::TriggersPlugin).add_systems(Update, (sync_actor_ids, sync_faction_disc));
+        app.add_plugins(triggers::TriggersPlugin).add_systems(Update, (sync_actor_ids, sync_faction_disc).run_if(module_active(crate::MODULE_ID)));
     }
 }
 

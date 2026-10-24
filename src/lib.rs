@@ -15,6 +15,7 @@ pub mod mcp_commands;
 pub mod operators;
 pub mod play_mode;
 pub mod prefabs;
+pub mod modules;
 pub mod movement;
 pub mod navigation;
 pub mod studio;
@@ -75,7 +76,7 @@ impl Plugin for BevyArcStudioPlugin {
         app.init_resource::<arc_core::UndoHistory<arc_core::WorldSpec>>()
             .register_type::<arc_core::WorldSpec>()
             .register_type::<camera::EditorCamera>()
-            .add_plugins((editor_registry::EditorRegistryPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin, prefabs::PrefabsPlugin, ui_assets::AssetBrowserPlugin))
+            .add_plugins((editor_registry::EditorRegistryPlugin, modules::ModulesPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin, prefabs::PrefabsPlugin, ui_assets::AssetBrowserPlugin))
             .add_plugins((
                 scene::ScenePlugin,
                 camera::EditorCameraPlugin,

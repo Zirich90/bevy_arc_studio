@@ -123,19 +123,27 @@ pub type SpawnHandler = Arc<dyn Fn(&mut SpawnCtx<'_, '_, '_>, &str) -> Option<En
 
 /// Spawn handlers for `UserProp::kind` strings the editor does not know itself (`SpawnObject { kind }`).
 /// A key ending in `:` matches by prefix (`"actor:"` handles `"actor:hero_fighter"`), any other key matches exactly.
+/// Handlers of an inactive module (see `modules`) are skipped.
 #[derive(Resource, Default, Clone)]
-pub struct SpawnKinds(Vec<(&'static str, SpawnHandler)>);
+pub struct SpawnKinds {
+    entries: Vec<(&'static str, SpawnHandler, Option<String>)>,
+    pub scope: Option<String>,
+    pub inactive: std::collections::HashSet<String>,
+}
 
 impl SpawnKinds {
     pub fn register(&mut self, key: &'static str, handler: SpawnHandler) {
-        match self.0.iter_mut().find(|(k, _)| *k == key) {
-            Some(e) => e.1 = handler,
-            None => self.0.push((key, handler)),
+        match self.entries.iter_mut().find(|(k, ..)| *k == key) {
+            Some(e) => (e.1, e.2) = (handler, self.scope.clone()),
+            None => self.entries.push((key, handler, self.scope.clone())),
         }
     }
 
     pub fn find(&self, kind: &str) -> Option<SpawnHandler> {
-        self.0.iter().find(|(k, _)| if k.ends_with(':') { kind.starts_with(k) } else { kind == *k }).map(|(_, h)| h.clone())
+        self.entries
+            .iter()
+            .find(|(k, _, o)| (if k.ends_with(':') { kind.starts_with(k) } else { kind == *k }) && o.as_ref().is_none_or(|o| !self.inactive.contains(o)))
+            .map(|(_, h, _)| h.clone())
     }
 }
 

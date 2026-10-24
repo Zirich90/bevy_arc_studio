@@ -1,0 +1,20 @@
+[package]
+name = "arc_studio_app"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Bevy ArcStudio application: the universal editor with the optional modules built in"
+default-run = "bevy_arc_studio"
+
+[[bin]]
+name = "bevy_arc_studio"
+path = "src/main.rs"
+
+[[bin]]
+name = "showcase"
+path = "src/bin/showcase.rs"
+
+[dependencies]
+bevy = { version = "0.20.0", features = ["dynamic_linking"] }
+bevy_arc_studio = { path = "../.." }
+bevy_arc_pf2e = { path = "../bevy_arc_pf2e" }
