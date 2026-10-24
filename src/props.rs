@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::arc_core::*;
 use crate::lighting::NightLight;
+use crate::selection::Deleted;
 use crate::terrain_render::{TerrainGrid, TerrainVersion};
+use crate::water::{WaterBodies, WaterBody, surface_fn};
 
 // ───────────────────────────── Components ─────────────────────────────
 
@@ -170,7 +172,7 @@ impl Plugin for PropsPlugin {
             .register_type::<UserProp>()
             .add_observer(strip_model_cameras)
             .add_systems(Startup, (build_assets, load_models).chain())
-            .add_systems(Update, (sync_props, animate_flames, animate_sparks, animate_bobbing));
+            .add_systems(Update, (sync_props, anchor_props, follow_terrain, animate_flames, animate_sparks, animate_bobbing));
     }
 }
 
@@ -459,6 +461,78 @@ impl Ctx<'_> {
     fn obj(&mut self, name: &str, category: ObjectCategory, half: Vec3) -> (PropRoot, SceneObject) {
         self.next_id += 1;
         (PropRoot, SceneObject { id: self.next_id, name: name.to_string(), category, aabb_half_extents: half })
+    }
+}
+
+/// Ground height and position a plant or rock was last settled at, so sculpting can carry it along.
+#[derive(Component)]
+struct GroundAnchor {
+    xz: Vec2,
+    ground: f32,
+}
+
+/// Grass or a tree hidden because sculpting put it under water; it comes back if the ground rises again.
+#[derive(Component)]
+struct Drowned;
+
+fn anchor_props(grid: Res<TerrainGrid>, mut commands: Commands, q: Query<(Entity, &SceneObject, &Transform), Without<GroundAnchor>>) {
+    for (e, so, tf) in &q {
+        if matches!(so.category, ObjectCategory::Vegetation | ObjectCategory::Rock) {
+            let (x, z) = (tf.translation.x, tf.translation.z);
+            commands.entity(e).insert(GroundAnchor { xz: Vec2::new(x, z), ground: grid.0.sample_height(x, z) });
+        }
+    }
+}
+
+/// Vegetation and rocks ride the relief when it is sculpted; grass and trees under water are removed (reeds stay).
+#[allow(clippy::too_many_arguments)]
+fn follow_terrain(
+    time: Res<Time>,
+    spec: Res<WorldSpec>,
+    grid: Res<TerrainGrid>,
+    bodies: Res<WaterBodies>,
+    mut last: Local<f32>,
+    mut dirty: Local<bool>,
+    mut snap: Local<Vec<WaterBody>>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &SceneObject, &mut Transform, Option<&mut GroundAnchor>, Has<Deleted>, Has<Drowned>)>,
+) {
+    // the UI holds the bodies mutably, so is_changed() is useless: compare the data
+    let moved = *snap != bodies.items;
+    if moved {
+        snap.clone_from(&bodies.items);
+    }
+    *dirty |= grid.is_changed() || moved;
+    if !*dirty || time.elapsed_secs() - *last < 0.25 || !spec.terrain_enabled {
+        return;
+    }
+    *dirty = false;
+    *last = time.elapsed_secs();
+    let surface = surface_fn(&grid.0, spec.water_level, &bodies.items);
+    for (e, so, mut tf, anchor, deleted, drowned) in &mut q {
+        if !matches!(so.category, ObjectCategory::Vegetation | ObjectCategory::Rock) || (deleted && !drowned) {
+            continue;
+        }
+        let (xz, g) = (Vec2::new(tf.translation.x, tf.translation.z), grid.0.sample_height(tf.translation.x, tf.translation.z));
+        match anchor {
+            None => continue, // anchored next frame by `anchor_props`
+            Some(mut a) if xz.distance(a.xz) > 0.05 => {
+                (a.xz, a.ground) = (xz, g); // moved by hand: settle there instead of snapping
+            }
+            Some(mut a) if (g - a.ground).abs() > 0.005 => {
+                tf.translation.y += g - a.ground;
+                a.ground = g;
+            }
+            Some(_) => {}
+        }
+        if matches!(so.name.as_str(), "GrassClump" | "PineTree") {
+            let wet = g < surface(xz.x, xz.y) - 0.05;
+            if wet && !deleted {
+                commands.entity(e).insert((Deleted, Drowned, Visibility::Hidden));
+            } else if !wet && drowned {
+                commands.entity(e).remove::<(Deleted, Drowned)>().insert(Visibility::Inherited);
+            }
+        }
     }
 }
 
