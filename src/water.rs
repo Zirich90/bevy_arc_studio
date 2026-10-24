@@ -66,6 +66,17 @@ pub fn body_at(grid: &HeightfieldGrid, global: f32, bodies: &[WaterBody], x: f32
     (o != NO_BODY).then_some(o as usize)
 }
 
+/// Surface height at world (x, z): the owning body's level, else the global one (what navigation wades through).
+pub fn surface_fn<'a>(grid: &'a HeightfieldGrid, global: f32, bodies: &'a [WaterBody]) -> impl Fn(f32, f32) -> f32 + 'a {
+    let owners = if bodies.is_empty() { Vec::new() } else { body_owners(grid, global, bodies) };
+    move |x, z| {
+        let m = grid.n as i32 - 1;
+        let (gx, gz) = grid.world_to_grid(x, z);
+        let o = owners.get(grid.idx((gx.round() as i32).clamp(0, m) as usize, (gz.round() as i32).clamp(0, m) as usize)).copied().unwrap_or(NO_BODY);
+        if o == NO_BODY { global } else { bodies[o as usize].level.max(global) }
+    }
+}
+
 #[derive(Component)]
 pub struct Water {
     nx: usize,
@@ -343,6 +354,21 @@ mod tests {
         let (mx, mz) = g.grid_to_world(5, 5);
         let o = body_owners(&g, 6.0, &[WaterBody { seed: [mx, mz], level: 11.0 }]);
         assert!(o.iter().filter(|&&b| b == 0).count() > 16);
+    }
+
+    #[test]
+    fn nav_wades_only_through_a_filled_moat() {
+        use crate::navigation::{NavCell, NavGrid};
+        let g = grid();
+        let (mx, mz) = g.grid_to_world(5, 5);
+        let bodies = [WaterBody { seed: [mx, mz], level: 9.0 }];
+        let at = surface_fn(&g, 6.0, &bodies);
+        assert_eq!((at(mx, mz), at(0.0, 0.0)), (9.0, 6.0));
+        let dry = NavGrid::build(&g, 6.0, &[], 0.35);
+        let wet = NavGrid::build_with(&g, &at, &[], 0.35);
+        assert_eq!(dry.at(Vec2::new(mx, mz)), NavCell::Free);
+        assert_ne!(wet.at(Vec2::new(mx, mz)), NavCell::Free);
+        assert_eq!(wet.at(Vec2::ZERO), dry.at(Vec2::ZERO));
     }
 
     #[test]

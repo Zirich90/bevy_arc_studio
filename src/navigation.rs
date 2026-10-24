@@ -136,6 +136,11 @@ impl NavGrid {
 
     /// Terrain pass (slope, water) then props inflated by the agent radius.
     pub fn build(grid: &HeightfieldGrid, water_level: f32, obstacles: &[Footprint], agent_radius: f32) -> Self {
+        Self::build_with(grid, &|_, _| water_level, obstacles, agent_radius)
+    }
+
+    /// Like `build`, with the water surface looked up per world point (x, z) so water bodies can differ from the global level.
+    pub fn build_with(grid: &HeightfieldGrid, water_at: &dyn Fn(f32, f32) -> f32, obstacles: &[Footprint], agent_radius: f32) -> Self {
         let mut g = Self::new(grid.size, NAV_CELL);
         let (cos_block, cos_diff) = (MAX_SLOPE_DEG.to_radians().cos(), DIFFICULT_SLOPE_DEG.to_radians().cos());
         for j in 0..g.n {
@@ -143,6 +148,7 @@ impl NavGrid {
                 let c = g.cell_center(i, j);
                 let h = grid.sample_height(c.x, c.y);
                 let ny = grid.sample_normal(c.x, c.y).y;
+                let water_level = water_at(c.x, c.y);
                 g.cells[j * g.n + i] = if ny < cos_block || h < water_level - WADE_DEPTH {
                     NavCell::Blocked
                 } else if h < water_level || ny < cos_diff {

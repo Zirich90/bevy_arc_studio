@@ -95,7 +95,7 @@ pub fn build_dynamic_world(world: &World, entities: impl Iterator<Item = Entity>
     let filter = component_filter(world.resource::<SceneComponentRegistry>());
     DynamicWorldBuilder::from_world(world, &registry)
         .with_component_filter(filter)
-        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>())
+        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<crate::water::WaterBodies>())
         .extract_entities(entities)
         .remove_empty_entities()
         .extract_resources()
@@ -152,6 +152,7 @@ fn load_scene(
     mut studio: ResMut<StudioState>,
     mut spec: ResMut<WorldSpec>,
     mut units: ResMut<UnitScale>,
+    mut water: ResMut<crate::water::WaterBodies>,
     mut pending: ResMut<PendingHeights>,
     mut sel: ResMut<EditorSelection>,
     grid: Res<TerrainGrid>,
@@ -173,8 +174,11 @@ fn load_scene(
             let hbytes = std::fs::read(heights_path(&path)).map_err(|e| format!("{}: {e}", heights_path(&path)))?;
             let heights: Vec<f32> = hbytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
 
+            *water = default(); // scenes saved before water bodies existed carry none
             for res in &dw.resources {
-                if let Some(s) = WorldSpec::from_reflect(res.as_ref()) {
+                if let Some(b) = res.represents::<crate::water::WaterBodies>().then(|| crate::water::WaterBodies::from_reflect(res.as_ref())).flatten() {
+                    *water = crate::water::WaterBodies { items: b.items, ..default() };
+                } else if let Some(s) = WorldSpec::from_reflect(res.as_ref()) {
                     *spec = s;
                     spec.sanitize();
                 } else if let Some(u) = UnitScale::from_reflect(res.as_ref()) {
@@ -312,6 +316,21 @@ mod tests {
         assert_eq!(w.get::<LevelTile>(n), Some(&tile));
         assert_eq!(w.get::<Door>(n), Some(&door));
         assert!(w.get::<crate::props::SceneObject>(n).is_some());
+    }
+
+    #[test]
+    fn water_bodies_roundtrip_in_scene() {
+        use crate::water::{WaterBodies, WaterBody};
+        let mut app = test_app();
+        app.register_type::<WaterBodies>().register_type::<WaterBody>().init_resource::<WaterBodies>();
+        app.world_mut().resource_mut::<WaterBodies>().items = vec![WaterBody { seed: [3.0, -4.0], level: 9.5 }];
+        let dw = build_dynamic_world(app.world(), std::iter::empty());
+        let registry = app.world().resource::<AppTypeRegistry>().clone();
+        let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
+        let mut server = app.world().resource::<AssetServer>().clone();
+        let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
+        let got = back.resources.iter().filter(|r| r.represents::<WaterBodies>()).find_map(|r| WaterBodies::from_reflect(r.as_ref())).expect("bodies saved");
+        assert_eq!(got.items, vec![WaterBody { seed: [3.0, -4.0], level: 9.5 }]);
     }
 
     #[test]

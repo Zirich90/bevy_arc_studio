@@ -15,6 +15,7 @@ use crate::props::{ObjectCategory, SceneObject};
 use crate::selection::Deleted;
 use crate::studio::{StudioMode, StudioState};
 use crate::terrain_render::{TerrainGrid, TerrainVersion};
+use crate::water::{WaterBodies, WaterBody};
 
 /// PF2e base Speed for one Stride action.
 pub const BASE_SPEED_FEET: f32 = 25.0;
@@ -67,6 +68,7 @@ pub struct NavMap {
     dirty: bool,
     changed_at: f32,
     water: f32,
+    bodies: Vec<WaterBody>,
     /// Bumped on every rebuild so cached previews know to recompute.
     pub revision: u32,
 }
@@ -80,7 +82,7 @@ impl NavMap {
 
 impl Default for NavMap {
     fn default() -> Self {
-        Self { grid: None, dirty: true, changed_at: f32::MIN, water: f32::NAN, revision: 0 }
+        Self { grid: None, dirty: true, changed_at: f32::MIN, water: f32::NAN, bodies: Vec::new(), revision: 0 }
     }
 }
 
@@ -149,12 +151,15 @@ pub fn footprint_of(tf: &Transform, so: &SceneObject) -> Option<Footprint> {
 
 type TileQuery<'w, 's> = Query<'w, 's, (&'static LevelTile, Option<&'static Door>, &'static Transform), Without<Deleted>>;
 
-fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, objs: &Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: &TileQuery, cell_size: f32) {
+fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, bodies: &[WaterBody], objs: &Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: &TileQuery, cell_size: f32) {
     let mut fps: Vec<Footprint> = objs.iter().filter_map(|(tf, so)| footprint_of(tf, so)).collect();
     fps.extend(tiles.iter().filter_map(|(t, d, tf)| tile_footprint(t, d, tf, cell_size)));
-    nav.grid = Some(NavGrid::build(grid, water, &fps, AGENT_RADIUS));
+    // no water at all (empty grid scene) means no water bodies either
+    let bodies = if water == f32::NEG_INFINITY { &[][..] } else { bodies };
+    nav.grid = Some(NavGrid::build_with(grid, &crate::water::surface_fn(grid, water, bodies), &fps, AGENT_RADIUS));
     nav.dirty = false;
     nav.water = water;
+    nav.bodies = bodies.to_vec();
     nav.revision += 1;
 }
 
@@ -164,6 +169,7 @@ fn refresh_nav(
     version: Res<TerrainVersion>,
     grid: Res<TerrainGrid>,
     spec: Res<WorldSpec>,
+    bodies: Res<WaterBodies>,
     // walking actors write their Transform every frame and never block the raster, so they must not keep it dirty
     changed: Query<(), (With<SceneObject>, Without<Mover>, Or<(Added<SceneObject>, Changed<Transform>, Added<Deleted>)>)>,
     objs: Query<(&Transform, &SceneObject), Without<Deleted>>,
@@ -178,20 +184,20 @@ fn refresh_nav(
     if any || version.is_changed() || grid.is_changed() {
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
-    } else if !nav.dirty && (nav.water.is_nan() || nav_water_level(&spec) != nav.water) {
+    } else if !nav.dirty && (nav.water.is_nan() || nav_water_level(&spec) != nav.water || bodies.items != nav.bodies) {
         // a standing difference (never-built raster, new water level) must not keep restarting the debounce
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
     }
     if nav.dirty && time.elapsed_secs() - nav.changed_at >= REBUILD_DEBOUNCE {
-        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &objs, &tiles, gset.cell_size);
+        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &bodies.items, &objs, &tiles, gset.cell_size);
     }
 }
 
 /// Immediate rebuild (used by commands so queries never see a stale raster).
-fn force_rebuild(grid: Res<TerrainGrid>, spec: Res<WorldSpec>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: TileQuery, gset: Res<GridSettings>, mut nav: ResMut<NavMap>) {
+fn force_rebuild(grid: Res<TerrainGrid>, spec: Res<WorldSpec>, bodies: Res<WaterBodies>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: TileQuery, gset: Res<GridSettings>, mut nav: ResMut<NavMap>) {
     if nav.dirty || nav.grid.is_none() {
-        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &objs, &tiles, gset.cell_size);
+        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &bodies.items, &objs, &tiles, gset.cell_size);
     }
 }
 
