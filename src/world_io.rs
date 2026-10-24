@@ -208,7 +208,7 @@ fn load_scene(
                     let door = rest.iter().filter(|c| c.represents::<crate::level_builder::Door>()).find_map(|c| crate::level_builder::Door::from_reflect(c.as_ref()));
                     if let Some(tile) = tile {
                         spawner.commands.queue(move |world: &mut World| {
-                            crate::level_builder::spawn_loaded_tile(world, tile, door);
+                            crate::level_builder::spawn_loaded_tile(world, tile, door, Some(tf));
                         });
                         n += 1;
                     }
@@ -307,7 +307,7 @@ mod tests {
         let d = comps.iter().filter(|c| c.represents::<Door>()).find_map(|c| Door::from_reflect(c.as_ref()));
         assert_eq!((t, d), (tile, Some(door)));
 
-        let n = spawn_loaded_tile(app.world_mut(), t, d);
+        let n = spawn_loaded_tile(app.world_mut(), t, d, None);
         let w = app.world();
         assert_eq!(w.get::<LevelTile>(n), Some(&tile));
         assert_eq!(w.get::<Door>(n), Some(&door));

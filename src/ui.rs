@@ -47,6 +47,7 @@ pub struct UiData<'w, 's> {
     pub reg: Res<'w, crate::editor_registry::EditorRegistry>,
     pub modules: Res<'w, crate::modules::ModuleRegistry>,
     pub gset: ResMut<'w, crate::level_builder::GridSettings>,
+    pub water: ResMut<'w, crate::water::WaterBodies>,
     pub lbs: ResMut<'w, crate::level_builder::LevelBuilderState>,
     pub order: Res<'w, UndoOrder>,
     pub th: Res<'w, TerrainHistory>,

@@ -89,6 +89,10 @@ pub enum StudioCommand {
     ToggleDoor { pos: [i32; 3], open: Option<bool> },
     /// Snap grid and storey: `None` leaves a field unchanged. `floor_level` lifts the building plane to `Y = floor_level * floor_height`.
     SetGrid { enabled: Option<bool>, cell_size: Option<f32>, floor_level: Option<i32>, floor_height: Option<f32>, angle_snap_deg: Option<f32> },
+    /// Own water level for the basin at world (x, z): fills a moat or drains a pond without touching the global level. `level: None` removes that body's override.
+    SetWaterBody { x: f32, z: f32, level: Option<f32> },
+    /// Bind (`enabled`) or unbind the building plane from the terrain. Unbound: storey 0 is `Y = 0`. `site` [x, z] re-grounds on the terrain there.
+    SetGroundSnap { enabled: bool, site: Option<[f32; 2]> },
     /// Save the selected objects (with descendants) as `assets/prefabs/<name>.prefab.json`; `path` may be a bare name. Not a scene edit.
     SaveSelectionAsPrefab { path: String },
     /// Instance a prefab at `position` (grid / ground snapped per settings) turned by `rotation_y_deg`; one undo step.
@@ -501,6 +505,8 @@ pub fn execute_commands(
             StudioCommand::SetGrid { enabled, cell_size, floor_level, floor_height, angle_snap_deg } => {
                 queue_world_cmd(&mut spawner.commands, "SetGrid", move |w| lb::cmd_set_grid(w, enabled, cell_size, floor_level, floor_height, angle_snap_deg))
             }
+            StudioCommand::SetWaterBody { x, z, level } => queue_world_cmd(&mut spawner.commands, "SetWaterBody", move |w| crate::water::cmd_set_water_body(w, x, z, level)),
+            StudioCommand::SetGroundSnap { enabled, site } => queue_world_cmd(&mut spawner.commands, "SetGroundSnap", move |w| lb::cmd_set_ground_snap(w, enabled, site)),
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));
                 Ok("save queued (reflect scene)".into())

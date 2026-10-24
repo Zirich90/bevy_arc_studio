@@ -13,7 +13,7 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
 use serde::{Deserialize, Serialize};
 
-use crate::arc_core::yaw_of;
+use crate::arc_core::{WorldSpec, yaw_of};
 use crate::camera::EditorCamera;
 use crate::editor_registry::{EditorAppExt, PanelDef, PanelLocation, ToolDef};
 use crate::gizmo_3d::{ObjState, SceneHistory, gizmo_system};
@@ -21,6 +21,7 @@ use crate::mcp_commands::{StudioCommand, StudioCommandQueue};
 use crate::navigation::Footprint;
 use crate::props::{NextObjectId, ObjectCategory, SceneObject, UserProp};
 use crate::selection::Deleted;
+use crate::terrain_render::TerrainGrid;
 use crate::ui::{UiData, chip, TEAL};
 use crate::ui_inspector::Filter;
 use crate::world_io::SceneComponentAppExt;
@@ -104,24 +105,27 @@ pub struct GridSettings {
     pub angle_snap_deg: f32,
     pub floor_level: i32,
     pub floor_height: f32,
+    /// Bind the building plane to the terrain: storey 0 sits at `ground_y`, taken from the ground under the first tiles of a new building.
+    pub ground_snap: bool,
+    pub ground_y: f32,
 }
 
 impl Default for GridSettings {
     fn default() -> Self {
-        Self { enabled: false, cell_size: 2.0, angle_snap_deg: 15.0, floor_level: 0, floor_height: 3.5 }
+        Self { enabled: false, cell_size: 2.0, angle_snap_deg: 15.0, floor_level: 0, floor_height: 3.5, ground_snap: true, ground_y: 0.0 }
     }
 }
 
 impl GridSettings {
     /// Y of the building / grid plane of the current storey.
     pub fn plane_y(&self) -> f32 {
-        self.floor_level as f32 * self.floor_height
+        self.ground_y + self.floor_level as f32 * self.floor_height
     }
     pub fn snap(&self, v: f32) -> f32 {
         (v / self.cell_size).round() * self.cell_size
     }
     pub fn cell_center(&self, p: IVec3) -> Vec3 {
-        Vec3::new(p.x as f32 * self.cell_size, p.y as f32 * self.floor_height, p.z as f32 * self.cell_size)
+        Vec3::new(p.x as f32 * self.cell_size, self.ground_y + p.y as f32 * self.floor_height, p.z as f32 * self.cell_size)
     }
     pub fn world_to_cell(&self, p: Vec3, level: i32) -> IVec3 {
         IVec3::new((p.x / self.cell_size).round() as i32, level, (p.z / self.cell_size).round() as i32)
@@ -527,8 +531,13 @@ fn spawn_tile(w: &mut World, t: LevelTile, g: &GridSettings) -> (Entity, Transfo
 }
 
 /// Recreate a saved tile (and its `Door` state) on load; visuals are attached by `attach_visuals` and the nav raster by `refresh_nav`.
-pub fn spawn_loaded_tile(w: &mut World, t: LevelTile, door: Option<Door>) -> Entity {
-    let g = w.resource::<GridSettings>().clone();
+/// `saved_tf` keeps the tile where it was saved and restores the building's `ground_y` from it.
+pub fn spawn_loaded_tile(w: &mut World, t: LevelTile, door: Option<Door>, saved_tf: Option<Transform>) -> Entity {
+    let mut g = w.resource::<GridSettings>().clone();
+    if let Some(tf) = saved_tf {
+        g.ground_y = tf.translation.y - t.grid_pos.y as f32 * g.floor_height;
+        w.resource_mut::<GridSettings>().ground_y = g.ground_y;
+    }
     let (e, _) = spawn_tile(w, t, &g);
     if let Some(d) = door {
         w.entity_mut(e).insert(d);
@@ -552,8 +561,15 @@ pub fn apply_edits(w: &mut World, label: &str, edits: Vec<Edit>) -> Result<Strin
 
 /// Apply edits without recording; returns the (before, after) object states and the (added, removed) counts.
 pub fn apply_edits_raw(w: &mut World, edits: Vec<Edit>) -> (Vec<ObjState>, Vec<ObjState>, usize, usize) {
-    let g = w.resource::<GridSettings>().clone();
     let mut live = live_tiles(w);
+    if live.is_empty() && w.resource::<GridSettings>().ground_snap {
+        let cs = w.resource::<GridSettings>().cell_size;
+        let sites: Vec<(f32, f32)> = edits.iter().filter_map(|e| if let Edit::Place(t) = e { Some((t.grid_pos.x as f32 * cs, t.grid_pos.z as f32 * cs)) } else { None }).collect();
+        if let Some(y) = mean_ground(w, &sites) {
+            w.resource_mut::<GridSettings>().ground_y = y;
+        }
+    }
+    let g = w.resource::<GridSettings>().clone();
     let (mut before, mut after) = (Vec::new(), Vec::new());
     let (mut added, mut removed) = (0, 0);
     let hide = |w: &mut World, e: Entity, tf: Transform, before: &mut Vec<ObjState>, after: &mut Vec<ObjState>| {
@@ -652,6 +668,26 @@ pub fn cmd_toggle_door(w: &mut World, pos: [i32; 3], open: Option<bool>) -> Resu
         crate::operators::record_edit(w, "Toggle Door", before, after, false);
     }
     Ok(format!("door at ({}, {}, {}) {}", pos.x, pos.y, pos.z, if want { "open" } else { "closed" }))
+}
+
+/// Mean terrain height over `sites` (world x, z); `None` on an empty-grid scene or without sites.
+fn mean_ground(w: &World, sites: &[(f32, f32)]) -> Option<f32> {
+    if sites.is_empty() || !w.get_resource::<WorldSpec>()?.terrain_enabled {
+        return None;
+    }
+    let grid = &w.get_resource::<TerrainGrid>()?.0;
+    Some(sites.iter().map(|&(x, z)| grid.sample_height(x, z)).sum::<f32>() / sites.len() as f32)
+}
+
+/// Bind or unbind the building plane from the terrain. Unbinding returns it to `Y = 0`; binding with `site` re-grounds on the terrain there.
+pub fn cmd_set_ground_snap(w: &mut World, enabled: bool, site: Option<[f32; 2]>) -> Result<String, String> {
+    let y = if enabled { site.and_then(|s| mean_ground(w, &[(s[0], s[1])])) } else { Some(0.0) };
+    let mut g = w.resource_mut::<GridSettings>();
+    g.ground_snap = enabled;
+    if let Some(y) = y {
+        g.ground_y = y;
+    }
+    Ok(format!("ground snap={} plane Y={:.2}", g.ground_snap, g.plane_y()))
 }
 
 pub fn cmd_set_grid(w: &mut World, enabled: Option<bool>, cell_size: Option<f32>, floor_level: Option<i32>, floor_height: Option<f32>, angle_snap_deg: Option<f32>) -> Result<String, String> {
@@ -886,7 +922,9 @@ fn level_tool_system(
     window: Single<&Window, With<PrimaryWindow>>,
     mut egui: EguiContexts,
     cam: Single<(&Camera, &GlobalTransform, &EditorCamera)>,
-    g: Res<GridSettings>,
+    mut g: ResMut<GridSettings>,
+    spec: Res<WorldSpec>,
+    terrain: Res<TerrainGrid>,
     mut st: ResMut<LevelBuilderState>,
     tiles: Query<(&LevelTile, &Transform), Without<Deleted>>,
     mut queue: ResMut<StudioCommandQueue>,
@@ -905,6 +943,15 @@ fn level_tool_system(
     }
 
     let ray = window.cursor_position().and_then(|c| camera.viewport_to_world(gtf, c).ok());
+    // a new building follows the ground under the cursor until its first tile is placed
+    if g.ground_snap && spec.terrain_enabled && tiles.is_empty() && !over_ui {
+        if let Some(p) = ray.and_then(|r| terrain.0.raycast(r.origin, *r.direction)) {
+            let y = terrain.0.sample_height(g.snap(p.x), g.snap(p.z));
+            if (g.ground_y - y).abs() > 1e-3 {
+                g.ground_y = y;
+            }
+        }
+    }
     let mode = st.mode;
     let level = g.floor_level;
     let (cs, fh, py) = (g.cell_size, g.floor_height, g.plane_y());
@@ -1055,6 +1102,13 @@ fn level_panel(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     ui.add(egui::Slider::new(&mut d.gset.cell_size, 0.5..=8.0).text("cell size"));
     ui.add(egui::Slider::new(&mut d.gset.angle_snap_deg, 1.0..=90.0).text("angle snap°"));
     ui.add(egui::Slider::new(&mut d.gset.floor_height, 2.0..=8.0).text("floor height"));
+    let bound = d.gset.ground_snap;
+    if chip(ui, bound, if bound { "Bound to ground - click to unbind" } else { "Unbound (Y = 0) - click to bind to ground" }).clicked() {
+        d.gset.ground_snap = !bound;
+        if bound {
+            d.gset.ground_y = 0.0;
+        }
+    }
     ui.horizontal(|ui| {
         ui.label("Floor level");
         if ui.button("−").clicked() {

@@ -124,6 +124,7 @@ fn global_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         srow(ui, f, &mut gev, "lake depth", &mut geo.lake_depth, 0.0..=15.0);
         srow(ui, f, &mut gev, "water level", &mut geo.water_level, 0.0..=30.0);
         srow(ui, f, &mut gev, "shore foam", &mut geo.shore_foam, 0.0..=1.0);
+        water_bodies_ui(ui, &mut d.water, geo.water_level);
         srow(ui, f, &mut gev, "camp x", &mut geo.camp_center[0], -120.0..=120.0);
         srow(ui, f, &mut gev, "camp z", &mut geo.camp_center[1], -120.0..=120.0);
         srow(ui, f, &mut gev, "clearing radius", &mut geo.clearing_radius, 3.0..=30.0);
@@ -257,5 +258,37 @@ mod tests {
         assert!(generate_scatter_plan(&spec, &g).is_empty());
         let on = WorldSpec { terrain_enabled: true, ..spec };
         assert!(!generate_scatter_plan(&on, &crate::terrain_render::generate_world(&on)).is_empty());
+    }
+}
+
+/// Per-body water levels: pick a basin on the terrain and set its level without touching the global one.
+fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, global_level: f32) {
+    ui.separator();
+    ui.label(egui::RichText::new("Water bodies (own level, global level untouched)").strong().color(TEAL));
+    ui.horizontal(|ui| {
+        if chip(ui, w.picking, if w.picking { "Click terrain... (Esc cancels)" } else { "Pick water body" }).clicked() {
+            w.picking = !w.picking;
+        }
+        if ui.add_enabled(w.selected.is_some(), egui::Button::new("Reset to global")).clicked() {
+            if let Some(i) = w.selected.take().filter(|&i| i < w.items.len()) {
+                w.items.remove(i);
+            }
+        }
+    });
+    let mut pick = None;
+    for (i, b) in w.items.iter().enumerate() {
+        if ui.selectable_label(w.selected == Some(i), format!("Body {}  ({:.0}, {:.0})  level {:.1}", i + 1, b.seed[0], b.seed[1], b.level)).clicked() {
+            pick = Some(i);
+        }
+    }
+    if pick.is_some() {
+        w.selected = pick;
+    }
+    if let Some(i) = w.selected.filter(|&i| i < w.items.len()) {
+        let mut lvl = w.items[i].level;
+        if ui.add(egui::Slider::new(&mut lvl, 0.0..=40.0).text("body level")).changed() {
+            w.items[i].level = lvl;
+        }
+        ui.weak(format!("global level {global_level:.1} stays as is"));
     }
 }
