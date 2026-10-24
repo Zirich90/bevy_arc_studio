@@ -93,7 +93,7 @@ fn apply_style(ctx: &egui::Context) {
     });
 }
 
-fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<bool>) {
+pub(crate) fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<bool>) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     if !*styled {
         apply_style(ctx);

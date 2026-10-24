@@ -3,6 +3,7 @@
 pub mod actions;
 pub mod check;
 pub mod conditions;
+pub mod encounter;
 pub mod stats;
 pub mod templates;
 

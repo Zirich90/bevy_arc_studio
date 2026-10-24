@@ -33,13 +33,45 @@ fn spawn_from_template(app: &mut App, template: &'static str, id: u32, pos: Vec3
 #[test]
 fn templates_match_spec() {
     let f = ActorTemplate::load("hero_fighter").unwrap();
-    assert_eq!((f.level, f.hp, f.ac, f.speed_feet, f.faction), (1, 20, 18, 25.0, Faction::Player));
+    assert_eq!((f.level, f.hp, f.ac, f.speed_feet, f.faction), (2, 32, 19, 25.0, Faction::Player));
     assert_eq!((f.weapon.name.as_str(), f.weapon.dice, f.weapon.sides, f.weapon.damage_type, f.weapon.agile), ("Longsword", 1, 8, DamageType::Slashing, false));
     let g = ActorTemplate::load("goblin_warrior").unwrap();
-    assert_eq!((g.level, g.hp, g.ac, g.speed_feet, g.faction), (1, 15, 16, 25.0, Faction::Hostile));
-    assert_eq!((g.weapon.name.as_str(), g.weapon.dice, g.weapon.sides, g.weapon.damage_type, g.weapon.agile), ("Dagger", 1, 4, DamageType::Piercing, true));
+    assert_eq!((g.level, g.hp, g.ac, g.speed_feet, g.faction), (1, 16, 16, 25.0, Faction::Hostile));
+    assert_eq!((g.weapon.name.as_str(), g.weapon.dice, g.weapon.sides, g.weapon.damage_type, g.weapon.agile), ("Dagger", 1, 6, DamageType::Piercing, true));
     assert!(ActorTemplate::load("../Cargo").is_err());
     assert!(available_templates().contains(&"hero_fighter".to_string()));
+}
+
+#[test]
+fn four_pf2e_archetypes_match_spec() {
+    // (template, hp, ac, speed, attack, dice, sides, reactive strike, spell dc, faction)
+    let want = [
+        ("hero_fighter", 32, 19, 10, 1, 8, true, 0, Faction::Player),
+        ("hero_wizard", 20, 16, 6, 1, 4, false, 18, Faction::Player),
+        ("goblin_warrior", 16, 16, 7, 1, 6, false, 0, Faction::Hostile),
+        ("dungeon_guard", 28, 18, 9, 1, 8, true, 0, Faction::Hostile),
+    ];
+    for (name, hp, ac, atk, n, sides, rs, dc, fac) in want {
+        let t = ActorTemplate::load(name).unwrap();
+        let s = CharacterSheet::from_template(&t);
+        assert_eq!((s.hp, s.ac, s.speed_feet, s.attack_bonus, s.weapon.dice, s.weapon.sides), (hp, ac, 25.0, atk, n, sides), "{name}");
+        assert_eq!((s.reactive_strike, s.spell_dc, t.faction), (rs, dc, fac), "{name}");
+        assert_eq!(s.reach(), 5.0);
+        assert!(available_templates().contains(&name.to_string()));
+    }
+    // strength modifiers behind the 1d8+4 / 1d6+2 damage lines
+    assert_eq!(ActorTemplate::load("hero_fighter").unwrap().abilities.str_, 18);
+    assert_eq!(ActorTemplate::load("goblin_warrior").unwrap().abilities.str_, 14);
+}
+
+#[test]
+fn composite_bodies_have_weapons_and_faction_rings() {
+    let mut app = base_app();
+    for (i, t) in ["hero_fighter", "hero_wizard", "goblin_warrior", "dungeon_guard"].into_iter().enumerate() {
+        let e = spawn_from_template(&mut app, t, i as u32 + 1, Vec3::ZERO);
+        let kids = app.world().get::<Children>(e).map(|c| c.len()).unwrap_or(0);
+        assert!(kids >= 7, "{t} has {kids} parts");
+    }
 }
 
 #[test]
@@ -51,7 +83,7 @@ fn spawn_fighter_from_ron_template() {
     let actor = er.get::<Actor>().unwrap();
     assert_eq!((actor.id, actor.template.as_str(), actor.name.as_str()), (7, "hero_fighter", "Hero Fighter"));
     let sheet = er.get::<CharacterSheet>().unwrap();
-    assert_eq!((sheet.hp, sheet.hp_max, sheet.ac, sheet.speed_feet), (20, 20, 18, 25.0));
+    assert_eq!((sheet.hp, sheet.hp_max, sheet.ac, sheet.speed_feet), (32, 32, 19, 25.0));
     assert_eq!(*er.get::<Faction>().unwrap(), Faction::Player);
     let mover = er.get::<Mover>().expect("Mover");
     assert_eq!(mover.speed_feet, 25.0);
@@ -65,7 +97,7 @@ fn damage_and_strikes_hurt_the_sheet() {
     let f = spawn_from_template(&mut app, "hero_fighter", 1, Vec3::ZERO);
     let mut sheet = app.world().get::<CharacterSheet>(f).unwrap().clone();
     sheet.take_damage(8, false);
-    assert_eq!((sheet.hp, sheet.dying), (12, 0));
+    assert_eq!((sheet.hp, sheet.dying), (24, 0));
     sheet.take_damage(30, false);
     assert_eq!((sheet.hp, sheet.dying), (0, 1));
     sheet.heal(5);
@@ -83,7 +115,7 @@ fn damage_and_strikes_hurt_the_sheet() {
         }
     }
     assert!(dealt > 0 && victim.hp < victim.hp_max);
-    assert_eq!(victim.hp, (20 - dealt).max(0));
+    assert_eq!(victim.hp, (32 - dealt).max(0));
 }
 
 fn trigger_app() -> App {

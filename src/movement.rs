@@ -57,6 +57,10 @@ pub struct Kinematics {
 #[derive(Resource, Default)]
 pub struct ActiveActor(pub Option<Entity>);
 
+/// Set while an encounter owns the Play-mode input (click-to-move and door clicks are routed through its action economy).
+#[derive(Resource, Default)]
+pub struct CombatLock(pub bool);
+
 #[derive(Resource)]
 pub struct NavMap {
     pub grid: Option<NavGrid>,
@@ -65,6 +69,13 @@ pub struct NavMap {
     water: f32,
     /// Bumped on every rebuild so cached previews know to recompute.
     pub revision: u32,
+}
+
+impl NavMap {
+    /// Raster is out of date (an edit is waiting out the rebuild debounce).
+    pub fn is_stale(&self) -> bool {
+        self.dirty || self.grid.is_none()
+    }
 }
 
 impl Default for NavMap {
@@ -102,6 +113,7 @@ pub struct MovementPlugin;
 impl Plugin for MovementPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NavMap>()
+            .init_resource::<CombatLock>()
             .init_resource::<ActiveActor>()
             .init_resource::<PathPreview>()
             .register_type::<Mover>()
@@ -152,7 +164,8 @@ fn refresh_nav(
     version: Res<TerrainVersion>,
     grid: Res<TerrainGrid>,
     spec: Res<WorldSpec>,
-    changed: Query<(), (With<SceneObject>, Or<(Added<SceneObject>, Changed<Transform>, Added<Deleted>)>)>,
+    // walking actors write their Transform every frame and never block the raster, so they must not keep it dirty
+    changed: Query<(), (With<SceneObject>, Without<Mover>, Or<(Added<SceneObject>, Changed<Transform>, Added<Deleted>)>)>,
     objs: Query<(&Transform, &SceneObject), Without<Deleted>>,
     tiles: TileQuery,
     doors: Query<(), Changed<Door>>,
@@ -162,7 +175,11 @@ fn refresh_nav(
     mut nav: ResMut<NavMap>,
 ) {
     let any = !changed.is_empty() || !doors.is_empty() || undeleted.read().count() > 0 || gone.read().count() > 0;
-    if any || version.is_changed() || grid.is_changed() || spec.water_level != nav.water {
+    if any || version.is_changed() || grid.is_changed() {
+        nav.dirty = true;
+        nav.changed_at = time.elapsed_secs();
+    } else if !nav.dirty && (nav.water.is_nan() || spec.water_level != nav.water) {
+        // a standing difference (never-built raster, new water level) must not keep restarting the debounce
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
     }
@@ -227,7 +244,10 @@ fn move_actors(
         } else {
             kin.vel = Vec2::ZERO;
         }
-        tf.translation = Vec3::new(pos.x, grid.0.sample_height(pos.x, pos.y), pos.y);
+        let ground = Vec3::new(pos.x, grid.0.sample_height(pos.x, pos.y), pos.y);
+        if tf.translation != ground {
+            tf.translation = ground;
+        }
         if kin.vel.length_squared() > 0.04 {
             let want = Quat::from_rotation_y((-kin.vel.x).atan2(-kin.vel.y));
             tf.rotation = tf.rotation.slerp(want, 1.0 - (-dt / 0.07).exp());
@@ -257,7 +277,7 @@ fn move_actors(
 // ───────────────────────────── Path helpers ─────────────────────────────
 
 /// Terrain-hugging samples along the polyline; flag marks difficult ground.
-fn sample_polyline(nav: &NavGrid, grid: &HeightfieldGrid, path: &NavPath, lift: f32) -> Vec<(Vec3, bool)> {
+pub(crate) fn sample_polyline(nav: &NavGrid, grid: &HeightfieldGrid, path: &NavPath, lift: f32) -> Vec<(Vec3, bool)> {
     let mut out = Vec::new();
     let lift_pt = |p: Vec2| Vec3::new(p.x, grid.sample_height(p.x, p.y) + lift, p.y);
     for w in path.points.windows(2) {
@@ -273,7 +293,7 @@ fn sample_polyline(nav: &NavGrid, grid: &HeightfieldGrid, path: &NavPath, lift: 
     out
 }
 
-fn ray_point_distance(ray: &Ray3d, p: Vec3) -> f32 {
+pub(crate) fn ray_point_distance(ray: &Ray3d, p: Vec3) -> f32 {
     let t = (p - ray.origin).dot(*ray.direction).max(0.0);
     p.distance(ray.origin + *ray.direction * t)
 }
@@ -303,9 +323,14 @@ fn play_input(
     mut commands: Commands,
     mut doors: Query<(&LevelTile, &mut Door), Without<Deleted>>,
     gset: Res<GridSettings>,
+    lock: Res<CombatLock>,
 ) {
     if active.0.is_none_or(|e| movers.get(e).is_err()) {
         active.0 = movers.iter().next().map(|(e, _)| e);
+    }
+    if lock.0 {
+        preview.0 = None;
+        return;
     }
     let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
     let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
@@ -395,7 +420,7 @@ const GLOW_GREEN: Color = Color::srgb(0.25, 1.0, 0.45);
 const GLOW_YELLOW: Color = Color::srgb(1.0, 0.85, 0.2);
 const OVER_RED: Color = Color::srgb(1.0, 0.3, 0.25);
 
-fn ring(g: &mut Gizmos<PathGizmos>, grid: &HeightfieldGrid, c: Vec2, r: f32, color: Color) {
+pub(crate) fn ring(g: &mut Gizmos<PathGizmos>, grid: &HeightfieldGrid, c: Vec2, r: f32, color: Color) {
     let at = |a: f32| {
         let p = c + Vec2::from_angle(a) * r;
         Vec3::new(p.x, grid.sample_height(p.x, p.y) + PREVIEW_LIFT, p.y)
@@ -413,12 +438,13 @@ fn draw_paths(
     active: Res<ActiveActor>,
     preview: Res<PathPreview>,
     nav: Res<NavMap>,
+    lock: Res<CombatLock>,
     movers: Query<(Entity, &Transform, &Mover, Option<&WaypointsPath>)>,
     mut g: Gizmos<PathGizmos>,
 ) {
     let lift = |p: Vec3| Vec3::new(p.x, grid.0.sample_height(p.x, p.z) + PREVIEW_LIFT, p.z);
     for (e, tf, mv, wp) in &movers {
-        if studio.mode == StudioMode::Playing && active.0 == Some(e) {
+        if studio.mode == StudioMode::Playing && active.0 == Some(e) && !lock.0 {
             ring(&mut g, &grid.0, xz(tf.translation), mv.radius + 0.25, GLOW_GREEN);
         }
         // remaining route of a walking actor

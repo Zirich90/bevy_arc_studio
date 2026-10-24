@@ -30,5 +30,5 @@ debug = 1
 opt-level = 3
 
 [features]
-default = []
+default = ["pf2e"]
 pf2e = ["dep:ron"]

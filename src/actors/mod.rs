@@ -33,17 +33,18 @@ pub enum Faction {
 impl Faction {
     pub const ALL: [Faction; 3] = [Faction::Player, Faction::Hostile, Faction::Neutral];
 
+    /// `Player` is the Party, `Hostile` the Enemy side of an encounter.
     pub fn label(self) -> &'static str {
         match self {
-            Faction::Player => "Player",
-            Faction::Hostile => "Hostile",
+            Faction::Player => "Party",
+            Faction::Hostile => "Enemy",
             Faction::Neutral => "Neutral",
         }
     }
 
     fn disc_color(self) -> Color {
         match self {
-            Faction::Player => Color::srgb(0.2, 0.75, 1.0),
+            Faction::Player => Color::srgb(0.2, 0.95, 0.35),
             Faction::Hostile => Color::srgb(0.95, 0.2, 0.18),
             Faction::Neutral => Color::srgb(0.95, 0.8, 0.2),
         }
@@ -79,7 +80,9 @@ pub struct WeaponSheet {
 
 /// Rules-facing stats of one actor; converts to/from `rules::Combatant` for strikes and damage.
 #[derive(Component, Reflect, Clone, Debug, Default, PartialEq)]
-#[reflect(Component)]
+/// `Clone` is reflected explicitly: the `[i32; N]` fields have no field-wise `reflect_clone`, which would silently drop the
+/// sheet from the play-mode snapshot.
+#[reflect(Component, Default, Clone)]
 pub struct CharacterSheet {
     pub level: i32,
     /// Str, Dex, Con, Int, Wis, Cha.
@@ -94,9 +97,19 @@ pub struct CharacterSheet {
     pub speed_feet: f32,
     pub attack_bonus: i32,
     pub weapon: WeaponSheet,
+    /// Melee reach in feet (below 5 reads as 5).
+    pub reach_ft: f32,
+    pub reactive_strike: bool,
+    pub has_shield: bool,
+    /// Spell DC; 0 for non-casters.
+    pub spell_dc: i32,
 }
 
 impl CharacterSheet {
+    pub fn reach(&self) -> f32 {
+        self.reach_ft.max(5.0)
+    }
+
     pub fn from_template(t: &ActorTemplate) -> Self {
         let a = &t.abilities;
         Self {
@@ -111,6 +124,10 @@ impl CharacterSheet {
             speed_feet: t.speed_feet,
             attack_bonus: t.attack_bonus,
             weapon: t.weapon.clone(),
+            reach_ft: t.reach_ft,
+            reactive_strike: t.reactive_strike,
+            has_shield: t.has_shield,
+            spell_dc: t.spell_dc,
         }
     }
 
@@ -215,6 +232,17 @@ pub struct ActorTemplate {
     pub color: (f32, f32, f32),
     /// Visual scale of the body (not the transform).
     pub scale: f32,
+    /// Body kit: `fighter`, `wizard`, `goblin`, `guard` (anything else: plain capsule).
+    #[serde(default)]
+    pub kit: String,
+    #[serde(default)]
+    pub reach_ft: f32,
+    #[serde(default)]
+    pub reactive_strike: bool,
+    #[serde(default)]
+    pub has_shield: bool,
+    #[serde(default)]
+    pub spell_dc: i32,
 }
 
 impl ActorTemplate {
@@ -248,19 +276,96 @@ pub fn available_templates() -> Vec<String> {
 #[derive(Component)]
 struct FactionDisc;
 
+/// One mesh piece of an actor body, in the actor's local frame (before the template scale).
+struct Part {
+    name: &'static str,
+    mesh: Mesh,
+    color: Color,
+    metal: bool,
+    glow: bool,
+    tf: Transform,
+}
+
+fn part(name: &'static str, mesh: impl Into<Mesh>, color: (f32, f32, f32), tf: Transform) -> Part {
+    Part { name, mesh: mesh.into(), color: Color::srgb(color.0, color.1, color.2), metal: false, glow: false, tf }
+}
+
+fn metal(mut p: Part) -> Part {
+    p.metal = true;
+    p
+}
+
+const STEEL: (f32, f32, f32) = (0.72, 0.75, 0.8);
+const WOOD: (f32, f32, f32) = (0.45, 0.3, 0.16);
+
+/// Composite fighters: body, head and a kit with weapon / shield / staff. Forward is -Z.
+fn kit_parts(kit: &str, body: (f32, f32, f32)) -> Vec<Part> {
+    let skin = (0.9, 0.72, 0.58);
+    let at = |x: f32, y: f32, z: f32| Transform::from_xyz(x, y, z);
+    let mut v = vec![part("ActorBody", Capsule3d::new(0.3, 0.8), body, at(0.0, 0.8, 0.0))];
+    match kit {
+        "fighter" => {
+            v.push(part("Head", Sphere::new(0.2), skin, at(0.0, 1.55, 0.0)));
+            v.push(metal(part("Helmet", Cylinder::new(0.215, 0.2), STEEL, at(0.0, 1.62, 0.0))));
+            v.push(metal(part("Sword", Cuboid::new(0.07, 0.06, 1.0), STEEL, at(0.42, 1.0, -0.5))));
+            v.push(part("Crossguard", Cuboid::new(0.3, 0.06, 0.06), (0.8, 0.65, 0.2), at(0.42, 1.0, -0.02)));
+            v.push(metal(part("Shield", Cuboid::new(0.1, 0.7, 0.55), (0.2, 0.3, 0.7), at(-0.45, 1.0, -0.1))));
+            v.push(part("ShieldBoss", Sphere::new(0.1), (0.85, 0.7, 0.25), at(-0.52, 1.0, -0.1)));
+        }
+        "wizard" => {
+            v.push(part("Robe", Cone { radius: 0.42, height: 1.1 }, body, at(0.0, 0.55, 0.0)));
+            v.push(part("Head", Sphere::new(0.19), skin, at(0.0, 1.5, 0.0)));
+            v.push(part("Hat", Cone { radius: 0.3, height: 0.6 }, (0.35, 0.2, 0.6), at(0.0, 1.9, 0.0)));
+            v.push(part("HatBrim", Cylinder::new(0.34, 0.03), (0.3, 0.17, 0.5), at(0.0, 1.62, 0.0)));
+            v.push(part("Staff", Cylinder::new(0.035, 1.9), WOOD, at(0.5, 0.95, -0.2)));
+            let mut orb = part("StaffOrb", Sphere::new(0.11), (1.0, 0.55, 0.15), at(0.5, 1.95, -0.2));
+            orb.glow = true;
+            v.push(orb);
+        }
+        "goblin" => {
+            v.push(part("Head", Sphere::new(0.26), (0.4, 0.78, 0.28), at(0.0, 1.45, 0.0)));
+            v.push(part("EarL", Cuboid::new(0.35, 0.05, 0.14), (0.4, 0.78, 0.28), at(-0.38, 1.5, 0.0)));
+            v.push(part("EarR", Cuboid::new(0.35, 0.05, 0.14), (0.4, 0.78, 0.28), at(0.38, 1.5, 0.0)));
+            v.push(metal(part("Dagger", Cuboid::new(0.05, 0.05, 0.55), STEEL, at(0.38, 0.95, -0.35))));
+            v.push(part("Hide", Cuboid::new(0.7, 0.3, 0.5), (0.4, 0.28, 0.15), at(0.0, 0.6, 0.0)));
+        }
+        "guard" => {
+            v.push(part("Head", Sphere::new(0.2), skin, at(0.0, 1.55, 0.0)));
+            v.push(metal(part("Helmet", Sphere::new(0.24), (0.5, 0.52, 0.56), at(0.0, 1.6, 0.0))));
+            v.push(part("Crest", Cuboid::new(0.05, 0.18, 0.4), (0.8, 0.15, 0.12), at(0.0, 1.88, 0.0)));
+            v.push(part("Pauldrons", Cuboid::new(0.85, 0.16, 0.4), (0.45, 0.47, 0.5), at(0.0, 1.3, 0.0)));
+            v.push(part("SpearShaft", Cylinder::new(0.03, 2.2), WOOD, at(0.46, 1.1, -0.2)));
+            v.push(metal(part("SpearTip", Cone { radius: 0.07, height: 0.3 }, STEEL, at(0.46, 2.35, -0.2))));
+            v.push(metal(part("TowerShield", Cuboid::new(0.1, 0.95, 0.6), (0.55, 0.12, 0.1), at(-0.46, 1.0, -0.1))));
+        }
+        _ => {
+            v.push(part("ActorNose", Cuboid::new(0.16, 0.16, 0.32), (0.98, 0.95, 0.85), at(0.0, 1.45, -0.3)));
+        }
+    }
+    v
+}
+
 /// Spawn an actor root with body meshes. `tf` must already stand on the terrain.
 pub fn spawn_actor(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, mut so: SceneObject, template: &str, t: &ActorTemplate, tf: Transform) -> Entity {
     let s = t.scale;
     so.category = ObjectCategory::Actor;
     so.aabb_half_extents = Vec3::new(0.4, 0.9, 0.4) * s;
-    let body = meshes.add(Capsule3d::new(0.3, 1.0));
-    let nose = meshes.add(Cuboid::new(0.16, 0.16, 0.32));
-    let disc = meshes.add(Annulus::new(0.5, 0.65));
-    let (r, g, b) = t.color;
-    let mat_body = mats.add(StandardMaterial { base_color: Color::srgb(r, g, b), perceptual_roughness: 0.6, ..default() });
-    let mat_nose = mats.add(StandardMaterial { base_color: Color::srgb(0.98, 0.95, 0.85), perceptual_roughness: 0.5, ..default() });
+    let disc = meshes.add(Annulus::new(0.5, 0.68));
     let mat_disc = mats.add(StandardMaterial { base_color: t.faction.disc_color(), unlit: true, double_sided: true, cull_mode: None, ..default() });
     let actor = Actor { name: t.name.clone(), id: so.id, template: template.to_string() };
+    let handles: Vec<_> = kit_parts(&t.kit, t.color)
+        .into_iter()
+        .map(|p| {
+            let mat = StandardMaterial {
+                base_color: p.color,
+                perceptual_roughness: if p.metal { 0.35 } else { 0.7 },
+                metallic: if p.metal { 0.8 } else { 0.0 },
+                emissive: if p.glow { LinearRgba::rgb(4.0, 1.8, 0.4) } else { LinearRgba::BLACK },
+                ..default()
+            };
+            (p.name, meshes.add(p.mesh), mats.add(mat), p.tf)
+        })
+        .collect();
     commands
         .spawn((
             Name::new(t.name.clone()),
@@ -273,8 +378,11 @@ pub fn spawn_actor(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mu
             Visibility::default(),
         ))
         .with_children(|c| {
-            c.spawn((Name::new("ActorBody"), Mesh3d(body), MeshMaterial3d(mat_body), Transform::from_xyz(0.0, 0.8 * s, 0.0).with_scale(Vec3::splat(s))));
-            c.spawn((Name::new("ActorNose"), Mesh3d(nose), MeshMaterial3d(mat_nose), Transform::from_xyz(0.0, 1.25 * s, -0.3 * s).with_scale(Vec3::splat(s))));
+            for (name, mesh, mat, mut ptf) in handles {
+                ptf.translation *= s;
+                ptf.scale = Vec3::splat(s);
+                c.spawn((Name::new(name), Mesh3d(mesh), MeshMaterial3d(mat), ptf));
+            }
             c.spawn((
                 Name::new("FactionDisc"),
                 FactionDisc,
@@ -293,8 +401,10 @@ pub struct ActorsPlugin;
 impl Plugin for ActorsPlugin {
     fn build(&self, app: &mut App) {
         register_types(app);
-        app.register_spawner_item("RPG (pf2e)", "Fighter", spawn_kind("actor:hero_fighter"))
-            .register_spawner_item("RPG (pf2e)", "Goblin", spawn_kind("actor:goblin_warrior"))
+        app.register_spawner_item("RPG (pf2e)", "Hero Fighter", spawn_kind("actor:hero_fighter"))
+            .register_spawner_item("RPG (pf2e)", "Hero Wizard", spawn_kind("actor:hero_wizard"))
+            .register_spawner_item("RPG (pf2e)", "Goblin Warrior", spawn_kind("actor:goblin_warrior"))
+            .register_spawner_item("RPG (pf2e)", "Dungeon Guard", spawn_kind("actor:dungeon_guard"))
             .register_spawner_item("RPG (pf2e)", "Trigger Volume", spawn_kind("trigger"));
         app.add_plugins(triggers::TriggersPlugin).add_systems(Update, (sync_actor_ids, sync_faction_disc));
     }
@@ -369,6 +479,13 @@ pub fn inspector(ui: &mut egui::Ui, d: &mut UiData, e: Entity) {
         ui.label(format!("Fort {:+}  Ref {:+}  Will {:+}", s.saves[0], s.saves[1], s.saves[2]));
         let w = &s.weapon;
         ui.label(format!("{} {:+}  {}d{} {:?}{}", w.name, s.attack_bonus, w.dice, w.sides, w.damage_type, if w.agile { "  agile" } else { "" }));
+        ui.label(format!(
+            "Reach {} ft{}{}{}",
+            s.reach(),
+            if s.reactive_strike { "  Reactive Strike" } else { "" },
+            if s.has_shield { "  Shield" } else { "" },
+            if s.spell_dc > 0 { format!("  Spell DC {}", s.spell_dc) } else { String::new() }
+        ));
     }
     if let Some(i) = inter {
         ui.label(format!("Interactable: {:?}", i.kind));
