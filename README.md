@@ -2,7 +2,7 @@
 
 ![Promo](docs/arcstudio_promo.gif)
 
-[Full quality video (mp4)](docs/arcstudio_promo.mp4)
+[Full quality video (mp4)](docs/arcstudio_promo.mp4)docs/arcstudio_promo.mp4
 
 **AI-first procedural 3D environment studio & editor GUI for Bevy 0.20** · `MIT OR Apache-2.0`
 
