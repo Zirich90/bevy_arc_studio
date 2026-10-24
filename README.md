@@ -1,9 +1,5 @@
 # Bevy ArcStudio
 
-![Promo](docs/arcstudio_promo.gif)
-
-![Promo](docs/arcstudio_promo.gif)
-
 https://github.com/user-attachments/assets/350c3808-5fd0-472f-8c72-ffeb1465093c
 
 [Full quality video (mp4)](docs/arcstudio_promo.mp4)
