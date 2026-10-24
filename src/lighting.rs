@@ -22,6 +22,16 @@ pub struct NightLight {
     pub base: f32,
 }
 
+/// Multiplier for moonlight and night ambient (1.0 = studio default).
+#[derive(Resource)]
+pub struct NightBoost(pub f32);
+
+impl Default for NightBoost {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 const SUN_AZIMUTH: f32 = 0.6;
 const EV_DAY: f32 = 13.5;
 const EV_NIGHT: f32 = 5.5;
@@ -78,7 +88,7 @@ pub struct LightingPlugin;
 
 impl Plugin for LightingPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(GlobalAmbientLight { color: Color::srgb(0.45, 0.55, 0.9), brightness: 0.0, ..default() })
+        app.init_resource::<NightBoost>().insert_resource(GlobalAmbientLight { color: Color::srgb(0.45, 0.55, 0.9), brightness: 0.0, ..default() })
             .insert_resource(DirectionalLightShadowMap { size: 4096 })
             .add_systems(Update, (advance_clock, apply_time_of_day, apply_toggles, flicker_night_lights).chain());
     }
@@ -98,27 +108,36 @@ fn apply_time_of_day(
     mut cam: Query<(&mut Exposure, &mut DistanceFog)>,
     mut vol: Query<&mut FogVolume>,
     mut ambient: ResMut<GlobalAmbientLight>,
+    boost: Res<NightBoost>,
 ) {
     let t = spec.time_of_day;
     let dir = sun_direction(t);
     let d = daylight(t);
     let elev = dir.y;
+    // exposure follows the log of the available light (sun + twilight sky) so dusk never over-exposes
+    let lux = 130_000.0 * spec.sun_intensity * smoothstep(-0.04, 0.12, elev) + 3000.0 * smoothstep(-0.35, 0.05, elev) + 100.0;
+    let frac = ((lux / 100.0).log10() / 1300.0_f32.log10()).clamp(0.0, 1.0);
+    let ev = EV_NIGHT + (EV_DAY - EV_NIGHT) * frac;
+    // extra moonlight only once the sky is really dark, so twilight exposure does not blow it out
+    let nb = 1.0 + (boost.0 - 1.0) * (1.0 - frac).powf(1.4);
     if let Ok((mut tf, mut l)) = sun.single_mut() {
         *tf = Transform::default().looking_to(-dir, Vec3::Y);
-        l.illuminance = 130_000.0 * spec.sun_intensity * smoothstep(-0.04, 0.12, elev);
+        // low sun: longer air path → dimmer and warmer light
+        let low = smoothstep(0.0, 0.4, elev);
+        l.illuminance = 130_000.0 * spec.sun_intensity * smoothstep(-0.04, 0.12, elev) * (0.3 + 0.7 * low);
+        l.color = Color::srgb(1.0, 0.68 + 0.32 * low, 0.42 + 0.58 * low);
         l.shadow_maps_enabled = spec.shadows && elev > -0.03;
     }
     if let Ok((mut tf, mut l)) = moon.single_mut() {
         let mdir = Vec3::new(-dir.x, dir.y.abs().max(0.35), -dir.z).normalize();
         *tf = Transform::default().looking_to(-mdir, Vec3::Y);
-        l.illuminance = 22.0 * (1.0 - d);
+        l.illuminance = 22.0 * nb * (1.0 - d);
         l.shadow_maps_enabled = spec.shadows && d < 0.3;
     }
+    ambient.brightness = 14.0 * nb * (1.0 - d) + 450.0 * d;
     for mut v in &mut vol {
         v.density_factor = if spec.fog_enabled { spec.fog_density * 1.6 } else { 0.0 };
     }
-    let ev = EV_NIGHT + (EV_DAY - EV_NIGHT) * d.powf(0.8);
-    ambient.brightness = 14.0 * (1.0 - d) + 450.0 * d;
     for (mut exp, mut fog) in &mut cam {
         exp.ev100 = ev;
         let vis = smoothstep(-0.25, 0.3, elev);

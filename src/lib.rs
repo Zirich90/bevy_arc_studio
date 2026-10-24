@@ -6,6 +6,7 @@ pub mod gizmo_3d;
 pub mod lighting;
 pub mod props;
 pub mod scene;
+pub mod showcase;
 pub mod selection;
 pub mod terrain_render;
 pub mod ui;
