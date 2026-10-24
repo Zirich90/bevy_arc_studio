@@ -131,7 +131,7 @@ impl Plugin for Gizmo3dPlugin {
 fn setup_gizmo(mut store: ResMut<GizmoConfigStore>, mut gz: ResMut<GizmoState>) {
     let (cfg, _) = store.config_mut::<HandleGizmos>();
     cfg.depth_bias = -1.0;
-    cfg.line.width = 4.5;
+    cfg.line.width = 3.0;
     // dev aid: ARC_GIZMO=select|move|rotate|scale [,local] [,snap] [,align]
     if let Ok(v) = std::env::var("ARC_GIZMO") {
         for t in v.split(',') {
@@ -168,6 +168,7 @@ struct Frame {
     o: Vec3,
     axes: [Vec3; 3],
     hs: f32,
+    eye: Vec3,
 }
 
 fn plane_uv(i: usize) -> (usize, usize) {
@@ -416,72 +417,90 @@ fn drag_update(d: &mut Drag, view: &View, ray: Ray3d, cursor: Vec2, ctrl: bool, 
 
 // ───────────────────────────── drawing ─────────────────────────────
 
-fn axis_color(i: usize, lit: bool) -> Color {
-    if lit {
-        return Color::linear_rgb(3.0, 2.6, 0.3);
-    }
-    match i {
-        0 => Color::linear_rgb(2.6, 0.25, 0.25),
-        1 => Color::linear_rgb(0.4, 2.4, 0.4),
-        _ => Color::linear_rgb(0.4, 0.9, 2.8),
-    }
+const LIT: (f32, f32, f32) = (2.6, 2.2, 0.5);
+
+/// Axis colour; `lit` = hovered/dragged, `dim` = another handle has focus, `a` scales alpha.
+fn axis_color(i: usize, lit: bool, dim: bool, a: f32) -> Color {
+    let (r, g, b) = if lit {
+        LIT
+    } else {
+        match i {
+            0 => (2.2, 0.35, 0.35),
+            1 => (0.45, 2.0, 0.45),
+            2 => (0.45, 0.95, 2.4),
+            _ => (2.0, 2.0, 2.0),
+        }
+    };
+    let alpha = if lit { 1.0 } else if dim { 0.3 } else { 0.9 } * a;
+    Color::linear_rgba(r, g, b, alpha)
 }
 
 fn draw_gizmo(g: &mut Gizmos<HandleGizmos>, mode: GizmoMode, f: &Frame, hover: Option<Handle>, drag: Option<&Drag>) {
     let active = drag.map(|d| d.handle);
-    let lit = |h: Handle| hover == Some(h) || active == Some(h);
+    let focus = active.or(hover);
+    let lit = |h: Handle| focus == Some(h);
+    let dim = focus.is_some();
+    let col = |i: usize, h: Handle, a: f32| axis_color(i, lit(h), dim && !lit(h), a);
     let o = f.o;
     let hs = f.hs;
-    let white = |l: bool| if l { Color::linear_rgb(3.0, 2.6, 0.3) } else { Color::linear_rgb(2.5, 2.5, 2.5) };
+    let to_eye = (f.eye - o).normalize_or_zero();
     match mode {
         GizmoMode::Move => {
+            const N: usize = 12;
             for i in 0..3 {
                 let a = f.axes[i];
-                let c = axis_color(i, lit(Handle::Axis(i)));
+                let c = col(i, Handle::Axis(i), 1.0);
                 let base = o + a * (AX_LEN - CONE_LEN) * hs;
                 let tip = o + a * AX_LEN * hs;
-                g.line(o + a * 0.14 * hs, base, c);
+                g.line(o + a * 0.16 * hs, base, c);
                 let (u, v) = (f.axes[(i + 1) % 3], f.axes[(i + 2) % 3]);
-                let rim: Vec<Vec3> = (0..=16).map(|k| base + (u * (k as f32 / 16.0 * TAU).cos() + v * (k as f32 / 16.0 * TAU).sin()) * CONE_R * hs).collect();
-                for p in rim.iter().step_by(2) {
+                let rim: Vec<Vec3> = (0..=N).map(|k| { let t = k as f32 / N as f32 * TAU; base + (u * t.cos() + v * t.sin()) * CONE_R * hs }).collect();
+                for p in rim.iter().take(N).step_by(3) {
                     g.line(tip, *p, c);
                 }
                 g.linestrip(rim, c);
-                // plane quad: outline + hatch fill
+                // plane handle: thin outline plus one diagonal
                 let q = plane_corners(f, i);
-                let pc = axis_color(i, lit(Handle::Plane(i)));
+                let pc = col(i, Handle::Plane(i), 0.8);
                 g.linestrip([q[0], q[1], q[2], q[3], q[0]], pc);
-                for t in [0.2_f32, 0.4, 0.6, 0.8] {
-                    g.line(q[0].lerp(q[1], t), q[3].lerp(q[2], t), pc);
+                if lit(Handle::Plane(i)) {
+                    g.line(q[0], q[2], pc);
+                    g.line(q[1], q[3], pc);
                 }
             }
-            g.sphere(o, 0.07 * hs, white(lit(Handle::Center)));
+            g.sphere(o, 0.06 * hs, axis_color(3, lit(Handle::Center), dim && !lit(Handle::Center), 1.0));
         }
         GizmoMode::Rotate => {
             for i in 0..3 {
                 let h = Handle::Ring(i);
-                g.linestrip(ring_points(f, i, 64), axis_color(i, lit(h)));
+                let pts = ring_points(f, i, 64);
+                // far half of the ring fades so the front arc reads clearly
+                for w in pts.windows(2) {
+                    let front = ((w[0] + w[1]) * 0.5 - o).dot(to_eye) >= 0.0;
+                    g.line(w[0], w[1], col(i, h, if front { 1.0 } else { 0.35 }));
+                }
                 if let Some(d) = drag.filter(|d| d.handle == h && !d.tangent_mode) {
-                    let a = f.axes[i];
-                    let w = a.cross(d.v_start);
+                    let w = f.axes[i].cross(d.v_start);
                     let n = 24;
-                    let pts: Vec<Vec3> = (0..=n).map(|k| { let t = d.acc * k as f32 / n as f32; o + (d.v_start * t.cos() + w * t.sin()) * hs * RING_R }).collect();
-                    for p in pts.iter().step_by(2) {
-                        g.line(o, *p, Color::linear_rgb(3.0, 2.6, 0.3));
+                    let arc: Vec<Vec3> = (0..=n).map(|k| { let t = d.acc * k as f32 / n as f32; o + (d.v_start * t.cos() + w * t.sin()) * hs * RING_R }).collect();
+                    let fill = Color::linear_rgba(LIT.0, LIT.1, LIT.2, 0.45);
+                    for p in arc.iter().step_by(3) {
+                        g.line(o, *p, fill);
                     }
+                    g.linestrip(arc, axis_color(i, true, false, 1.0));
                 }
             }
-            g.sphere(o, 0.05 * hs, white(false));
+            g.sphere(o, 0.04 * hs, axis_color(3, false, dim, 1.0));
         }
         GizmoMode::Scale => {
             let rot = Quat::from_mat3(&Mat3::from_cols(f.axes[0], f.axes[1], f.axes[2]));
             for i in 0..3 {
-                let c = axis_color(i, lit(Handle::ScaleAxis(i)));
+                let c = col(i, Handle::ScaleAxis(i), 1.0);
                 let end = o + f.axes[i] * SCALE_LEN * hs;
-                g.line(o, end, c);
+                g.line(o + f.axes[i] * 0.16 * hs, end, c);
                 draw_box(g, end, Vec3::splat(CUBE * hs), rot, c);
             }
-            draw_box(g, o, Vec3::splat(CUBE * 0.8 * hs), rot, white(lit(Handle::ScaleAll)));
+            draw_box(g, o, Vec3::splat(CUBE * 0.8 * hs), rot, axis_color(3, lit(Handle::ScaleAll), dim && !lit(Handle::ScaleAll), 1.0));
         }
         GizmoMode::Select => {}
     }
@@ -533,7 +552,7 @@ pub fn gizmo_system(
         GizmoSpace::Local => [prot * Vec3::X, prot * Vec3::Y, prot * Vec3::Z],
     };
     let hs = (calc_handle_size(view.eye, origin, view.dir, fov) * HANDLE_SCALE).max(1e-3);
-    let frame = Frame { o: origin, axes, hs };
+    let frame = Frame { o: origin, axes, hs, eye: view.eye };
     let cursor = window.cursor_position();
     let ray = cursor.and_then(|c| camera.viewport_to_world(gtf, c).ok());
     let cam_busy = ecam.mode.is_some() || alt;
