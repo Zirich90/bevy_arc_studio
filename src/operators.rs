@@ -72,7 +72,7 @@ pub fn push_result(w: &mut World, op: &str, res: Result<String, String>) {
 // ───────────────────────────── Registry ─────────────────────────────
 
 const UNDOABLE: &[&str] = &[
-    "ApplyPreset", "SetQuality", "SetTime", "SpawnObject", "Sculpt", "DeleteSelected", "SetTransform", "Duplicate", "Paste", "SetSpec", "SetComponent",
+    "ApplyPreset", "SetQuality", "SetTime", "SpawnObject", "Sculpt", "DeleteSelected", "SetTransform", "Duplicate", "Paste", "EditMaterial", "ApplyMaterial", "SetSpec", "SetComponent",
     "AddComponent", "RemoveComponent", "Reparent", "ToggleDoor", "SetWaterBody", "BuildRoom", "BuildWallLine", "PlaceLevelTile", "PaintLevelTiles", "ToggleDoor", "SpawnPrefab",
 ];
 

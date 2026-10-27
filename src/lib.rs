@@ -4,6 +4,7 @@ pub mod editor_registry;
 pub mod gizmo_3d;
 pub mod level_builder;
 pub mod lighting;
+pub mod materials;
 pub mod props;
 pub mod scene;
 pub mod showcase;
@@ -76,7 +77,7 @@ impl Plugin for BevyArcStudioPlugin {
         app.init_resource::<arc_core::UndoHistory<arc_core::WorldSpec>>()
             .register_type::<arc_core::WorldSpec>()
             .register_type::<camera::EditorCamera>()
-            .add_plugins((editor_registry::EditorRegistryPlugin, modules::ModulesPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin, prefabs::PrefabsPlugin, ui_assets::AssetBrowserPlugin))
+            .add_plugins((editor_registry::EditorRegistryPlugin, modules::ModulesPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin, prefabs::PrefabsPlugin, ui_assets::AssetBrowserPlugin, materials::MaterialsPlugin))
             .add_plugins((
                 scene::ScenePlugin,
                 camera::EditorCameraPlugin,

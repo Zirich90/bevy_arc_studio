@@ -9,6 +9,7 @@
 | Камера | `SetCameraStyle`, `SetCamera`, `FocusSelected` | нет |
 | Террейн | `SetBrush`, `Sculpt` | да |
 | Мир | `SetSpec { field, value }` (поле `WorldSpec` по reflect-пути) | да |
+| Материалы | `EditMaterial{target}`, `ApplyMaterial{target,name}`, `SaveMaterial{target,name}` | Edit/Apply да; пресеты в `assets/materials/<name>.mat.json`, hot-reload |
 | Объекты | `SpawnObject`, `DeleteSelected`, `Duplicate`, `Copy`, `Paste`, `SetTransform` | да (Duplicate/Paste клонируют с потомками) |
 | Выделение | `Select { name }`, `SelectIds`, `ListObjects`, `DescribeScene` | нет |
 | Гизмо | `SetGizmo` | нет |

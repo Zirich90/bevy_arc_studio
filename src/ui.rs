@@ -46,6 +46,7 @@ pub struct UiData<'w, 's> {
     pub redits: ResMut<'w, crate::ui_reflect::ReflectEdits>,
     pub reg: Res<'w, crate::editor_registry::EditorRegistry>,
     pub modules: Res<'w, crate::modules::ModuleRegistry>,
+    pub matlib: Res<'w, crate::materials::MaterialLibrary>,
     pub gset: ResMut<'w, crate::level_builder::GridSettings>,
     pub water: ResMut<'w, crate::water::WaterBodies>,
     pub lbs: ResMut<'w, crate::level_builder::LevelBuilderState>,

@@ -1,0 +1,1 @@
+Phase 2.4: material editor — MaterialOverride component (per-object PBR, undoable, saved in scenes), library assets/materials/*.mat.json with hot-reload, Materials panel, EditMaterial/ApplyMaterial/SaveMaterial commands.

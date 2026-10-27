@@ -79,6 +79,12 @@ pub enum StudioCommand {
     /// Insert a component by type name (short or full path); `value` JSON or Default; undoable.
     AddComponent { target: Target, component: String, value: Option<String> },
     RemoveComponent { target: Target, component: String },
+    /// Add a `MaterialOverride` seeded from the object's current material (per-object PBR edit); undoable.
+    EditMaterial { target: Target },
+    /// Apply the library preset `assets/materials/<name>.mat.json` to an object; undoable. Objects keep following the file (hot-reload).
+    ApplyMaterial { target: Target, name: String },
+    /// Save the object's `MaterialOverride` as library preset `name`.
+    SaveMaterial { target: Target, name: String },
     /// Move `child` under `parent` (None = root), keeping world position; undoable.
     Reparent { child: Target, parent: Option<Target> },
     /// Modular building: floor over the rectangle `min..=max` (grid cells, any corner order), pillars on corners, walls on the perimeter; one undo step.
@@ -525,6 +531,18 @@ pub fn execute_commands(
             StudioCommand::SetComponent { target, component, value } => {
                 queue_world_cmd(&mut spawner.commands, "SetComponent", move |w| operators::set_component(w, &target, &component, &value))
             }
+            StudioCommand::EditMaterial { target } => queue_world_cmd(&mut spawner.commands, "EditMaterial", move |w| {
+                let e = operators::resolve(w, &target)?;
+                crate::materials::edit_material(w, e)
+            }),
+            StudioCommand::ApplyMaterial { target, name } => queue_world_cmd(&mut spawner.commands, "ApplyMaterial", move |w| {
+                let e = operators::resolve(w, &target)?;
+                crate::materials::apply_material(w, e, &name)
+            }),
+            StudioCommand::SaveMaterial { target, name } => queue_world_cmd(&mut spawner.commands, "SaveMaterial", move |w| {
+                let e = operators::resolve(w, &target)?;
+                crate::materials::save_material(w, e, &name)
+            }),
             StudioCommand::AddComponent { target, component, value } => {
                 queue_world_cmd(&mut spawner.commands, "AddComponent", move |w| operators::add_component(w, &target, &component, value.as_deref()))
             }
