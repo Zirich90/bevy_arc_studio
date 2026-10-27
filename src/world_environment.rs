@@ -124,7 +124,7 @@ fn global_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         srow(ui, f, &mut gev, "lake depth", &mut geo.lake_depth, 0.0..=15.0);
         srow(ui, f, &mut gev, "water level", &mut geo.water_level, 0.0..=30.0);
         srow(ui, f, &mut gev, "shore foam", &mut geo.shore_foam, 0.0..=1.0);
-        water_bodies_ui(ui, &mut d.water, geo.water_level);
+        water_bodies_ui(ui, &mut d.water, &mut d.queue, geo.water_level);
         srow(ui, f, &mut gev, "camp x", &mut geo.camp_center[0], -120.0..=120.0);
         srow(ui, f, &mut gev, "camp z", &mut geo.camp_center[1], -120.0..=120.0);
         srow(ui, f, &mut gev, "clearing radius", &mut geo.clearing_radius, 3.0..=30.0);
@@ -262,7 +262,7 @@ mod tests {
 }
 
 /// Per-body water levels: pick a basin on the terrain and set its level without touching the global one.
-fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, global_level: f32) {
+fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, queue: &mut crate::mcp_commands::StudioCommandQueue, global_level: f32) {
     ui.separator();
     ui.label(egui::RichText::new("Water bodies (own level, global level untouched)").strong().color(TEAL));
     ui.horizontal(|ui| {
@@ -270,8 +270,8 @@ fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, global_
             w.picking = !w.picking;
         }
         if ui.add_enabled(w.selected.is_some(), egui::Button::new("Reset to global")).clicked() {
-            if let Some(i) = w.selected.take().filter(|&i| i < w.items.len()) {
-                w.items.remove(i);
+            if let Some(b) = w.selected.and_then(|i| w.items.get(i)) {
+                queue.push(crate::mcp_commands::StudioCommand::SetWaterBody { x: b.seed[0], z: b.seed[1], level: None });
             }
         }
     });
@@ -285,9 +285,9 @@ fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, global_
         w.selected = pick;
     }
     if let Some(i) = w.selected.filter(|&i| i < w.items.len()) {
-        let mut lvl = w.items[i].level;
+        let (seed, mut lvl) = (w.items[i].seed, w.items[i].level);
         if ui.add(egui::Slider::new(&mut lvl, 0.0..=40.0).text("body level")).changed() {
-            w.items[i].level = lvl;
+            queue.push(crate::mcp_commands::StudioCommand::SetWaterBody { x: seed[0], z: seed[1], level: Some(lvl) });
         }
         ui.weak(format!("global level {global_level:.1} stays as is"));
     }

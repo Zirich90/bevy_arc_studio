@@ -75,7 +75,7 @@ pub enum StudioCommand {
     /// Insert a component by type name (short or full path); `value` JSON or Default; undoable.
     AddComponent { target: Target, component: String, value: Option<String> },
     RemoveComponent { target: Target, component: String },
-    /// Move `child` under `parent` (None = root), keeping world position; not undoable.
+    /// Move `child` under `parent` (None = root), keeping world position; undoable.
     Reparent { child: Target, parent: Option<Target> },
     /// Modular building: floor over the rectangle `min..=max` (grid cells, any corner order), pillars on corners, walls on the perimeter; one undo step.
     BuildRoom { min: [i32; 2], max: [i32; 2], floor: i32, style: WallStyle },
@@ -85,11 +85,11 @@ pub enum StudioCommand {
     PlaceLevelTile { kind: TileKind, pos: [i32; 3], facing: Option<u8>, style: Option<WallStyle> },
     /// Brush stroke over many cells (floor paint, or `erase` = remove the wall layer / floor of each cell); one undo step.
     PaintLevelTiles { kind: TileKind, cells: Vec<[i32; 3]>, style: WallStyle, erase: bool },
-    /// Open/close (`open: None` toggles) the door in a cell; locked doors refuse to open. Not undoable.
+    /// Open/close (`open: None` toggles) the door in a cell; locked doors refuse to open; undoable.
     ToggleDoor { pos: [i32; 3], open: Option<bool> },
     /// Snap grid and storey: `None` leaves a field unchanged. `floor_level` lifts the building plane to `Y = floor_level * floor_height`.
     SetGrid { enabled: Option<bool>, cell_size: Option<f32>, floor_level: Option<i32>, floor_height: Option<f32>, angle_snap_deg: Option<f32> },
-    /// Own water level for the basin at world (x, z): fills a moat or drains a pond without touching the global level. `level: None` removes that body's override.
+    /// Own water level for the basin at world (x, z): fills a moat or drains a pond without touching the global level. `level: None` removes that body's override; undoable.
     SetWaterBody { x: f32, z: f32, level: Option<f32> },
     /// Bind (`enabled`) or unbind the building plane from the terrain. Unbound: storey 0 is `Y = 0`. `site` [x, z] re-grounds on the terrain there.
     SetGroundSnap { enabled: bool, site: Option<[f32; 2]> },

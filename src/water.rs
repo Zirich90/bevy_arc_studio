@@ -14,13 +14,14 @@ use crate::terrain_render::{TerrainGrid, TerrainVersion};
 /// A water body with its own surface level: the terrain basin that contains `seed` (world x, z), flooded to `level`
 /// without touching the global `WorldSpec::water_level`. A level above the rim spills into whatever lies beyond it.
 #[derive(Reflect, Clone, Debug, PartialEq)]
+#[reflect(Clone)]
 pub struct WaterBody {
     pub seed: [f32; 2],
     pub level: f32,
 }
 
 #[derive(Resource, Reflect, Default, Clone, Debug)]
-#[reflect(Resource, Default)]
+#[reflect(Resource, Default, Clone)]
 pub struct WaterBodies {
     pub items: Vec<WaterBody>,
     pub selected: Option<usize>,
@@ -266,10 +267,16 @@ fn ripple(mesh: &mut Mesh, w: &Water, t: f32) {
 /// Give the basin at world (x, z) its own water level (creating the body if needed); `None` removes the body again.
 pub fn cmd_set_water_body(w: &mut World, x: f32, z: f32, level: Option<f32>) -> Result<String, String> {
     let (global, grid) = (w.resource::<WorldSpec>().water_level, w.resource::<TerrainGrid>().0.clone());
+    let before = crate::operators::snap_resource::<WaterBodies>(w);
     let mut bodies = w.resource_mut::<WaterBodies>();
-    let hit = body_at(&grid, global, &bodies.items, x, z);
+    // the exact seed (sent back by the UI) wins over the flood test, so a body lowered below its own seed stays addressable
+    let hit = bodies.items.iter().position(|b| b.seed == [x, z]).or_else(|| body_at(&grid, global, &bodies.items, x, z));
+    let mut retune = false;
     match (hit, level) {
-        (Some(i), Some(l)) => bodies.items[i].level = l,
+        (Some(i), Some(l)) => {
+            bodies.items[i].level = l;
+            retune = true;
+        }
         (Some(i), None) => {
             bodies.items.remove(i);
             bodies.selected = None;
@@ -280,7 +287,11 @@ pub fn cmd_set_water_body(w: &mut World, x: f32, z: f32, level: Option<f32>) -> 
         }
         (None, None) => return Err("no water body there".into()),
     }
-    Ok(format!("{} water bodies", bodies.items.len()))
+    let n = bodies.items.len();
+    let after = crate::operators::snap_resource::<WaterBodies>(w);
+    // slider drags arrive as one command per frame: coalesce level changes into a single undo step
+    crate::operators::record_edit(w, "Water body", before, after, retune);
+    Ok(format!("{n} water bodies"))
 }
 
 /// While `picking`: a left click on the terrain selects the body under the cursor, or creates one there. Esc cancels. Also marks the selected body.
@@ -293,6 +304,7 @@ fn pick_water_body(
     spec: Res<WorldSpec>,
     grid: Res<TerrainGrid>,
     mut bodies: ResMut<WaterBodies>,
+    mut queue: ResMut<crate::mcp_commands::StudioCommandQueue>,
     mut gizmos: Gizmos,
 ) {
     if let Some(b) = bodies.selected.and_then(|i| bodies.items.get(i)) {
@@ -322,8 +334,7 @@ fn pick_water_body(
     }
     let h = grid.0.sample_height(p.x, p.z);
     let level = if h < spec.water_level { spec.water_level } else { h + 0.5 };
-    bodies.items.push(WaterBody { seed: [p.x, p.z], level });
-    bodies.selected = Some(bodies.items.len() - 1);
+    queue.push(crate::mcp_commands::StudioCommand::SetWaterBody { x: p.x, z: p.z, level: Some(level) });
 }
 
 #[cfg(test)]
@@ -388,5 +399,30 @@ mod tests {
         let g = grid();
         let o = body_owners(&g, 6.0, &[WaterBody { seed: [0.0, 0.0], level: 6.0 }]);
         assert!(o.iter().all(|&b| b == NO_BODY));
+    }
+    #[test]
+    fn water_body_edits_undo_and_redo() {
+        use crate::operators::{ComponentHistory, CompClock, apply_snap};
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).register_type::<WaterBodies>().register_type::<WaterBody>();
+        app.init_resource::<WaterBodies>().init_resource::<ComponentHistory>().init_resource::<CompClock>();
+        app.insert_resource(WorldSpec::default()).insert_resource(TerrainGrid(grid()));
+        let w = app.world_mut();
+        let (mx, mz) = w.resource::<TerrainGrid>().0.grid_to_world(5, 5);
+        cmd_set_water_body(w, mx, mz, Some(9.0)).unwrap();
+        assert_eq!(w.resource::<WaterBodies>().items.len(), 1);
+        cmd_set_water_body(w, mx, mz, None).unwrap();
+        assert!(w.resource::<WaterBodies>().items.is_empty());
+        let s = w.resource_mut::<ComponentHistory>().undo().unwrap();
+        assert!(s.value.is_some(), "snapshot has a value");
+        assert_eq!(w.resource::<ComponentHistory>().redo_len(), 1);
+        apply_snap(w, &s);
+        assert_eq!(w.resource::<WaterBodies>().items.len(), 1, "undo of delete brings the body back");
+        let s = w.resource_mut::<ComponentHistory>().undo().unwrap();
+        apply_snap(w, &s);
+        assert!(w.resource::<WaterBodies>().items.is_empty(), "undo of create removes it");
+        let s = w.resource_mut::<ComponentHistory>().redo().unwrap();
+        apply_snap(w, &s);
+        assert_eq!(w.resource::<WaterBodies>().items[0].level, 9.0);
     }
 }

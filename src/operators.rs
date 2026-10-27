@@ -73,7 +73,7 @@ pub fn push_result(w: &mut World, op: &str, res: Result<String, String>) {
 
 const UNDOABLE: &[&str] = &[
     "ApplyPreset", "SetQuality", "SetTime", "SpawnObject", "Sculpt", "DeleteSelected", "SetTransform", "Duplicate", "SetSpec", "SetComponent",
-    "AddComponent", "RemoveComponent", "BuildRoom", "BuildWallLine", "PlaceLevelTile", "PaintLevelTiles", "ToggleDoor", "SpawnPrefab",
+    "AddComponent", "RemoveComponent", "Reparent", "ToggleDoor", "SetWaterBody", "BuildRoom", "BuildWallLine", "PlaceLevelTile", "PaintLevelTiles", "ToggleDoor", "SpawnPrefab",
 ];
 
 pub fn is_undoable(op: &str) -> bool {
@@ -229,17 +229,21 @@ pub fn resolve(w: &mut World, t: &Target) -> Result<Entity, String> {
 // ───────────────────────────── Component history ─────────────────────────────
 
 /// One component of one entity; `value: None` means the component is absent.
+pub type ResourceApply = fn(&mut World, &dyn PartialReflect);
+
 pub struct CompSnap {
     pub entity: Entity,
     pub type_id: TypeId,
     pub value: Option<Box<dyn Reflect>>,
+    /// Set for a resource snapshot (`entity` is then a placeholder): writes `value` back into the world.
+    pub resource: Option<ResourceApply>,
     /// Components restored together with this one in a single undo step (e.g. `ChildOf` + `Transform` of a reparent).
     pub also: Vec<CompSnap>,
 }
 
 impl Clone for CompSnap {
     fn clone(&self) -> Self {
-        Self { entity: self.entity, type_id: self.type_id, value: self.value.as_ref().and_then(|v| v.reflect_clone().ok()), also: self.also.clone() }
+        Self { entity: self.entity, type_id: self.type_id, value: self.value.as_ref().and_then(|v| v.reflect_clone().ok()), resource: self.resource, also: self.also.clone() }
     }
 }
 
@@ -247,6 +251,7 @@ impl PartialEq for CompSnap {
     fn eq(&self, o: &Self) -> bool {
         self.entity == o.entity
             && self.type_id == o.type_id
+            && self.resource.is_some() == o.resource.is_some()
             && self.also == o.also
             && match (&self.value, &o.value) {
                 (None, None) => true,
@@ -274,7 +279,18 @@ pub fn snap(w: &World, e: Entity, tid: TypeId) -> CompSnap {
         .get_type_data::<ReflectComponent>(tid)
         .and_then(|rc| w.get_entity(e).ok().and_then(|er| rc.reflect(er)))
         .and_then(|r| r.reflect_clone().ok());
-    CompSnap { entity: e, type_id: tid, value, also: Vec::new() }
+    CompSnap { entity: e, type_id: tid, value, resource: None, also: Vec::new() }
+}
+
+/// Snapshot of a reflected resource (`#[reflect(Resource)]`), for undoable resource edits.
+pub fn snap_resource<R: Resource + Reflect + FromReflect>(w: &World) -> CompSnap {
+    let value = w.get_resource::<R>().map(|r| r.reflect_clone().ok()).flatten();
+    let apply: ResourceApply = |w, v| {
+        if let Some(r) = R::from_reflect(v) {
+            w.insert_resource(r);
+        }
+    };
+    CompSnap { entity: Entity::PLACEHOLDER, type_id: TypeId::of::<R>(), value, resource: Some(apply), also: Vec::new() }
 }
 
 pub fn apply_snap(w: &mut World, s: &CompSnap) {
@@ -287,6 +303,12 @@ pub fn apply_snap(w: &mut World, s: &CompSnap) {
 fn apply_one(w: &mut World, s: &CompSnap) {
     let registry = w.resource::<AppTypeRegistry>().clone();
     let reg = registry.read();
+    if let Some(apply) = s.resource {
+        if let Some(v) = &s.value {
+            apply(w, v.as_partial_reflect());
+        }
+        return;
+    }
     let Some(rc) = reg.get_type_data::<ReflectComponent>(s.type_id) else { return };
     let Ok(mut em) = w.get_entity_mut(s.entity) else { return };
     match &s.value {

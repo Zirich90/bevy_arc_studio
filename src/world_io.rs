@@ -21,7 +21,31 @@ use crate::selection::{Deleted, EditorSelection};
 use crate::studio::{Spawner, StudioState};
 use crate::terrain_render::{PendingHeights, TerrainGrid};
 
-pub const SCENE_FORMAT_VERSION: u32 = 2;
+/// v1: legacy `.json`; v2: reflect `DynamicWorld`; v3: `ChildOf` hierarchy + `SceneMeta` version resource.
+pub const SCENE_FORMAT_VERSION: u32 = 3;
+
+/// Format version stamped into every saved scene (as a world resource). Files without it are v2.
+#[derive(Resource, Reflect, Clone, Debug)]
+#[reflect(Resource, Default)]
+pub struct SceneMeta {
+    pub version: u32,
+}
+
+impl Default for SceneMeta {
+    fn default() -> Self {
+        Self { version: SCENE_FORMAT_VERSION }
+    }
+}
+
+/// Version recorded in a loaded scene (2 when the file predates `SceneMeta`); rejects scenes from a newer editor.
+pub fn scene_version(dw: &DynamicWorld) -> Result<u32, String> {
+    let v = dw.resources.iter().find_map(|r| SceneMeta::from_reflect(r.as_ref())).map_or(2, |m| m.version);
+    if v > SCENE_FORMAT_VERSION {
+        return Err(format!("scene format v{v} is newer than this editor (v{SCENE_FORMAT_VERSION})"));
+    }
+    // v2 -> v3 only adds data (hierarchy, meta): nothing to rewrite. Future breaking versions migrate `dw` here.
+    Ok(v)
+}
 
 /// True for the reflect format (`*.scn.json`); other `.json` paths use the legacy v1 loader.
 pub fn is_reflect_path(path: &str) -> bool {
@@ -79,12 +103,14 @@ impl Plugin for WorldIoPlugin {
             .init_resource::<SceneComponentRegistry>()
             .register_type::<UnitScale>()
             .init_resource::<UnitScale>()
+            .register_type::<SceneMeta>()
+            .init_resource::<SceneMeta>()
             .add_systems(Update, (save_scene, load_scene).chain().after(crate::mcp_commands::execute_commands));
     }
 }
 
 fn component_filter(extras: &SceneComponentRegistry) -> WorldFilter {
-    let base = WorldFilter::deny_all().allow::<Transform>().allow::<UserProp>();
+    let base = WorldFilter::deny_all().allow::<Transform>().allow::<UserProp>().allow::<ChildOf>();
     extras.ids.iter().fold(base, |f, id| f.allow_by_id(*id))
 }
 
@@ -95,7 +121,7 @@ pub fn build_dynamic_world(world: &World, entities: impl Iterator<Item = Entity>
     let filter = component_filter(world.resource::<SceneComponentRegistry>());
     DynamicWorldBuilder::from_world(world, &registry)
         .with_component_filter(filter)
-        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<crate::water::WaterBodies>())
+        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<SceneMeta>().allow::<crate::water::WaterBodies>())
         .extract_entities(entities)
         .remove_empty_entities()
         .extract_resources()
@@ -171,6 +197,7 @@ fn load_scene(
             let mut srv = (*server).clone();
             let reg = registry.read();
             let dw = dynamic_world_from_json(&json, &reg, &mut srv).map_err(|e| format!("{path}: {e}"))?;
+            let version = scene_version(&dw).map_err(|e| format!("{path}: {e}"))?;
             let hbytes = std::fs::read(heights_path(&path)).map_err(|e| format!("{}: {e}", heights_path(&path)))?;
             let heights: Vec<f32> = hbytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
 
@@ -192,8 +219,11 @@ fn load_scene(
             pending.0 = Some(heights);
 
             let mut n = 0;
+            let mut spawned: std::collections::HashMap<Entity, Entity> = default();
+            let mut parents: Vec<(Entity, Entity)> = Vec::new();
             for de in &dw.entities {
                 let mut kind = None;
+                let mut parent = None;
                 let mut tf = None;
                 let mut rest: Vec<Box<dyn PartialReflect>> = Vec::new();
                 for c in &de.components {
@@ -202,6 +232,8 @@ fn load_scene(
                         kind = Some(u.kind);
                     } else if let Some(t) = Transform::from_reflect(c.as_ref()) {
                         tf = Some(t);
+                    } else if let Some(p) = ChildOf::from_reflect(c.as_ref()) {
+                        parent = Some(p.parent());
                     } else if tid.is_some_and(|t| extras.contains(t)) {
                         if let Ok(b) = c.reflect_clone() { rest.push(b.into_partial_reflect()); }
                     }
@@ -221,6 +253,10 @@ fn load_scene(
                 let yaw = tf.rotation.to_euler(EulerRot::YXZ).0;
                 let Some((e, _)) = spawner.spawn(&grid.0, &spec, &kind, tf.translation.x, tf.translation.z, yaw) else { continue };
                 spawner.commands.entity(e).insert(tf);
+                spawned.insert(de.entity, e);
+                if let Some(p) = parent {
+                    parents.push((e, p));
+                }
                 if !rest.is_empty() {
                     spawner.commands.queue(move |world: &mut World| {
                         let registry = world.resource::<AppTypeRegistry>().clone();
@@ -234,7 +270,18 @@ fn load_scene(
                 }
                 n += 1;
             }
-            Ok(format!("loaded {path} (v{SCENE_FORMAT_VERSION}, {n} objects)"))
+            // saved transforms are local: relink after every object exists, in any file order
+            let links: Vec<(Entity, Entity)> = parents.into_iter().filter_map(|(c, p)| spawned.get(&p).map(|&p| (c, p))).collect();
+            if !links.is_empty() {
+                spawner.commands.queue(move |world: &mut World| {
+                    for (c, p) in links {
+                        if world.get_entity(c).is_ok() && world.get_entity(p).is_ok() {
+                            world.entity_mut(c).insert(ChildOf(p));
+                        }
+                    }
+                });
+            }
+            Ok(format!("loaded {path} (v{version}, {n} objects)"))
         })();
         report(&mut q, &mut studio, res.unwrap_or_else(|e| format!("ERR {e}")));
     }
@@ -258,8 +305,10 @@ mod tests {
             .register_type::<WorldSpec>()
             .register_type::<UnitScale>()
             .register_type::<UserProp>()
+            .register_type::<ChildOf>()
+            .register_type::<SceneMeta>()
             .register_scene_component::<Marker>();
-        app.init_resource::<WorldSpec>().init_resource::<UnitScale>();
+        app.init_resource::<WorldSpec>().init_resource::<UnitScale>().init_resource::<SceneMeta>();
         app
     }
 
@@ -331,6 +380,31 @@ mod tests {
         let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
         let got = back.resources.iter().filter(|r| r.represents::<WaterBodies>()).find_map(|r| WaterBodies::from_reflect(r.as_ref())).expect("bodies saved");
         assert_eq!(got.items, vec![WaterBody { seed: [3.0, -4.0], level: 9.5 }]);
+    }
+
+    #[test]
+    fn hierarchy_and_version_are_saved() {
+        let mut app = test_app();
+        let w = app.world_mut();
+        let parent = w.spawn((Transform::default(), UserProp { kind: "pine".into() })).id();
+        let child = w.spawn((Transform::from_xyz(1.0, 0.0, 0.0), UserProp { kind: "pine".into() }, ChildOf(parent))).id();
+        let dw = build_dynamic_world(app.world(), [parent, child].into_iter());
+        let registry = app.world().resource::<AppTypeRegistry>().clone();
+        let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
+        let mut server = app.world().resource::<AssetServer>().clone();
+        let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
+        assert_eq!(scene_version(&back), Ok(SCENE_FORMAT_VERSION));
+        let links: Vec<Entity> = back.entities.iter().flat_map(|e| e.components.iter()).filter_map(|c| ChildOf::from_reflect(c.as_ref())).map(|c| c.parent()).collect();
+        assert_eq!(links.len(), 1);
+        assert!(back.entities.iter().any(|e| e.entity == links[0]), "parent id points at a saved entity");
+    }
+
+    #[test]
+    fn scene_without_meta_is_v2_and_newer_is_rejected() {
+        let mut dw = DynamicWorld::default();
+        assert_eq!(scene_version(&dw), Ok(2));
+        dw.resources.push(Box::new(SceneMeta { version: SCENE_FORMAT_VERSION + 1 }).into_partial_reflect());
+        assert!(scene_version(&dw).is_err());
     }
 
     #[test]

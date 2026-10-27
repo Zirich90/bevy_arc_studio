@@ -125,7 +125,7 @@ pub fn restore(w: &mut World) -> String {
         }
         for t in &ids {
             let value = es.comps.iter().find(|c| c.type_id == *t).cloned();
-            apply_snap(w, &value.unwrap_or(CompSnap { entity: es.entity, type_id: *t, value: None, also: Vec::new() }));
+            apply_snap(w, &value.unwrap_or(CompSnap { entity: es.entity, type_id: *t, value: None, resource: None, also: Vec::new() }));
         }
         let cur = w.get::<ChildOf>(es.entity).map(|c| c.parent());
         let mut em = w.entity_mut(es.entity);
