@@ -121,6 +121,8 @@ impl Plugin for Gizmo3dPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GizmoState>()
             .init_resource::<SceneHistory>()
+            .init_resource::<ObjectClipboard>()
+            .add_systems(Update, refresh_cloned_ids)
             .init_gizmo_group::<HandleGizmos>()
             .add_systems(Startup, setup_gizmo)
             .add_systems(Update, (gizmo_hotkeys, gizmo_system).chain())
@@ -640,6 +642,97 @@ pub fn apply_states(states: &[ObjState], q: &mut Query<(&mut Transform, &mut Vis
     }
 }
 
+/// Objects copied with Ctrl+C / `Copy`; `pastes` staggers repeated pastes so they do not stack.
+#[derive(Resource, Default)]
+pub struct ObjectClipboard {
+    pub sources: Vec<Entity>,
+    pub pastes: u32,
+}
+
+/// On a freshly cloned root: its cloned descendants still carry the source ids.
+#[derive(Component)]
+pub struct FreshIds;
+
+/// Selected entities with no selected ancestor (their descendants travel with them).
+pub fn top_level(sel: &EditorSelection, parents: &Query<&ChildOf>) -> Vec<Entity> {
+    let mut v: Vec<Entity> = sel
+        .selected
+        .iter()
+        .copied()
+        .filter(|e| {
+            let mut cur = *e;
+            while let Ok(p) = parents.get(cur) {
+                cur = p.parent();
+                if sel.selected.contains(&cur) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+    v.sort_by_key(|e| e.to_bits());
+    v
+}
+
+/// Clone `sources` with all descendants, shifted by `stagger` times their footprint. Returns (before, after, new roots).
+pub fn clone_objects(
+    commands: &mut Commands,
+    grid: &HeightfieldGrid,
+    sources: &[(Entity, Transform, SceneObject, bool)],
+    stagger: f32,
+    next_id: &mut u32,
+) -> (Vec<ObjState>, Vec<ObjState>, Vec<Entity>) {
+    let (mut before, mut after, mut fresh) = (Vec::new(), Vec::new(), Vec::new());
+    for (src, tf, so, is_child) in sources {
+        let off = Vec3::new((so.aabb_half_extents.x * 2.0 + 1.0).clamp(1.5, 6.0) * stagger, 0.0, 0.0);
+        let mut ntf = *tf;
+        ntf.translation += off;
+        if !is_child {
+            let lift = tf.translation.y - grid.sample_height(tf.translation.x, tf.translation.z);
+            ntf.translation.y = grid.sample_height(ntf.translation.x, ntf.translation.z) + lift;
+        }
+        *next_id += 1;
+        let mut dup = so.clone();
+        dup.id = *next_id;
+        let id = commands
+            .entity(*src)
+            .clone_and_spawn_with_opt_out(|b| {
+                b.linked_cloning(true);
+            })
+            .insert((ntf, dup, FreshIds))
+            .id();
+        before.push(ObjState { entity: id, tf: ntf, alive: false });
+        after.push(ObjState { entity: id, tf: ntf, alive: true });
+        fresh.push(id);
+    }
+    (before, after, fresh)
+}
+
+/// Gives cloned descendants unique object ids (the clone copies the source's).
+fn refresh_cloned_ids(mut commands: Commands, roots: Query<Entity, With<FreshIds>>, kids: Query<&Children>, mut objs: Query<&mut SceneObject>) {
+    if roots.is_empty() {
+        return;
+    }
+    let mut next = objs.iter().map(|o| o.id).max().unwrap_or(0);
+    for r in &roots {
+        for d in kids.iter_descendants(r) {
+            if let Ok(mut so) = objs.get_mut(d) {
+                next += 1;
+                so.id = next;
+            }
+        }
+        commands.entity(r).remove::<FreshIds>();
+    }
+}
+
+/// Live, editable roots among `ids`, ready for `clone_objects`.
+pub fn clone_sources(ids: &[Entity], q: &Query<(&mut Transform, &mut Visibility)>, all: &Query<&SceneObject>, deleted: &Query<(), With<Deleted>>, parents: &Query<&ChildOf>) -> Vec<(Entity, Transform, SceneObject, bool)> {
+    ids.iter()
+        .filter(|e| !deleted.contains(**e))
+        .filter_map(|e| Some((*e, *q.get(*e).ok()?.0, all.get(*e).ok()?.clone(), parents.contains(*e))))
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn scene_edit_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
@@ -647,43 +740,39 @@ fn scene_edit_hotkeys(
     mut commands: Commands,
     mut sel: ResMut<EditorSelection>,
     mut hist: ResMut<SceneHistory>,
+    mut clip: ResMut<ObjectClipboard>,
     gz: Res<GizmoState>,
     terrain: Res<TerrainGrid>,
     mut q: Query<(&mut Transform, &mut Visibility)>,
     all: Query<&SceneObject>,
+    deleted: Query<(), With<Deleted>>,
+    parents: Query<&ChildOf>,
 ) {
     if egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false) || gz.drag.is_some() {
         return;
     }
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
 
-    if ctrl && keys.just_pressed(KeyCode::KeyD) && !sel.selected.is_empty() {
-        let grid = &terrain.0;
+    if ctrl && keys.just_pressed(KeyCode::KeyC) && !sel.selected.is_empty() {
+        clip.sources = top_level(&sel, &parents);
+        clip.pastes = 0;
+    }
+
+    let paste = ctrl && keys.just_pressed(KeyCode::KeyV) && !clip.sources.is_empty();
+    let dup = ctrl && keys.just_pressed(KeyCode::KeyD) && !sel.selected.is_empty();
+    if paste || dup {
+        let ids = if paste { clip.sources.clone() } else { top_level(&sel, &parents) };
+        let stagger = if paste {
+            clip.pastes += 1;
+            clip.pastes as f32
+        } else {
+            1.0
+        };
+        let srcs = clone_sources(&ids, &q, &all, &deleted, &parents);
         let mut next_id = all.iter().map(|o| o.id).max().unwrap_or(0);
-        let (mut before, mut after, mut fresh) = (Vec::new(), Vec::new(), Vec::new());
-        for src in sel.selected.iter().copied() {
-            let (Ok((tf, _)), Ok(so)) = (q.get(src), all.get(src)) else { continue };
-            let off = Vec3::new((so.aabb_half_extents.x * 2.0 + 1.0).clamp(1.5, 6.0), 0.0, 0.0);
-            let mut ntf = *tf;
-            let lift = tf.translation.y - grid.sample_height(tf.translation.x, tf.translation.z);
-            ntf.translation += off;
-            ntf.translation.y = grid.sample_height(ntf.translation.x, ntf.translation.z) + lift;
-            next_id += 1;
-            let mut dup = so.clone();
-            dup.id = next_id;
-            let id = commands
-                .entity(src)
-                .clone_and_spawn_with_opt_out(|b| {
-                    b.linked_cloning(true);
-                })
-                .insert((ntf, dup))
-                .id();
-            before.push(ObjState { entity: id, tf: ntf, alive: false });
-            after.push(ObjState { entity: id, tf: ntf, alive: true });
-            fresh.push(id);
-        }
+        let (before, after, fresh) = clone_objects(&mut commands, &terrain.0, &srcs, stagger, &mut next_id);
         if let Some(first) = fresh.first().copied() {
-            hist.record("Duplicate", before, after);
+            hist.record(if paste { "Paste" } else { "Duplicate" }, before, after);
             sel.selected = fresh.into_iter().collect();
             sel.primary = Some(first);
         }
@@ -700,5 +789,45 @@ fn scene_edit_hotkeys(
             apply_states(&after, &mut q, &mut commands);
             sel.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod clone_tests {
+    use super::*;
+    use crate::props::ObjectCategory;
+
+    fn obj(id: u32) -> SceneObject {
+        SceneObject { id, name: format!("o{id}"), category: ObjectCategory::Model, aabb_half_extents: Vec3::ONE }
+    }
+
+    #[derive(Resource, Default)]
+    struct Fresh(Vec<Entity>);
+
+    fn run_clone(mut commands: Commands, q: Query<(Entity, &Transform, &SceneObject, Has<ChildOf>)>, mut fresh: ResMut<Fresh>) {
+        let grid = HeightfieldGrid::new(5, 10.0);
+        let srcs: Vec<_> = q.iter().filter(|o| !o.3).map(|(e, t, s, c)| (e, *t, s.clone(), c)).collect();
+        let mut next = 2;
+        fresh.0 = clone_objects(&mut commands, &grid, &srcs, 1.0, &mut next).2;
+    }
+
+    #[test]
+    fn clone_carries_descendants_with_unique_ids() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).init_resource::<Fresh>().add_systems(Update, refresh_cloned_ids);
+        let parent = app.world_mut().spawn((Transform::default(), obj(1))).id();
+        app.world_mut().spawn((Transform::from_xyz(1.0, 0.0, 0.0), obj(2), ChildOf(parent)));
+        { let id = app.world_mut().register_system(run_clone); app.world_mut().run_system(id).unwrap(); }
+        app.update();
+        app.update();
+        let w = app.world_mut();
+        let mut ids: Vec<u32> = w.query::<&SceneObject>().iter(w).map(|o| o.id).collect();
+        assert_eq!(ids.len(), 4, "parent + child, cloned");
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 4, "ids are unique");
+        let root = app.world().resource::<Fresh>().0[0];
+        assert_eq!(app.world().get::<Children>(root).map(|c| c.len()), Some(1));
+        assert!(app.world().get::<FreshIds>(root).is_none());
     }
 }

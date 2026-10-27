@@ -59,6 +59,7 @@ Read results:
 | `SelectIds` | `{ids:[u32], additive}` (ids from `ListObjects`) |
 | `SetTransform` | `{id?, pos?, rot_deg?, scale?, drop_to_ground}` — undoable |
 | `Duplicate` | `{offset:[x,z]}` |
+| `Copy` / `Paste` | — (clone selection with descendants; Paste staggers per repeat, undoable) |
 | `SetSpec` | `{field, value}` — `WorldSpec` field by reflect path, bool as 0/1 — undoable |
 | `ListObjects`, `Describe`, `DescribeScene` | read-only; `Describe` returns the schema of every operator, `DescribeScene` `{filter?, limit?}` the hierarchy |
 | `SetComponent` / `AddComponent` / `RemoveComponent` | `{target, component, value}` (reflect-serde JSON string) — undoable |

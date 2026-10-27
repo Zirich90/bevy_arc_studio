@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
-use crate::gizmo_3d::{GizmoMode, GizmoState, ObjState, SceneHistory};
+use crate::gizmo_3d::{GizmoMode, GizmoState, ObjState, ObjectClipboard, SceneHistory, clone_objects, top_level};
 use crate::level_builder::{self as lb, TileKind, WallStyle};
 use crate::movement;
 use crate::operators::{self, CommandResults, DEFERRED, Target};
@@ -60,8 +60,12 @@ pub enum StudioCommand {
     SelectIds { ids: Vec<u32>, additive: bool },
     /// Edit a transform (target: `id` or the primary selection); rot_deg = (x, y, z) Euler YXZ; undoable.
     SetTransform { id: Option<u32>, pos: Option<Vec3>, rot_deg: Option<Vec3>, scale: Option<Vec3>, drop_to_ground: bool },
-    /// Copy the selected editor-spawned props, offset by `offset` (x, z).
+    /// Clone the selected objects with all descendants, shifted by `offset` (x, z) on top of the default footprint shift. Undoable.
     Duplicate { offset: [f32; 2] },
+    /// Remember the selected objects (top-level ones; descendants travel along) for `Paste`.
+    Copy,
+    /// Paste the copied objects with descendants, staggered per repeat. Undoable.
+    Paste,
     /// Set a WorldSpec field by reflect path (e.g. "lake_radius", "fog_enabled"); bool as 0/1; undoable.
     SetSpec { field: String, value: f64 },
     /// Result line: JSON array `[{"id","name","kind","pos":[x,y,z]}]` (max 300).
@@ -197,11 +201,47 @@ fn queue_world_cmd(commands: &mut Commands, op: &'static str, f: impl FnOnce(&mu
 }
 
 #[derive(bevy::ecs::system::SystemParam)]
-pub struct Extra<'w> {
+pub struct Extra<'w, 's> {
     gz: ResMut<'w, GizmoState>,
     req: ResMut<'w, HistoryRequest>,
     results: ResMut<'w, CommandResults>,
     custom: Res<'w, CustomCommands>,
+    clip: ResMut<'w, ObjectClipboard>,
+    parents: Query<'w, 's, &'static ChildOf>,
+}
+
+/// Clone `ids` (and descendants) for Duplicate/Paste; the new roots become the selection.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn clone_selected(
+    ids: &[Entity],
+    offset: [f32; 2],
+    stagger: f32,
+    label: &str,
+    objs: &Query<(Entity, &Transform, &SceneObject, Option<&UserProp>), Without<Deleted>>,
+    parents: &Query<&ChildOf>,
+    grid: &HeightfieldGrid,
+    commands: &mut Commands,
+    sh: &mut SceneHistory,
+    sel: &mut EditorSelection,
+) -> Result<usize, String> {
+    let srcs: Vec<_> = ids.iter().filter_map(|e| objs.get(*e).ok()).map(|(e, tf, so, _)| (e, *tf, so.clone(), parents.contains(e))).collect();
+    if srcs.is_empty() {
+        return Err("nothing duplicable selected".into());
+    }
+    let mut next_id = objs.iter().map(|o| o.2.id).max().unwrap_or(0);
+    let (before, mut after, fresh) = clone_objects(commands, grid, &srcs, stagger, &mut next_id);
+    let mut before = before;
+    for (b, a) in before.iter_mut().zip(after.iter_mut()) {
+        a.tf.translation += Vec3::new(offset[0], 0.0, offset[1]);
+        b.tf = a.tf;
+        commands.entity(a.entity).insert(a.tf);
+    }
+    sh.record(label.to_string(), before, after);
+    sel.clear();
+    for e in &fresh {
+        sel.add(*e);
+    }
+    Ok(fresh.len())
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -425,22 +465,26 @@ pub fn execute_commands(
                 Ok(format!("transform set at ({:.1}, {:.1}, {:.1})", next.translation.x, next.translation.y, next.translation.z))
             }
             StudioCommand::Duplicate { offset } => {
-                let src: Vec<(Transform, String)> = sel.selected.iter().filter_map(|e| objs.get(*e).ok()).filter_map(|(_, tf, _, up)| up.map(|u| (*tf, u.kind.clone()))).collect();
-                if src.is_empty() {
-                    return Err("nothing duplicable selected (editor-spawned props only)".into());
+                let ids = top_level(&sel, &extra.parents);
+                let n = clone_selected(&ids, offset, 1.0, "Duplicate", &objs, &extra.parents, &grid.0, &mut spawner.commands, &mut sh, &mut sel)?;
+                Ok(format!("duplicated {n} (with descendants)"))
+            }
+            StudioCommand::Copy => {
+                extra.clip.sources = top_level(&sel, &extra.parents);
+                extra.clip.pastes = 0;
+                if extra.clip.sources.is_empty() {
+                    return Err("nothing selected".into());
                 }
-                sel.clear();
-                for (tf, kind) in &src {
-                    let (x, z) = (tf.translation.x + offset[0], tf.translation.z + offset[1]);
-                    let yaw = tf.rotation.to_euler(EulerRot::YXZ).0;
-                    if let Some((e, t)) = spawner.spawn(&grid.0, &spec, kind, x, z, yaw) {
-                        let t = Transform { scale: tf.scale, rotation: tf.rotation, ..t };
-                        spawner.commands.entity(e).insert(t);
-                        sh.record(format!("Duplicate {kind}"), vec![ObjState { entity: e, tf: t, alive: false }], vec![ObjState { entity: e, tf: t, alive: true }]);
-                        sel.add(e);
-                    }
+                Ok(format!("copied {} objects", extra.clip.sources.len()))
+            }
+            StudioCommand::Paste => {
+                if extra.clip.sources.is_empty() {
+                    return Err("clipboard is empty".into());
                 }
-                Ok(format!("duplicated {}", src.len()))
+                extra.clip.pastes += 1;
+                let (ids, k) = (extra.clip.sources.clone(), extra.clip.pastes as f32);
+                let n = clone_selected(&ids, [0.0, 0.0], k, "Paste", &objs, &extra.parents, &grid.0, &mut spawner.commands, &mut sh, &mut sel)?;
+                Ok(format!("pasted {n} (with descendants)"))
             }
             StudioCommand::SetSpec { field, value } => {
                 use bevy::reflect::GetPath;
