@@ -178,8 +178,8 @@ impl Plugin for PropsPlugin {
 
 /// glTF models may embed cameras; only the editor camera may render to the window.
 /// An observer strips them at insertion, before the first extract sees two active cameras.
-fn strip_model_cameras(add: On<Add<Camera>>, editor: Query<(), With<crate::camera::EditorCamera>>, mut commands: Commands) {
-    if !editor.contains(add.entity) {
+fn strip_model_cameras(add: On<Add<Camera>>, keep: Query<(), Or<(With<crate::camera::EditorCamera>, With<crate::thumbnails::ThumbnailCamera>)>>, mut commands: Commands) {
+    if !keep.contains(add.entity) {
         commands.entity(add.entity).remove::<(Camera, Camera3d)>();
     }
 }
@@ -886,7 +886,8 @@ pub fn spawn_user_prop(
             let file = &k[6..];
             let leaf = file.rsplit('/').next().unwrap_or(file);
             let stem = leaf.rsplit_once('.').map_or(leaf, |(s, _)| s).to_string();
-            let tf = mul_tf(pos, rot);
+            let mut tf = mul_tf(pos, rot);
+            crate::asset_meta::load(&model_asset_path(file)).apply(&mut tf);
             let o = cx.obj(&stem, ObjectCategory::Model, Vec3::splat(1.0));
             let scene = server.load(GltfAssetLabel::Scene(0).from_asset(model_asset_path(file)));
             (commands.spawn((Name::new(stem), o, WorldAssetRoot(scene), tf)).id(), tf)

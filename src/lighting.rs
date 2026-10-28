@@ -154,7 +154,7 @@ fn apply_time_of_day(
 fn apply_toggles(
     spec: Res<WorldSpec>,
     mut commands: Commands,
-    cam: Query<Entity, With<Camera3d>>,
+    cam: Query<Entity, (With<Camera3d>, Without<crate::thumbnails::ThumbnailCamera>)>,
     sun: Query<Entity, With<Sun>>,
     mut shadow_map: ResMut<DirectionalLightShadowMap>,
     mut last: Local<Option<(bool, bool, bool, QualityPreset)>>,

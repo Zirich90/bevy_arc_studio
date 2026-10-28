@@ -451,7 +451,7 @@ fn build_far_ground(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mu
     commands.spawn((Name::new("FarGround"), Mesh3d(meshes.add(Plane3d::default().mesh().size(9000.0, 9000.0))), MeshMaterial3d(m), Transform::from_xyz(0.0, PLATEAU - 12.2, 0.0), NotShadowCaster));
 }
 
-fn fix_atmosphere(mut q: Query<&mut bevy::light::Atmosphere>, cam: Query<Entity, (With<Camera3d>, Without<bevy::anti_alias::smaa::Smaa>)>, mut commands: Commands, mut done: Local<bool>) {
+fn fix_atmosphere(mut q: Query<&mut bevy::light::Atmosphere>, cam: Query<Entity, (With<Camera3d>, Without<bevy::anti_alias::smaa::Smaa>, Without<crate::thumbnails::ThumbnailCamera>)>, mut commands: Commands, mut done: Local<bool>) {
     for e in &cam {
         commands.entity(e).insert(bevy::anti_alias::smaa::Smaa::default());
     }

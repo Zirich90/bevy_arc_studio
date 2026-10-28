@@ -12,15 +12,18 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
 
 use crate::arc_core::WorldPreset;
+use crate::asset_meta::{self, AssetMeta};
 use crate::level_builder::{GridSettings, WallStyle, demo_tavern_commands};
 use crate::mcp_commands::{StudioCommand as Cmd, StudioCommandQueue};
 use crate::props::assets_dir;
 use crate::terrain_render::TerrainGrid;
+use crate::thumbnails::Thumbnails;
 use crate::ui::*;
 use crate::ui_inspector::spawn_point;
 
 const RESCAN: Duration = Duration::from_millis(1500);
-const CARD: egui::Vec2 = egui::vec2(132.0, 54.0);
+const CARD: egui::Vec2 = egui::vec2(150.0, 66.0);
+const BADGE: f32 = 54.0;
 
 // ───────────────────────────── Scanning ─────────────────────────────
 
@@ -140,33 +143,67 @@ impl Plugin for AssetBrowserPlugin {
 
 // ───────────────────────────── UI ─────────────────────────────
 
-fn card(ui: &mut egui::Ui, icon: &str, tint: egui::Color32, title: &str, sub: &str, active: bool) -> egui::Response {
+fn card(ui: &mut egui::Ui, icon: &str, tint: egui::Color32, title: &str, sub: &str, active: bool, thumb: Option<(&mut Thumbnails, &str)>) -> egui::Response {
     let (rect, r) = ui.allocate_exact_size(CARD, egui::Sense::click());
     let fill = if active { egui::Color32::from_rgb(20, 70, 66) } else if r.hovered() { egui::Color32::from_gray(48) } else { egui::Color32::from_gray(30) };
+    let tex = thumb.and_then(|(t, key)| if ui.is_rect_visible(rect) { t.request(key) } else { None });
     let p = ui.painter();
     p.rect_filled(rect, 5.0, fill);
     p.rect_stroke(rect, 5.0, egui::Stroke::new(1.0, if active { TEAL } else { egui::Color32::from_gray(58) }), egui::StrokeKind::Inside);
-    let badge = egui::Rect::from_min_size(rect.min + egui::vec2(6.0, 7.0), egui::vec2(34.0, 40.0));
-    p.rect_filled(badge, 4.0, tint.gamma_multiply(0.30));
-    p.text(badge.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(13.0), tint);
-    let wrap = rect.width() - 52.0;
+    let badge = egui::Rect::from_min_size(rect.min + egui::vec2(6.0, 6.0), egui::vec2(BADGE, BADGE));
+    if let Some(id) = tex {
+        p.image(id, badge, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+    } else {
+        p.rect_filled(badge, 4.0, tint.gamma_multiply(0.30));
+        p.text(badge.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(13.0), tint);
+    }
+    let wrap = rect.width() - BADGE - 20.0;
     let line = |text: &str, size: f32, color: egui::Color32| {
         let mut job = egui::text::LayoutJob::single_section(text.to_string(), egui::TextFormat { font_id: egui::FontId::proportional(size), color, ..Default::default() });
         job.wrap = egui::text::TextWrapping::truncate_at_width(wrap);
         ui.painter().layout_job(job)
     };
     let (g1, g2) = (line(title, 12.0, egui::Color32::from_gray(228)), line(sub, 10.0, egui::Color32::from_gray(135)));
-    let x = rect.min.x + 46.0;
-    ui.painter().galley(egui::pos2(x, rect.min.y + 11.0), g1, egui::Color32::WHITE);
-    ui.painter().galley(egui::pos2(x, rect.min.y + 29.0), g2, egui::Color32::WHITE);
+    let x = rect.min.x + BADGE + 14.0;
+    ui.painter().galley(egui::pos2(x, rect.min.y + 16.0), g1, egui::Color32::WHITE);
+    ui.painter().galley(egui::pos2(x, rect.min.y + 36.0), g2, egui::Color32::WHITE);
     r.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Right-click menu of a model card: import settings stored in `<model>.arcmeta.json` and applied on spawn.
+fn import_menu(ui: &mut egui::Ui, rel: &str) {
+    let id = egui::Id::new(("arcmeta", rel));
+    let mut m: AssetMeta = ui.data_mut(|d| d.get_temp(id)).unwrap_or_else(|| asset_meta::load(rel));
+    ui.label(egui::RichText::new(format!("Import settings - {rel}")).size(11.0).color(TEAL));
+    ui.horizontal(|ui| {
+        ui.label("Scale");
+        ui.add(egui::DragValue::new(&mut m.scale).speed(0.01).range(0.001..=1000.0));
+        ui.label("Yaw");
+        ui.add(egui::DragValue::new(&mut m.yaw_deg).speed(1.0).suffix(" deg"));
+        ui.label("Y offset");
+        ui.add(egui::DragValue::new(&mut m.y_offset).speed(0.01));
+    });
+    let saved = asset_meta::load(rel);
+    ui.horizontal(|ui| {
+        if ui.add_enabled(m != saved, egui::Button::new("Save")).on_hover_text("Writes the .arcmeta.json sidecar; new spawns of this model use it").clicked() {
+            let _ = asset_meta::save(rel, &m);
+        }
+        if ui.button("Reset").clicked() {
+            m = AssetMeta::default();
+            let _ = asset_meta::save(rel, &m);
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(id, m));
 }
 
 fn model_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], sx: f32, sz: f32) {
     for e in list {
         let kind = model_kind(&e.rel);
         let armed = d.assets.placing == Some(Placing::Model(kind.clone()));
-        if card(ui, "GLB", egui::Color32::from_rgb(120, 170, 255), &e.name, &e.group, armed).on_hover_text(&e.rel).clicked() {
+        let sub = if asset_meta::load(&e.rel).is_default() { e.group.clone() } else { format!("{} - custom import", e.group) };
+        let resp = card(ui, "GLB", egui::Color32::from_rgb(120, 170, 255), &e.name, &sub, armed, Some((&mut d.thumbs, &e.rel))).on_hover_text(&e.rel);
+        resp.context_menu(|ui| import_menu(ui, &e.rel));
+        if resp.clicked() {
             if d.assets.click_place {
                 d.assets.placing = Some(Placing::Model(kind));
             } else {
@@ -179,7 +216,7 @@ fn model_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], sx: f32, 
 fn prefab_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], center: Vec3) {
     for e in list {
         let armed = d.assets.placing == Some(Placing::Prefab(e.rel.clone()));
-        if card(ui, "PFB", egui::Color32::from_rgb(255, 190, 90), &e.name, "prefab - click to spawn", armed).on_hover_text(&e.rel).clicked() {
+        if card(ui, "PFB", egui::Color32::from_rgb(255, 190, 90), &e.name, "prefab - click to spawn", armed, None).on_hover_text(&e.rel).clicked() {
             if d.assets.click_place {
                 d.assets.placing = Some(Placing::Prefab(e.rel.clone()));
             } else {
@@ -305,23 +342,23 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
                 egui::ScrollArea::vertical().id_salt("assets_kit").auto_shrink([false, false]).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         for it in &items {
-                            if card(ui, "OBJ", egui::Color32::from_rgb(120, 220, 150), it.label, it.category, false).clicked() {
+                            if card(ui, "OBJ", egui::Color32::from_rgb(120, 220, 150), it.label, it.category, false, None).clicked() {
                                 (it.spawn)(&mut d.queue, sx, sz);
                             }
                         }
                         for style in WallStyle::ALL {
-                            if card(ui, "ROOM", egui::Color32::from_rgb(230, 130, 170), style.label(), "5 x 4 room at view center", false).clicked() {
+                            if card(ui, "ROOM", egui::Color32::from_rgb(230, 130, 170), style.label(), "5 x 4 room at view center", false, None).clicked() {
                                 let (min, max) = ([cell.x - 2, cell.y - 2], [cell.x + 2, cell.y + 1]);
                                 d.queue.push(Cmd::SetGrid { enabled: Some(true), cell_size: None, floor_level: None, floor_height: None, angle_snap_deg: None });
                                 d.queue.push(Cmd::BuildRoom { min, max, floor: level, style });
                             }
                         }
-                        if card(ui, "DEMO", egui::Color32::from_rgb(255, 150, 90), "Demo Tavern", "two rooms, door, stairs", false).clicked() {
+                        if card(ui, "DEMO", egui::Color32::from_rgb(255, 150, 90), "Demo Tavern", "two rooms, door, stairs", false, None).clicked() {
                             for c in demo_tavern_commands(WallStyle::WoodTavern) {
                                 d.queue.push(c);
                             }
                         }
-                        if card(ui, "SKY", egui::Color32::from_rgb(160, 160, 255), "Misty Dusk", "world preset", false).clicked() {
+                        if card(ui, "SKY", egui::Color32::from_rgb(160, 160, 255), "Misty Dusk", "world preset", false, None).clicked() {
                             d.queue.push(Cmd::ApplyPreset(WorldPreset::MistyDuskLake));
                         }
                     });

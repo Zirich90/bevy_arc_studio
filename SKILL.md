@@ -78,6 +78,8 @@ Read results:
 | `SetModule` / `RescanModules` / `ConnectModule` | see Modules below |
 | `Custom` | `{name, args}` — plugin commands, see below |
 
+Model import settings: `assets/models/<file>.glb.arcmeta.json` = `{"scale":1.0,"yaw_deg":0.0,"y_offset":0.0}` (all optional) is applied to every `SpawnObject {kind:"model:<file>"}`. Edit it in the Assets tab (right-click a model card → Import settings). The Assets tab renders model thumbnails lazily on a private render layer.
+
 Props (grass, pines, rocks, reeds) follow the sculpted terrain; grass and pines that end up under water are hidden.
 
 ## 4. Screenshots
