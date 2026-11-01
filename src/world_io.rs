@@ -109,6 +109,21 @@ impl Plugin for WorldIoPlugin {
     }
 }
 
+/// Match the represented type before FromReflect: defaultable structs can convert from unrelated structs.
+pub(crate) fn scene_object_parts(components: &[Box<dyn PartialReflect>], extras: &SceneComponentRegistry) -> Option<(String, Transform, Option<Entity>, Vec<Box<dyn PartialReflect>>)> {
+    let mut kind = None;
+    let mut tf = None;
+    let mut parent = None;
+    let mut rest = Vec::new();
+    for c in components {
+        if c.represents::<UserProp>() { kind = UserProp::from_reflect(c.as_ref()).map(|u|u.kind); }
+        else if c.represents::<Transform>() { tf = Transform::from_reflect(c.as_ref()); }
+        else if c.represents::<ChildOf>() { parent = ChildOf::from_reflect(c.as_ref()).map(|p|p.parent()); }
+        else if c.get_represented_type_info().is_some_and(|i| extras.contains(i.type_id())) { rest.push(c.to_dynamic().ok()?); }
+    }
+    Some((kind?,tf?,parent,rest))
+}
+
 fn component_filter(extras: &SceneComponentRegistry) -> WorldFilter {
     let base = WorldFilter::deny_all().allow::<Transform>().allow::<UserProp>().allow::<ChildOf>();
     extras.ids.iter().fold(base, |f, id| f.allow_by_id(*id))
@@ -205,16 +220,21 @@ fn load_scene(
             for res in &dw.resources {
                 if let Some(b) = res.represents::<crate::water::WaterBodies>().then(|| crate::water::WaterBodies::from_reflect(res.as_ref())).flatten() {
                     *water = crate::water::WaterBodies { items: b.items, ..default() };
-                } else if let Some(s) = WorldSpec::from_reflect(res.as_ref()) {
+                } else if let Some(s) = res.represents::<WorldSpec>().then(|| WorldSpec::from_reflect(res.as_ref())).flatten() {
                     *spec = s;
                     spec.sanitize();
-                } else if let Some(u) = UnitScale::from_reflect(res.as_ref()) {
+                } else if let Some(u) = res.represents::<UnitScale>().then(|| UnitScale::from_reflect(res.as_ref())).flatten() {
                     *units = u;
                 }
             }
             for e in &users {
                 spawner.commands.entity(e).despawn();
             }
+            // Linked grid members are rebuilt by their prefab root, not independent scene objects.
+            spawner.commands.queue(|w: &mut World| {
+                let tiles: Vec<Entity> = w.query_filtered::<Entity, With<crate::prefabs::PrefabTile>>().iter(w).collect();
+                for e in tiles { if let Ok(e) = w.get_entity_mut(e) { e.despawn(); } }
+            });
             sel.clear();
             pending.0 = Some(heights);
 
@@ -222,23 +242,7 @@ fn load_scene(
             let mut spawned: std::collections::HashMap<Entity, Entity> = default();
             let mut parents: Vec<(Entity, Entity)> = Vec::new();
             for de in &dw.entities {
-                let mut kind = None;
-                let mut parent = None;
-                let mut tf = None;
-                let mut rest: Vec<Box<dyn PartialReflect>> = Vec::new();
-                for c in &de.components {
-                    let tid = c.get_represented_type_info().map(|i| i.type_id());
-                    if let Some(u) = UserProp::from_reflect(c.as_ref()) {
-                        kind = Some(u.kind);
-                    } else if let Some(t) = Transform::from_reflect(c.as_ref()) {
-                        tf = Some(t);
-                    } else if let Some(p) = ChildOf::from_reflect(c.as_ref()) {
-                        parent = Some(p.parent());
-                    } else if tid.is_some_and(|t| extras.contains(t)) {
-                        if let Ok(b) = c.reflect_clone() { rest.push(b.into_partial_reflect()); }
-                    }
-                }
-                let (Some(kind), Some(tf)) = (kind, tf) else { continue };
+                let Some((kind, tf, parent, rest)) = scene_object_parts(&de.components, &extras) else { continue };
                 if kind == "level" {
                     let tile = rest.iter().filter(|c| c.represents::<crate::level_builder::LevelTile>()).find_map(|c| crate::level_builder::LevelTile::from_reflect(c.as_ref()));
                     let door = rest.iter().filter(|c| c.represents::<crate::level_builder::Door>()).find_map(|c| crate::level_builder::Door::from_reflect(c.as_ref()));

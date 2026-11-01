@@ -18,6 +18,7 @@ pub mod mcp_commands;
 pub mod operators;
 pub mod play_mode;
 pub mod prefabs;
+pub mod prefab_variants;
 pub mod modules;
 pub mod movement;
 pub mod navigation;

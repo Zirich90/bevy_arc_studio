@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::arc_core::WorldSpec;
 use crate::gizmo_3d::{GizmoState, ObjState, SceneHistory};
-use crate::level_builder::{self as lb, Door, Edit, GridSettings, LevelTile, TileKind};
+use crate::level_builder::{self as lb, Door, Edit, GridSettings, LevelTile};
 use crate::props::{NextObjectId, ObjectCategory, SceneObject, UserProp, assets_dir};
 use crate::selection::{Deleted, EditorSelection};
 use crate::studio::Spawner;
@@ -27,14 +27,17 @@ pub const PREFAB_VERSION: u32 = 1;
 
 /// Root node of a spawned prefab; `prefab_path` is relative to `assets/` (e.g. `prefabs/tavern_corner.prefab.json`).
 #[derive(Component, Reflect, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-#[reflect(Component, Default)]
+#[reflect(Component, Default, Clone)]
+#[serde(default)]
 pub struct PrefabInstance {
     pub prefab_path: String,
+    pub base_level: i32,
+    pub origin_y: f32,
 }
 
 /// Runtime link of a tile to the `PrefabInstance` that placed it (E6): moving or turning the root re-places the tile.
-/// `rel` is the saved pivot-relative tile; `base_level`/`root_y` are the storey and root height at spawn. Not saved with the scene,
-/// so tiles of a reloaded instance become independent again.
+/// `rel` is the saved pivot-relative tile; `base_level`/`root_y` are the storey and root height at spawn.
+/// The root stores the anchor and rebuilds linked tiles when a scene is loaded.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct PrefabTile {
     pub root: Entity,
@@ -45,7 +48,7 @@ pub struct PrefabTile {
 
 /// Runtime marker: the free objects of this instance exist (absent right after a scene load, which triggers re-instancing).
 #[derive(Component)]
-struct PrefabHydrated;
+pub(crate) struct PrefabHydrated;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PrefabLight {
@@ -56,6 +59,11 @@ pub struct PrefabLight {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PrefabEntity {
+    /// Stable member key, preserved when the file is reordered. Legacy files use their original index.
+    #[serde(default)]
+    pub id: String,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub components: std::collections::BTreeMap<String, serde_json::Value>,
     /// Index into `entities` of the parent member (free objects only).
     pub parent: Option<usize>,
     /// `UserProp.kind`: pine | boulder | campfire | pier | lantern | `model:<path .glb>` | `level`.
@@ -123,7 +131,7 @@ pub fn build_prefab(name: &str, members: Vec<Member>, g: &GridSettings) -> Resul
     let min_level = if min_level == i32::MAX { 0 } else { min_level };
     let entities = members
         .into_iter()
-        .map(|m| {
+        .enumerate().map(|(index, m)| {
             let tile = m.tile.map(|t| LevelTile { grid_pos: IVec3::new(t.grid_pos.x - pivot_cell.x, t.grid_pos.y - min_level, t.grid_pos.z - pivot_cell.y), ..t });
             let (pos, parent) = match (&tile, m.parent) {
                 (Some(_), _) => (Vec3::ZERO, None),
@@ -131,7 +139,7 @@ pub fn build_prefab(name: &str, members: Vec<Member>, g: &GridSettings) -> Resul
                 (None, p) => (m.tf.translation, p),
             };
             let (rot, scale) = if tile.is_some() { (Quat::IDENTITY, Vec3::ONE) } else { (m.tf.rotation, m.tf.scale) };
-            PrefabEntity { parent, kind: m.kind, name: m.name, pos: pos.to_array(), rot: rot.to_array(), scale: scale.to_array(), tile, door: m.door, light: m.light }
+            PrefabEntity { id: index.to_string(), components: default(), parent, kind: m.kind, name: m.name, pos: pos.to_array(), rot: rot.to_array(), scale: scale.to_array(), tile, door: m.door, light: m.light }
         })
         .collect();
     Ok(PrefabFile { version: PREFAB_VERSION, name: name.to_string(), cell_size: cs, entities })
@@ -165,10 +173,8 @@ fn half_extents(f: &PrefabFile) -> Vec3 {
 
 // ───────────────────────────── World operations ─────────────────────────────
 
-fn load_file(root: &Path, rel: &str) -> Result<PrefabFile, String> {
-    let fs = root.join(rel);
-    let json = std::fs::read_to_string(&fs).map_err(|e| format!("{}: {e}", fs.display()))?;
-    serde_json::from_str(&json).map_err(|e| format!("{rel}: {e}"))
+pub(crate) fn load_file(root: &Path, rel: &str) -> Result<PrefabFile, String> {
+    crate::prefab_variants::load_resolved(root, rel)
 }
 
 fn next_id(w: &mut World) -> u32 {
@@ -225,7 +231,18 @@ pub fn save_entities(w: &mut World, root: &Path, path: &str, selected: Vec<Entit
         })
         .collect();
     let g = w.resource::<GridSettings>().clone();
-    let file = build_prefab(&name, members, &g)?;
+    let mut file = build_prefab(&name, members, &g)?;
+    let previous = load_file(root, &rel).ok();
+    let mut keys = std::collections::BTreeSet::new();
+    for (member, &e) in file.entities.iter_mut().zip(&items) {
+        let inherited_key = previous.as_ref().and_then(|f| f.entities.iter().find(|m| m.kind == member.kind && m.name == member.name && !keys.contains(&m.id))).map(|m|m.id.clone());
+        let mut key = w.get::<crate::prefab_variants::PrefabSourceKey>(e).map(|k|k.id.clone()).or(inherited_key).unwrap_or_else(||format!("{:016x}",rand::random::<u64>()));
+        while key.is_empty() || keys.contains(&key) { key=format!("{:016x}",rand::random::<u64>()); }
+        keys.insert(key.clone());
+        w.entity_mut(e).insert(crate::prefab_variants::PrefabSourceKey { id:key.clone() });
+        member.id = key;
+        member.components = crate::prefab_variants::capture_components(w, e)?;
+    }
     let fs = root.join(&rel);
     if let Some(dir) = fs.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -236,16 +253,19 @@ pub fn save_entities(w: &mut World, root: &Path, path: &str, selected: Vec<Entit
 }
 
 /// Spawn the free (non-tile) members of `file` as children of `root`; returns the new entities.
-fn spawn_members(w: &mut World, root: Entity, file: &PrefabFile) -> Vec<Entity> {
+pub(crate) fn spawn_members(w: &mut World, root: Entity, file: &PrefabFile) -> Vec<Entity> {
     let free: Vec<usize> = (0..file.entities.len()).filter(|i| file.entities[*i].tile.is_none()).collect();
     if free.is_empty() {
         return Vec::new();
     }
-    let mut made: Vec<Option<Entity>> = vec![None; file.entities.len()];
+    let existing: std::collections::HashMap<String, Entity> = w.query::<(Entity, &crate::prefab_variants::PrefabMember)>().iter(w)
+        .filter(|(_, m)| m.root == root).map(|(e,m)| (m.key.clone(),e)).collect();
+    let mut made: Vec<Option<Entity>> = file.entities.iter().map(|m| existing.get(&m.id).copied()).collect();
     let mut ss = SystemState::<(Spawner, Res<TerrainGrid>, Res<WorldSpec>)>::new(w);
     {
         let Ok((mut sp, grid, spec)) = ss.get_mut(w) else { return Vec::new() };
         for &i in &free {
+            if made[i].is_some() { continue; }
             made[i] = sp.spawn(&grid.0, &spec, &file.entities[i].kind, 0.0, 0.0, 0.0).map(|(e, _)| e);
         }
     }
@@ -256,7 +276,7 @@ fn spawn_members(w: &mut World, root: Entity, file: &PrefabFile) -> Vec<Entity> 
         let parent = pe.parent.and_then(|p| made.get(p).copied().flatten()).unwrap_or(root);
         let tf = Transform { translation: Vec3::from(pe.pos), rotation: Quat::from_array(pe.rot), scale: Vec3::from(pe.scale) };
         let mut em = w.entity_mut(e);
-        em.insert((tf, ChildOf(parent), Name::new(pe.name.clone())));
+        em.insert((tf, ChildOf(parent), Name::new(pe.name.clone()), crate::prefab_variants::PrefabMember { root, key: pe.id.clone() }));
         // members belong to the instance; only the root is saved with the scene and re-instances them on load
         em.remove::<UserProp>();
         if let Some(mut so) = em.get_mut::<SceneObject>() {
@@ -265,6 +285,7 @@ fn spawn_members(w: &mut World, root: Entity, file: &PrefabFile) -> Vec<Entity> 
         if let Some(l) = &pe.light {
             em.insert(PointLight { color: Color::srgba(l.color[0], l.color[1], l.color[2], l.color[3]), intensity: l.intensity, range: l.range, ..default() });
         }
+        if let Err(err) = crate::prefab_variants::apply_components(w, e, &pe.components) { warn!("prefab component: {err}"); }
         out.push(e);
     }
     out
@@ -274,6 +295,7 @@ fn spawn_members(w: &mut World, root: Entity, file: &PrefabFile) -> Vec<Entity> 
 pub fn spawn_prefab(w: &mut World, root: &Path, path: &str, pos: Vec3, yaw_deg: f32) -> Result<String, String> {
     let rel = normalize_rel(path);
     let file = load_file(root, &rel)?;
+    crate::prefab_variants::validate_components(w, &file)?;
     let g = w.resource::<GridSettings>().clone();
     let has_tiles = file.entities.iter().any(|e| e.tile.is_some());
     let snap_ground = w.get_resource::<GizmoState>().is_none_or(|s| s.snap_ground);
@@ -282,30 +304,18 @@ pub fn spawn_prefab(w: &mut World, root: &Path, path: &str, pos: Vec3, yaw_deg: 
         Some(t) if snap_ground => t.0.sample_height(x, z),
         _ => pos.y,
     };
-    let quarter = quarter_turns(yaw_deg);
     let root_tf = Transform { translation: Vec3::new(x, y, z), rotation: Quat::from_rotation_y(yaw_deg.to_radians()), scale: Vec3::ONE };
 
     let id = next_id(w);
     let so = SceneObject { id, name: file.name.clone(), category: ObjectCategory::Structure, aabb_half_extents: half_extents(&file) };
-    let root_e = w.spawn((Name::new(file.name.clone()), so, UserProp { kind: "prefab".into() }, PrefabInstance { prefab_path: rel.clone() }, PrefabHydrated, root_tf, Visibility::default())).id();
+    let root_e = w.spawn((Name::new(file.name.clone()), so, UserProp { kind: "prefab".into() }, PrefabInstance { prefab_path: rel.clone(), base_level: g.floor_level, origin_y: y }, PrefabHydrated, root_tf, Visibility::default())).id();
+    w.entity_mut(root_e).insert(crate::prefab_variants::PrefabOverrides::default());
     let mut spawned = vec![(root_e, root_tf)];
     for e in spawn_members(w, root_e, &file) {
         spawned.push((e, w.get::<Transform>(e).copied().unwrap_or_default()));
     }
 
-    // tiles: re-snapped onto the grid, one batch so replaced tiles undo together with the rest
-    let base = g.world_to_cell(Vec3::new(x, 0.0, z), g.floor_level);
-    let placed: Vec<LevelTile> = file.entities.iter().filter_map(|e| e.tile.as_ref()).map(|t| place_tile(t, base, quarter)).collect();
-    let (mut before, mut after, added, _) = lb::apply_edits_raw(w, placed.iter().map(|t| Edit::Place(*t)).collect());
-    for (pe, t) in file.entities.iter().filter(|e| e.tile.is_some()).zip(&placed) {
-        let found = w.query_filtered::<(Entity, &LevelTile), Without<Deleted>>().iter(w).find(|(_, o)| *o == t).map(|(e, _)| e);
-        let Some(e) = found else { continue };
-        let rel = pe.tile.unwrap_or_default();
-        w.entity_mut(e).insert(PrefabTile { root: root_e, rel, base_level: base.y, root_y: y });
-        if let (Some(d), TileKind::Doorway) = (pe.door, t.kind) {
-            w.entity_mut(e).insert(d);
-        }
-    }
+    let (mut before, mut after, added) = spawn_tiles(w, root_e, &file);
     for (e, tf) in &spawned {
         before.push(ObjState { entity: *e, tf: *tf, alive: false });
         after.push(ObjState { entity: *e, tf: *tf, alive: true });
@@ -314,6 +324,39 @@ pub fn spawn_prefab(w: &mut World, root: &Path, path: &str, pos: Vec3, yaw_deg: 
     w.resource_mut::<SceneHistory>().record(format!("Spawn Prefab {}", file.name), before, after);
     w.resource_mut::<EditorSelection>().set_one(root_e);
     Ok(format!("spawned prefab {rel} at ({x:.1}, {y:.1}, {z:.1}) yaw {yaw_deg:.0}: {n} objects, {added} tiles"))
+}
+
+/// Reconcile grid members without changing their entity IDs.
+pub(crate) fn spawn_tiles(w: &mut World, root: Entity, file: &PrefabFile) -> (Vec<ObjState>, Vec<ObjState>, usize) {
+    let inst = w.get::<PrefabInstance>(root).unwrap().clone();
+    let tf = *w.get::<Transform>(root).unwrap();
+    let g = w.resource::<GridSettings>().clone();
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    let mut added = 0;
+    for pe in file.entities.iter().filter(|e| e.tile.is_some()) {
+        let rel = pe.tile.unwrap();
+        let want = tile_for_root(&rel, &tf, &g, inst.base_level, inst.origin_y);
+        let existing = w.query::<(Entity, &crate::prefab_variants::PrefabMember)>().iter(w)
+            .find(|(_,m)| m.root == root && m.key == pe.id).map(|(e,_)| e);
+        let e = if let Some(e) = existing {
+            if w.get::<LevelTile>(e) != Some(&want) {
+                w.entity_mut(e).insert((want, lb::tile_transform(&want, &g)));
+            }
+            e
+        } else {
+            let (b,a,n,_) = lb::apply_edits_raw(w, vec![Edit::Place(want)]);
+            before.extend(b); after.extend(a); added += n;
+            let Some(e) = w.query_filtered::<(Entity,&LevelTile),Without<Deleted>>().iter(w).find(|(_,t)| **t == want).map(|(e,_)|e) else {continue};
+            e
+        };
+        w.entity_mut(e).insert((PrefabTile { root, rel, base_level: inst.base_level, root_y: inst.origin_y }, crate::prefab_variants::PrefabMember { root, key: pe.id.clone() }));
+        // Only the root is serialized; hydration restores linked tiles after scene load.
+        w.entity_mut(e).remove::<UserProp>();
+        if let Some(d) = pe.door { w.entity_mut(e).insert(d); }
+        if let Err(e) = crate::prefab_variants::apply_components(w,e,&pe.components) { warn!("prefab: {e}"); }
+    }
+    (before,after,added)
 }
 
 /// Re-create the members of prefab roots that came from a scene file (the file stores only the root).
@@ -329,6 +372,7 @@ fn rehydrate(mut commands: Commands, roots: Query<(Entity, &PrefabInstance), (Wi
                 }
                 w.entity_mut(e).insert(Name::new(file.name.clone()));
                 spawn_members(w, e, &file);
+                spawn_tiles(w,e,&file);
             }
             Err(err) => warn!("prefab {rel}: {err}"),
         });
@@ -379,12 +423,13 @@ pub struct PrefabsPlugin;
 
 impl Plugin for PrefabsPlugin {
     fn build(&self, app: &mut App) {
-        app.register_scene_component::<PrefabInstance>().add_systems(Update, (rehydrate, sync_prefab_tiles));
+        app.register_scene_component::<PrefabInstance>().add_plugins(crate::prefab_variants::PrefabVariantsPlugin).add_systems(Update, (rehydrate, sync_prefab_tiles));
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::level_builder::TileKind;
     use super::*;
     use crate::level_builder::WallStyle;
     use bevy::ecs::system::RunSystemOnce;

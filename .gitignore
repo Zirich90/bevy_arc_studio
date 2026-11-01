@@ -3,3 +3,8 @@ err.txt
 out.txt
 # docs/ (specs, prompts, logs, screenshots) is intentionally tracked
 modules/state.json
+
+# Local shared Obsidian memory and generated code graph
+.memory/
+graphify-out/
+__pycache__/

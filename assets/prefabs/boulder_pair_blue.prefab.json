@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "name": "Blue boulder variant",
+  "base": "prefabs/boulder_pair.prefab.json",
+  "overrides": {
+    "left": {
+      "components": {
+        "bevy_arc_studio::materials::MaterialOverride": {
+          "base_color": [
+            0.06,
+            0.35,
+            0.95,
+            1.0
+          ]
+        }
+      },
+      "scale": [
+        2.5,
+        2.5,
+        2.5
+      ]
+    }
+  }
+}

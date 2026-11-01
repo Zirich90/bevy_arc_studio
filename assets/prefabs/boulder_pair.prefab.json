@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "name": "Boulder pair",
+  "cell_size": 2.0,
+  "entities": [
+    {
+      "id": "left",
+      "parent": null,
+      "kind": "boulder",
+      "name": "Left boulder",
+      "pos": [
+        -2.5,
+        2.0,
+        0.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "components": {
+        "bevy_arc_studio::materials::MaterialOverride": {
+          "preset": "",
+          "base_color": [
+            0.8,
+            0.25,
+            0.08,
+            1.0
+          ],
+          "metallic": 0.1,
+          "roughness": 0.65,
+          "reflectance": 0.5,
+          "emissive": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "right",
+      "parent": null,
+      "kind": "boulder",
+      "name": "Right boulder",
+      "pos": [
+        2.5,
+        2.0,
+        0.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "components": {
+        "bevy_arc_studio::materials::MaterialOverride": {
+          "preset": "",
+          "base_color": [
+            0.8,
+            0.25,
+            0.08,
+            1.0
+          ],
+          "metallic": 0.1,
+          "roughness": 0.65,
+          "reflectance": 0.5,
+          "emissive": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    }
+  ]
+}

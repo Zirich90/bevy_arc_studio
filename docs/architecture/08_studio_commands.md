@@ -27,3 +27,11 @@
 | Плагины | `Custom { name, args }` (реестр `CustomCommands`; PF2e: `pf2e.spawn_actor`) | зависит от обработчика |
 
 История (E1): четыре стека (World/Scene/Terrain/Comp) объединены глобальным порядком `UndoOrder`; свежая правка сбрасывает redo всех. Разрыв: снимки компонентов держат `Entity`, пересоздание пропсов (`SetSpec` террейна/озера) делает записи мёртвыми.
+
+
+### Prefab variants (2.6)
+`SetPrefabOverride { target, member, field, value }` changes a prefab member field through unified Undo.
+`value` is JSON text; `null` resets a field, or the whole member if `field` is empty.
+`SavePrefabVariant { target, path }` saves a new linked asset; file creation is not undone.
+`SpawnPrefab` resolves version-1 bases and version-2 linked variants.
+See `docs/architecture/prefab_variants.md`; UI: select an instance root, open Prefabs.

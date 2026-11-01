@@ -105,6 +105,10 @@ pub enum StudioCommand {
     SetGroundSnap { enabled: bool, site: Option<[f32; 2]> },
     /// Save the selected objects (with descendants) as `assets/prefabs/<name>.prefab.json`; `path` may be a bare name. Not a scene edit.
     SaveSelectionAsPrefab { path: String },
+    /// Set a member field override; JSON null resets to the inherited value. Undoable.
+    SetPrefabOverride { target: Target, member: String, field: String, value: String },
+    /// Save the instance overrides as a new linked variant asset. File creation is not undone.
+    SavePrefabVariant { target: Target, path: String },
     /// Instance a prefab at `position` (grid / ground snapped per settings) turned by `rotation_y_deg`; one undo step.
     SpawnPrefab { path: String, position: Vec3, rotation_y_deg: f32 },
     /// Switch a module (its `module.json` found in `modules/`) on or off. Not undoable.
@@ -561,6 +565,14 @@ pub fn execute_commands(
                 let selected: Vec<Entity> = sel.selected.iter().copied().collect();
                 queue_world_cmd(&mut spawner.commands, "SaveSelectionAsPrefab", move |w| crate::prefabs::cmd_save_selection(w, &path, selected))
             }
+            StudioCommand::SetPrefabOverride { target, member, field, value } => queue_world_cmd(&mut spawner.commands, "SetPrefabOverride", move |w| {
+                let e = operators::resolve(w, &target)?;
+                crate::prefab_variants::set_override(w, e, &member, &field, &value)
+            }),
+            StudioCommand::SavePrefabVariant { target, path } => queue_world_cmd(&mut spawner.commands, "SavePrefabVariant", move |w| {
+                let e = operators::resolve(w, &target)?;
+                crate::prefab_variants::save_variant(w, e, &path)
+            }),
             StudioCommand::SpawnPrefab { path, position, rotation_y_deg } => {
                 queue_world_cmd(&mut spawner.commands, "SpawnPrefab", move |w| crate::prefabs::cmd_spawn_prefab(w, &path, position, rotation_y_deg))
             }

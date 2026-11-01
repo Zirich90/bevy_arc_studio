@@ -73,7 +73,7 @@ pub fn push_result(w: &mut World, op: &str, res: Result<String, String>) {
 
 const UNDOABLE: &[&str] = &[
     "ApplyPreset", "SetQuality", "SetTime", "SpawnObject", "Sculpt", "DeleteSelected", "SetTransform", "Duplicate", "Paste", "EditMaterial", "ApplyMaterial", "SetSpec", "SetComponent",
-    "AddComponent", "RemoveComponent", "Reparent", "ToggleDoor", "SetWaterBody", "BuildRoom", "BuildWallLine", "PlaceLevelTile", "PaintLevelTiles", "ToggleDoor", "SpawnPrefab",
+    "AddComponent", "RemoveComponent", "Reparent", "ToggleDoor", "SetWaterBody", "BuildRoom", "BuildWallLine", "PlaceLevelTile", "PaintLevelTiles", "ToggleDoor", "SpawnPrefab", "SetPrefabOverride",
 ];
 
 pub fn is_undoable(op: &str) -> bool {

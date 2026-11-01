@@ -110,3 +110,11 @@ With the PF2e module connected: `{"Custom":{"name":"pf2e.spawn_actor","args":"{\
 (templates: `hero_fighter`, `hero_wizard`, `goblin_warrior`, `dungeon_guard`; `faction` optional). Spawn a trigger volume with `SpawnObject { kind: "trigger" }`.
 
 Tactical combat (PF2e, Play mode) is driven through the reflected resource `bevy_arc_pf2e::encounter::CombatInput`: push into `orders` one of `{"Stride":{"x":..,"z":..}}`, `{"Step":{..}}`, `{"Strike":{"target":<entity>}}`, `{"ArcaneBolt":{"target":..}}`, `{"Fireball":{"x":..,"z":..}}`, `{"Interact":{"x":..,"z":..}}`, `"RaiseShield"`, `"EndTurn"`, `{"Mode":<ActionMode>}`; `hover` stands in for the mouse cursor.
+
+
+### Prefab variants (2.6)
+`SetPrefabOverride { target, member, field, value }` changes a prefab member field through unified Undo.
+`value` is JSON text; `null` resets a field, or the whole member if `field` is empty.
+`SavePrefabVariant { target, path }` saves a new linked asset; file creation is not undone.
+`SpawnPrefab` resolves version-1 bases and version-2 linked variants.
+See `docs/architecture/prefab_variants.md`; UI: select an instance root, open Prefabs.
