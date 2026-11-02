@@ -538,7 +538,7 @@ pub fn gizmo_system(
     studio: Res<StudioState>,
     gset: Res<crate::level_builder::GridSettings>,
 ) {
-    let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
+    let blocked = egui.ctx_mut().map(|c| crate::ui::pointer_over_ui(c) || c.egui_wants_pointer_input()).unwrap_or(false);
     let (camera, gtf, proj, ecam) = *cam;
     let fov = if let Projection::Perspective(p) = proj { p.fov } else { 1.0 };
     let view = View { camera, gtf, dir: *gtf.forward(), eye: gtf.translation() };

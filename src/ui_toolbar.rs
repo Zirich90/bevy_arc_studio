@@ -37,6 +37,16 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
             }
         });
         if mode.in_session() {
+            ui.horizontal(|ui| {
+                ui.label("Behavior signal");
+                let id = ui.id().with("behavior_signal");
+                let mut signal = ui.data_mut(|data| data.get_temp::<String>(id)).unwrap_or_else(|| "demo.hide".into());
+                ui.add(egui::TextEdit::singleline(&mut signal).desired_width(180.0));
+                if ui.add_enabled(mode == StudioMode::Playing && !signal.trim().is_empty(), egui::Button::new("Emit")).clicked() {
+                    d.queue.push(Cmd::Custom { name: "behavior.emit".into(), args: serde_json::json!({"signal": signal}).to_string() });
+                }
+                ui.data_mut(|data| data.insert_temp(id, signal));
+            });
             return;
         }
         ui.horizontal(|ui| {

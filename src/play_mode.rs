@@ -62,6 +62,7 @@ fn tracked_types(w: &World) -> Vec<TypeId> {
 
 /// Serialise the scene into `PlayModeSnapshot` (Edit -> Playing).
 pub fn capture(w: &mut World) {
+    crate::behavior::reset_session(w);
     let ids = tracked_types(w);
     let ents: Vec<Entity> = w.query_filtered::<Entity, With<SceneObject>>().iter(w).collect();
     let ents = ents
@@ -99,6 +100,7 @@ pub fn capture(w: &mut World) {
 
 /// Roll the scene back to the snapshot (Playing/Paused -> Edit); returns a status line. No-op without an active snapshot.
 pub fn restore(w: &mut World) -> String {
+    crate::behavior::reset_session(w);
     let mut s = match w.get_resource_mut::<PlayModeSnapshot>() {
         Some(mut s) if s.active => std::mem::take(&mut *s),
         _ => return "Stop: no snapshot".into(),

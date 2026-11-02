@@ -101,10 +101,35 @@ pub fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner:
         ui_assets::draw(&mut ui, &mut d);
         ui_inspector::draw_docks(&mut ui, &mut d);
     }
+    // Panels use a manually constructed root Ui; egui's run_ui viewport bookkeeping does not see them.
+    ctx.data_mut(|data| data.insert_temp(egui::Id::new("studio_viewport"), ui.available_rect_before_wrap()));
     if (d.studio.toolbar_h - top).abs() > 0.5 {
         d.studio.toolbar_h = top;
     }
     ui_hud::draw(ctx, &mut d);
+}
+
+pub(crate) fn pointer_over_ui(ctx: &egui::Context) -> bool {
+    ctx.is_pointer_over_egui() || ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("studio_viewport")))
+        .is_some_and(|rect| ctx.pointer_latest_pos().is_some_and(|pos| !rect.contains(pos)))
+}
+
+#[cfg(test)]
+mod pointer_tests {
+    use super::*;
+
+    #[test]
+    fn manual_panels_block_pointer_outside_viewport() {
+        let ctx = egui::Context::default();
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("studio_viewport"), egui::Rect::from_min_max(egui::pos2(260.0, 100.0), egui::pos2(1240.0, 720.0))));
+        for (pos, blocked) in [(egui::pos2(1400.0, 600.0), true), (egui::pos2(800.0, 400.0), false), (egui::pos2(800.0, 50.0), true)] {
+            ctx.run_ui(egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 900.0))),
+                events: vec![egui::Event::PointerMoved(pos)], ..Default::default()
+            }, |_| {}).drop_without_applying_deltas();
+            assert_eq!(pointer_over_ui(&ctx), blocked);
+        }
+    }
 }
 
 // ───────────────────────────── shared widgets ─────────────────────────────

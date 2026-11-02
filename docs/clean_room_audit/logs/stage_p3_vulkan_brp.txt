@@ -1,0 +1,26 @@
+load queued (reflect scene)
+loaded scenes/behavior_pilot.scn.json (v3, 1 objects)
+TimedVisibility visibility=Inherited
+SignalVisibility visibility=Inherited
+save queued (reflect scene)
+saved target/behavior_roundtrip.scn.json (v3, 1 objects)
+load queued (reflect scene)
+loaded target/behavior_roundtrip.scn.json (v3, 1 objects)
+TimedVisibility visibility=Inherited
+SignalVisibility visibility=Inherited
+set TimedVisibility
+undo
+Play: scene snapshot taken (Playing)
+mode Paused
+TimedVisibility visibility=Inherited
+mode Playing
+TimedVisibility visibility=Hidden
+SignalVisibility visibility=Inherited
+signal queued: demo.hide
+SignalVisibility visibility=Hidden
+Stop: scene restored (0 spawned removed)
+TimedVisibility visibility=Inherited
+SignalVisibility visibility=Inherited
+selected behavior_pilot
+focus
+PASS: prefab/scene load, component edit/Undo, Pause, timer, signal, Stop

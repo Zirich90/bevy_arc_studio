@@ -338,7 +338,7 @@ fn play_input(
         preview.0 = None;
         return;
     }
-    let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
+    let blocked = egui.ctx_mut().map(|c| crate::ui::pointer_over_ui(c) || c.egui_wants_pointer_input()).unwrap_or(false);
     let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
     let cursor = window.cursor_position();
     let (Some(cursor), Some(navgrid), false, StudioMode::Playing) = (cursor, nav.grid.as_ref(), blocked, studio.mode) else {

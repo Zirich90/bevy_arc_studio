@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "behavior_pilot",
+  "cell_size": 2.0,
+  "entities": [
+    {
+      "id": "timer",
+      "parent": null,
+      "kind": "boulder",
+      "name": "Timer: hides after 5 seconds",
+      "pos": [-3.0, 0.0, 0.0],
+      "rot": [0.0, 0.0, 0.0, 1.0],
+      "scale": [2.0, 2.0, 2.0],
+      "components": {
+        "bevy_arc_studio::behavior::TimedVisibility": { "delay_seconds": 5.0, "visible": false }
+      }
+    },
+    {
+      "id": "signal",
+      "parent": null,
+      "kind": "boulder",
+      "name": "Signal: demo.hide",
+      "pos": [3.0, 0.0, 0.0],
+      "rot": [0.0, 0.0, 0.0, 1.0],
+      "scale": [2.0, 2.0, 2.0],
+      "components": {
+        "bevy_arc_studio::behavior::SignalVisibility": { "signal": "demo.hide", "visible": false }
+      }
+    }
+  ]
+}

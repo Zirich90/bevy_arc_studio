@@ -78,7 +78,7 @@ fn editor_camera_system(
     let (ctrl, tf, camera, proj, gtf) = &mut *cam;
     let dt = time.delta_secs().min(0.1);
     let fov_y = if let Projection::Perspective(p) = proj { p.fov } else { 1.0 };
-    let blocked = egui.ctx_mut().map(|c| c.egui_wants_pointer_input() || c.is_pointer_over_egui()).unwrap_or(false);
+    let blocked = egui.ctx_mut().map(|c| c.egui_wants_pointer_input() || crate::ui::pointer_over_ui(c)).unwrap_or(false);
     let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let d = motion.delta;

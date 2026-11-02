@@ -1,0 +1,97 @@
+{
+  "resources": {
+    "bevy_arc_studio::arc_core::UnitScale": {
+      "world_per_foot": 0.3048
+    },
+    "bevy_arc_studio::arc_core::WorldSpec": {
+      "terrain_enabled": false,
+      "seed": 1337,
+      "size": 256.0,
+      "resolution": 257,
+      "base_height": 18.0,
+      "mountain_height": 75.0,
+      "max_height": 90.0,
+      "noise_frequency": 3.0,
+      "warp_amount": 0.12,
+      "erosion_droplets": 60000,
+      "thermal_iterations": 24,
+      "lake_center": [
+        -20.0,
+        14.0
+      ],
+      "lake_radius": 32.0,
+      "lake_depth": 5.0,
+      "water_level": 6.0,
+      "shore_foam": 0.8,
+      "camp_center": [
+        38.0,
+        -22.0
+      ],
+      "clearing_radius": 9.0,
+      "time_of_day": 13.5,
+      "auto_sun": false,
+      "sun_speed": 0.15,
+      "sun_intensity": 1.0,
+      "fog_enabled": true,
+      "fog_color": [
+        0.7,
+        0.8,
+        0.95
+      ],
+      "fog_density": 0.0018,
+      "god_rays": true,
+      "bloom": true,
+      "reflections": true,
+      "shadows": true,
+      "quality_preset": "High",
+      "forest_density": 0.4,
+      "boulder_density": 0.4,
+      "grass_density": 0.7
+    },
+    "bevy_arc_studio::water::WaterBodies": {
+      "items": [],
+      "selected": null,
+      "picking": false
+    },
+    "bevy_arc_studio::world_io::SceneMeta": {
+      "version": 3
+    }
+  },
+  "entities": {
+    "4294964545": {
+      "components": {
+        "bevy_arc_studio::prefab_variants::PrefabOverrides": {
+          "json": "{}"
+        },
+        "bevy_arc_studio::prefabs::PrefabInstance": {
+          "prefab_path": "prefabs/behavior_pilot.prefab.json",
+          "base_level": 0,
+          "origin_y": 0.0
+        },
+        "bevy_arc_studio::props::UserProp": {
+          "kind": "prefab"
+        },
+        "bevy_camera::visibility::Visibility": "Inherited",
+        "bevy_ecs::name::Name": "behavior_pilot",
+        "bevy_transform::components::transform::Transform": {
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    }
+  }
+}

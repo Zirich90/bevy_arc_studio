@@ -320,7 +320,7 @@ fn pick_water_body(
         bodies.picking = false;
         return;
     }
-    let over_ui = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
+    let over_ui = egui.ctx_mut().map(|c| crate::ui::pointer_over_ui(c) || c.egui_wants_pointer_input()).unwrap_or(false);
     if !mouse.just_pressed(MouseButton::Left) || over_ui || !spec.terrain_enabled {
         return;
     }

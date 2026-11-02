@@ -167,7 +167,7 @@ fn on_click(
     studio: Res<StudioState>,
 ) {
     ev.propagate(false);
-    let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui()).unwrap_or(false) || !studio.gizmo_active();
+    let blocked = egui.ctx_mut().map(|c| crate::ui::pointer_over_ui(c)).unwrap_or(false) || !studio.gizmo_active();
     let (Some(p0), Some(cur)) = (sel.press, window.cursor_position()) else { return };
     if ev.button != PointerButton::Primary || blocked || gizmo.busy() || p0.distance(cur) > MARQUEE_THRESHOLD {
         return;
@@ -213,7 +213,7 @@ pub fn selection_input(
     objs: Query<(Entity, &Transform, &SceneObject, Option<&SpawnScale>), Without<Deleted>>,
     studio: Res<StudioState>,
 ) {
-    let blocked = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false) || !studio.gizmo_active();
+    let blocked = egui.ctx_mut().map(|c| crate::ui::pointer_over_ui(c) || c.egui_wants_pointer_input()).unwrap_or(false) || !studio.gizmo_active();
     let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);

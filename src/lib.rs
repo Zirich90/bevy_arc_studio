@@ -1,4 +1,5 @@
 pub mod arc_core;
+pub mod behavior;
 pub mod camera;
 pub mod editor_registry;
 pub mod gizmo_3d;
@@ -92,6 +93,7 @@ impl Plugin for BevyArcStudioPlugin {
                 mcp_commands::McpCommandsPlugin,
                 movement::MovementPlugin,
                 world_io::WorldIoPlugin,
+                behavior::BehaviorPlugin,
             ));
     }
 }

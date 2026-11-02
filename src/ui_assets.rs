@@ -388,7 +388,7 @@ fn placement_system(
         st.placing = None;
         return;
     }
-    let over_ui = egui.ctx_mut().map(|c| c.is_pointer_over_egui() || c.egui_wants_pointer_input()).unwrap_or(false);
+    let over_ui = egui.ctx_mut().map(|c| crate::ui::pointer_over_ui(c) || c.egui_wants_pointer_input()).unwrap_or(false);
     let (camera, gtf) = *cam;
     let ray = window.cursor_position().and_then(|c| camera.viewport_to_world(gtf, c).ok());
     let (Some(r), false) = (ray, over_ui) else { return };
