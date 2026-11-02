@@ -8,3 +8,8 @@ modules/state.json
 .memory/
 graphify-out/
 __pycache__/
+
+# Local Obsidian/Graphify maintenance tools
+/scripts/sync_memory.py
+/scripts/build_memory_graph.py
+/scripts/tests/test_sync_memory.py
