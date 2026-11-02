@@ -86,3 +86,8 @@
 - Статус 3.1–3.3: выполнены. TimedVisibility и SignalVisibility доступны через инспектор и BRP; Undo, scene/prefab roundtrip и Play/Pause/Stop проверены. Приёмка: `docs/clean_room_audit/logs/stage_p3_log.md`.
 - E7 остаётся продуктовой проверкой редактора. Не считать его завершённым по наличию отдельных подсистем.
 - В приёмке фазы 3 отдельно проверить DX12 и Vulkan на одном пилоте. Для каждого записать backend, запуск, BRP-сценарий и просмотренный скриншот; ошибка запуска Vulkan требует отдельного расследования.
+
+## E5/E6 completion — 2026-11-02
+E5: DynamicWorld v3 remains the scene format. Asset Browser, thumbnails and linked prefab overrides are implemented; scene/prefab override roundtrip was reverified. `scene.switch` loads another saved scene and resumes Play after successful load.
+E6: separate owned process (`--game-scene`), independent BRP endpoint, live hierarchy with one-second refresh, component read/edit, Pause/Resume/Stop. Existing F5 Play-in-Editor remains available.
+Acceptance evidence: `docs/clean_room_audit/logs/stage_e5_e6_completion_log.md`; usage: `docs/architecture/10_separate_game.md`.

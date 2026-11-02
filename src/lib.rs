@@ -1,3 +1,4 @@
+pub mod game_process;
 pub mod arc_core;
 pub mod behavior;
 pub mod camera;
@@ -83,6 +84,7 @@ impl Plugin for BevyArcStudioPlugin {
             .register_type::<camera::EditorCamera>()
             .add_plugins((editor_registry::EditorRegistryPlugin, modules::ModulesPlugin, world_environment::WorldEnvironmentPlugin, level_builder::LevelBuilderPlugin, prefabs::PrefabsPlugin, ui_assets::AssetBrowserPlugin, materials::MaterialsPlugin, thumbnails::ThumbnailsPlugin))
             .add_plugins((
+                game_process::GameProcessPlugin,
                 scene::ScenePlugin,
                 camera::EditorCameraPlugin,
                 ui::UiPlugin,

@@ -95,11 +95,15 @@ pub enum SceneIo {
 #[derive(Resource, Default)]
 pub struct SceneIoQueue(pub Vec<SceneIo>);
 
+#[derive(Resource, Default)]
+pub struct ResumeAfterScene(pub bool);
+
 pub struct WorldIoPlugin;
 
 impl Plugin for WorldIoPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SceneIoQueue>()
+        app.init_resource::<ResumeAfterScene>()
+            .init_resource::<SceneIoQueue>()
             .init_resource::<SceneComponentRegistry>()
             .register_type::<UnitScale>()
             .init_resource::<UnitScale>()
@@ -189,6 +193,7 @@ fn save_scene(world: &mut World) {
 #[allow(clippy::too_many_arguments)]
 fn load_scene(
     mut io: ResMut<SceneIoQueue>,
+    mut resume: ResMut<ResumeAfterScene>,
     mut q: ResMut<StudioCommandQueue>,
     mut studio: ResMut<StudioState>,
     mut spec: ResMut<WorldSpec>,
@@ -285,8 +290,12 @@ fn load_scene(
                     }
                 });
             }
+            if resume.0 {
+                spawner.commands.queue(|world: &mut World| { let _ = crate::play_mode::cmd_set_play_mode(world, crate::studio::StudioMode::Playing); });
+            }
             Ok(format!("loaded {path} (v{version}, {n} objects)"))
         })();
+        resume.0 = false;
         report(&mut q, &mut studio, res.unwrap_or_else(|e| format!("ERR {e}")));
     }
 }
