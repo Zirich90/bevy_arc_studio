@@ -65,6 +65,7 @@ impl Plugin for EditorCameraPlugin {
 
 #[allow(clippy::too_many_arguments)]
 fn editor_camera_system(
+    studio: Res<crate::studio::StudioState>,
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -75,6 +76,7 @@ fn editor_camera_system(
     window: Single<&Window, With<PrimaryWindow>>,
     mut cam: Single<(&mut EditorCamera, &mut Transform, &Camera, &Projection, &GlobalTransform)>,
 ) {
+    if studio.tool == "node_graph" { return; }
     let (ctrl, tf, camera, proj, gtf) = &mut *cam;
     let dt = time.delta_secs().min(0.1);
     let fov_y = if let Projection::Perspective(p) = proj { p.fov } else { 1.0 };

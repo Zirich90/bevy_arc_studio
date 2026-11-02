@@ -1,0 +1,80 @@
+Asset(
+  format_version: 1,
+  kind: Material(Pbr3d(PbrSettings(
+    blend: Opaque,
+    two_sided: false,
+    shading: Lit,
+  ))),
+  name: "tex_layers",
+  nodes: {
+    "n01": Node(
+      kind: "output::Pbr3d",
+      pos: (1260.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "function::common/tex_layer",
+      pos: (0.0, -202.5),
+      params: {},
+      inputs: {
+        "tint": Float3((1.0, 0.8, 0.6)),
+      },
+    ),
+    "n03": Node(
+      kind: "function::common/tex_layer",
+      pos: (0.0, 67.5),
+      params: {},
+      inputs: {
+        "tint": Float3((0.6, 0.8, 1.0)),
+      },
+    ),
+    "n04": Node(
+      kind: "function::common/tex_layer_outer",
+      pos: (0.0, 337.5),
+      params: {},
+      inputs: {
+        "scale": Float(0.25),
+      },
+    ),
+    "n05": Node(
+      kind: "stdlib::Lerp",
+      pos: (420.0, -67.5),
+      params: {},
+      inputs: {
+        "alpha": Float(0.5),
+      },
+    ),
+    "n06": Node(
+      kind: "stdlib::Add",
+      pos: (840.0, 67.5),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n06", "out"),
+      to: ("n01", "base_color"),
+    ),
+    Edge(
+      from: ("n02", "rgb"),
+      to: ("n05", "a"),
+    ),
+    Edge(
+      from: ("n03", "rgb"),
+      to: ("n05", "b"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n06", "a"),
+    ),
+    Edge(
+      from: ("n04", "rgb"),
+      to: ("n06", "b"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

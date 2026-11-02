@@ -1,0 +1,259 @@
+Asset(
+  format_version: 1,
+  kind: Material(Unlit3d(UnlitSettings(
+    blend: Add,
+    two_sided: true,
+  ))),
+  name: "hologram",
+  nodes: {
+    "n01": Node(
+      kind: "output::Unlit3d",
+      pos: (1260.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "param::Color",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Color((0.2, 0.8, 1.0, 1.0)),
+        "name": Str("color"),
+      },
+    ),
+    "n03": Node(
+      kind: "param::Scalar",
+      pos: (0.0, 405.0),
+      params: {
+        "default": Float(0.5),
+        "name": Str("scan_speed"),
+      },
+    ),
+    "n04": Node(
+      kind: "stdlib::Fresnel",
+      pos: (0.0, 162.0),
+      params: {},
+      inputs: {
+        "exponent": Float(3.0),
+      },
+    ),
+    "n05": Node(
+      kind: "stdlib::WorldPosition",
+      pos: (0.0, 567.0),
+      params: {},
+    ),
+    "n06": Node(
+      kind: "stdlib::BreakOutFloat3",
+      pos: (210.0, 567.0),
+      params: {},
+    ),
+    "n07": Node(
+      kind: "stdlib::Time",
+      pos: (0.0, 702.0),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 540.0),
+      params: {},
+      inputs: {
+        "b": Float(20.0),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 702.0),
+      params: {},
+    ),
+    "n10": Node(
+      kind: "stdlib::Add",
+      pos: (630.0, 607.5),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Frac",
+      pos: (812.0, 607.5),
+      params: {},
+    ),
+    "n12": Node(
+      kind: "stdlib::Step",
+      pos: (980.0, 607.5),
+      params: {},
+      inputs: {
+        "a": Float(0.5),
+      },
+    ),
+    "n13": Node(
+      kind: "stdlib::Multiply",
+      pos: (980.0, 405.0),
+      params: {},
+      inputs: {
+        "b": Float(0.3),
+      },
+    ),
+    "n14": Node(
+      kind: "stdlib::Add",
+      pos: (980.0, 202.5),
+      params: {},
+    ),
+    "n15": Node(
+      kind: "stdlib::Multiply",
+      pos: (1120.0, 54.0),
+      params: {},
+    ),
+    "n16": Node(
+      kind: "stdlib::Saturate",
+      pos: (1120.0, 270.0),
+      params: {},
+    ),
+    "n17": Node(
+      kind: "stdlib::VertexNormalWS",
+      pos: (420.0, 945.0),
+      params: {},
+    ),
+    "n18": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 1080.0),
+      params: {},
+      inputs: {
+        "b": Float(3.0),
+      },
+    ),
+    "n19": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 1215.0),
+      params: {},
+      inputs: {
+        "b": Float(10.0),
+      },
+    ),
+    "n20": Node(
+      kind: "stdlib::Add",
+      pos: (630.0, 1147.5),
+      params: {},
+    ),
+    "n21": Node(
+      kind: "stdlib::Sin",
+      pos: (812.0, 1147.5),
+      params: {},
+    ),
+    "n22": Node(
+      kind: "stdlib::Multiply",
+      pos: (980.0, 1147.5),
+      params: {},
+      inputs: {
+        "b": Float(0.02),
+      },
+    ),
+    "n23": Node(
+      kind: "stdlib::Multiply",
+      pos: (1148.0, 1012.5),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n15", "out"),
+      to: ("n01", "color"),
+    ),
+    Edge(
+      from: ("n16", "out"),
+      to: ("n01", "opacity"),
+    ),
+    Edge(
+      from: ("n23", "out"),
+      to: ("n01", "world_position_offset"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n06", "v"),
+    ),
+    Edge(
+      from: ("n06", "y"),
+      to: ("n08", "a"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n09", "a"),
+    ),
+    Edge(
+      from: ("n03", "out"),
+      to: ("n09", "b"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n10", "a"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n10", "b"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n11", "x"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n12", "b"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n13", "a"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n14", "a"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n14", "b"),
+    ),
+    Edge(
+      from: ("n02", "rgb"),
+      to: ("n15", "a"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n15", "b"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n16", "x"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n18", "a"),
+    ),
+    Edge(
+      from: ("n06", "y"),
+      to: ("n19", "a"),
+    ),
+    Edge(
+      from: ("n18", "out"),
+      to: ("n20", "a"),
+    ),
+    Edge(
+      from: ("n19", "out"),
+      to: ("n20", "b"),
+    ),
+    Edge(
+      from: ("n20", "out"),
+      to: ("n21", "x"),
+    ),
+    Edge(
+      from: ("n21", "out"),
+      to: ("n22", "a"),
+    ),
+    Edge(
+      from: ("n17", "out"),
+      to: ("n23", "a"),
+    ),
+    Edge(
+      from: ("n22", "out"),
+      to: ("n23", "b"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

@@ -1,0 +1,57 @@
+Asset(
+  format_version: 1,
+  kind: Function,
+  name: "tex_layer",
+  nodes: {
+    "n01": Node(
+      kind: "output::FunctionInput",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Float4((1.0, 1.0, 1.0, 1.0)),
+        "name": Str("tint"),
+        "order": Int(0),
+        "type": Type(Float3),
+      },
+    ),
+    "n02": Node(
+      kind: "stdlib::TextureSample",
+      pos: (0.0, 202.5),
+      params: {
+        "texture": Str("textures/rock_albedo"),
+      },
+    ),
+    "n03": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 67.5),
+      params: {},
+    ),
+    "n04": Node(
+      kind: "output::FunctionOutput",
+      pos: (770.0, 67.5),
+      params: {
+        "name": Str("rgb"),
+        "order": Int(0),
+        "type": Type(Float3),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n02", "rgb"),
+      to: ("n03", "a"),
+    ),
+    Edge(
+      from: ("n01", "out"),
+      to: ("n03", "b"),
+    ),
+    Edge(
+      from: ("n03", "out"),
+      to: ("n04", "value"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

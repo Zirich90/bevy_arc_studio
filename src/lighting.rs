@@ -103,6 +103,7 @@ fn advance_clock(mut spec: ResMut<WorldSpec>, time: Res<Time>) {
 #[allow(clippy::type_complexity)]
 fn apply_time_of_day(
     spec: Res<WorldSpec>,
+    quillshade: Option<Res<crate::quillshade_bridge::QuillshadeEnvironment>>,
     mut sun: Query<(&mut Transform, &mut DirectionalLight), (With<Sun>, Without<Moon>)>,
     mut moon: Query<(&mut Transform, &mut DirectionalLight), (With<Moon>, Without<Sun>)>,
     mut cam: Query<(&mut Exposure, &mut DistanceFog)>,
@@ -110,6 +111,7 @@ fn apply_time_of_day(
     mut ambient: ResMut<GlobalAmbientLight>,
     boost: Res<NightBoost>,
 ) {
+    if quillshade.is_some_and(|q| q.0) { return; }
     let t = spec.time_of_day;
     let dir = sun_direction(t);
     let d = daylight(t);

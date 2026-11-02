@@ -1,0 +1,108 @@
+Asset(
+  format_version: 1,
+  kind: Material(Pbr3d(PbrSettings(
+    blend: Opaque,
+    two_sided: false,
+    shading: Lit,
+  ))),
+  name: "exp42",
+  nodes: {
+    "01m5r4tbwgbt53z0q87wj6tc76": Node(
+      kind: "output::Pbr3d",
+      pos: (732.5041, -199.6267),
+      params: {},
+    ),
+    "01m5r4whtv0wryfpt5qhs1z45g": Node(
+      kind: "stdlib::Constant3Vector",
+      pos: (-40.223312, -506.2974),
+      params: {
+        "value": Float3((1.0, 0.0, 0.0)),
+      },
+    ),
+    "01m5r5fvg5nwsw7f4nfzekr156": Node(
+      kind: "stdlib::Time",
+      pos: (-532.72705, -24.392591),
+      params: {},
+    ),
+    "01m5r5g6kgkb2absme5p6sg4vr": Node(
+      kind: "stdlib::Sin",
+      pos: (-50.887005, -25.082565),
+      params: {},
+    ),
+    "01m5r5ggky8sh5r98shtdt02wj": Node(
+      kind: "stdlib::Divide",
+      pos: (-252.72708, -24.392591),
+      params: {},
+    ),
+    "01m5r5zf3079k9ak5dgtk5eqwc": Node(
+      kind: "stdlib::Lerp",
+      pos: (485.94604, -202.94812),
+      params: {},
+    ),
+    "01m5sgzbjrntfvax3nwq5776sd": Node(
+      kind: "stdlib::SampleCurve",
+      pos: (182.87036, -121.415184),
+      params: {
+        "curve": Str("common/pulse"),
+      },
+      inputs: {
+        "t": Float(0.7),
+      },
+    ),
+    "01m5snxhc2hgmhqb287zpbbyzz": Node(
+      kind: "stdlib::GlobalConstF32",
+      pos: (-530.0148, 73.61316),
+      params: {
+        "const": Int(1003),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "01m5snxy0d3d3kk068athbvtst": Node(
+      kind: "stdlib::GlobalConstVec3",
+      pos: (-43.19693, -375.26147),
+      params: {
+        "const": Int(1001),
+        "table": Str("common/tuning"),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("01m5r5zf3079k9ak5dgtk5eqwc", "out"),
+      to: ("01m5r4tbwgbt53z0q87wj6tc76", "base_color"),
+    ),
+    Edge(
+      from: ("01m5r5ggky8sh5r98shtdt02wj", "out"),
+      to: ("01m5r5g6kgkb2absme5p6sg4vr", "x"),
+    ),
+    Edge(
+      from: ("01m5r5fvg5nwsw7f4nfzekr156", "out"),
+      to: ("01m5r5ggky8sh5r98shtdt02wj", "a"),
+    ),
+    Edge(
+      from: ("01m5snxhc2hgmhqb287zpbbyzz", "out"),
+      to: ("01m5r5ggky8sh5r98shtdt02wj", "b"),
+    ),
+    Edge(
+      from: ("01m5r4whtv0wryfpt5qhs1z45g", "out"),
+      to: ("01m5r5zf3079k9ak5dgtk5eqwc", "a"),
+    ),
+    Edge(
+      from: ("01m5sgzbjrntfvax3nwq5776sd", "out"),
+      to: ("01m5r5zf3079k9ak5dgtk5eqwc", "alpha"),
+    ),
+    Edge(
+      from: ("01m5snxy0d3d3kk068athbvtst", "out"),
+      to: ("01m5r5zf3079k9ak5dgtk5eqwc", "b"),
+    ),
+    Edge(
+      from: ("01m5r5g6kgkb2absme5p6sg4vr", "out"),
+      to: ("01m5sgzbjrntfvax3nwq5776sd", "t"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

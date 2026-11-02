@@ -115,7 +115,8 @@ impl GamePanel {
         self.pending = Some(std::sync::Mutex::new(rx));
     }
 }
-fn panel(mut contexts: bevy_egui::EguiContexts, mut panel: ResMut<GamePanel>, game: Res<GameProcess>, mut queue: ResMut<crate::mcp_commands::StudioCommandQueue>) {
+fn panel(mut contexts: bevy_egui::EguiContexts, mut panel: ResMut<GamePanel>, game: Res<GameProcess>, mut queue: ResMut<crate::mcp_commands::StudioCommandQueue>, studio: Res<crate::studio::StudioState>) {
+    if studio.tool == "node_graph" { return; }
     let Ok(ctx) = contexts.ctx_mut() else { return };
     let result = panel.pending.as_ref().and_then(|rx| rx.lock().ok()?.try_recv().ok());
     if let Some(result) = result {

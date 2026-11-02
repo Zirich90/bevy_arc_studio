@@ -1,0 +1,64 @@
+Asset(
+  format_version: 1,
+  kind: Material(Unlit3d(UnlitSettings(
+    blend: Opaque,
+    two_sided: false,
+  ))),
+  name: "type",
+  nodes: {
+    "n01": Node(
+      kind: "output::Unlit3d",
+      pos: (1120.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "param::Scalar",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Float(0.5),
+        "name": Str("self"),
+      },
+    ),
+    "n03": Node(
+      kind: "param::Color",
+      pos: (0.0, 202.5),
+      params: {
+        "default": Color((0.9, 0.4, 0.1, 1.0)),
+        "name": Str("mesh"),
+      },
+    ),
+    "n04": Node(
+      kind: "function::kw/fn",
+      pos: (350.0, 0.0),
+      params: {},
+    ),
+    "n05": Node(
+      kind: "stdlib::Multiply",
+      pos: (770.0, 67.5),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n05", "out"),
+      to: ("n01", "color"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n04", "in"),
+    ),
+    Edge(
+      from: ("n03", "rgb"),
+      to: ("n05", "a"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n05", "b"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

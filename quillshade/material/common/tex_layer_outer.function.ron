@@ -1,0 +1,55 @@
+Asset(
+  format_version: 1,
+  kind: Function,
+  name: "tex_layer_outer",
+  nodes: {
+    "n01": Node(
+      kind: "output::FunctionInput",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Float4((0.5, 0.5, 0.5, 0.5)),
+        "name": Str("scale"),
+        "order": Int(0),
+        "type": Type(Float),
+      },
+    ),
+    "n02": Node(
+      kind: "function::common/tex_layer",
+      pos: (0.0, 202.5),
+      params: {},
+    ),
+    "n03": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 67.5),
+      params: {},
+    ),
+    "n04": Node(
+      kind: "output::FunctionOutput",
+      pos: (770.0, 67.5),
+      params: {
+        "name": Str("rgb"),
+        "order": Int(0),
+        "type": Type(Float3),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n02", "rgb"),
+      to: ("n03", "a"),
+    ),
+    Edge(
+      from: ("n01", "out"),
+      to: ("n03", "b"),
+    ),
+    Edge(
+      from: ("n03", "out"),
+      to: ("n04", "value"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

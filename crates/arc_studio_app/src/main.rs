@@ -16,7 +16,7 @@ fn main() {
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin { primary_window: Some(Window { title: "Bevy ArcStudio".into(), resolution: (1600, 900).into(), ..default() }), ..default() })
-                .set(AssetPlugin { file_path: bevy_arc_studio::props::assets_dir().to_string_lossy().into_owned(), ..default() }),
+                .set(AssetPlugin { file_path: bevy_arc_studio::props::assets_dir().to_string_lossy().into_owned(), watch_for_changes_override: Some(true), ..default() }),
         )
         .add_plugins(plugin)
         // optional modules: compiled in, connected from the editor's Modules tab

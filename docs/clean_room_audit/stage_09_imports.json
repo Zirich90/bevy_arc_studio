@@ -1,0 +1,704 @@
+{
+  "imports": [
+    {
+      "path": "crates/quillshade/Cargo.toml",
+      "sha256": "29347a433cef4d36d9dda516d74007b1214ed48a4d9a25bc2b00d8790c45da19",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/lib.rs",
+      "sha256": "1f90199d794c59b10a38c30874f4843086ac73e9fb0581137dddfecb6abf1fc9",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/light/mod.rs",
+      "sha256": "6100dd8af28c4f17ef72887766dab055efa22bb76c6afd7f37ffd627d652b9f9",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/mod.rs",
+      "sha256": "8cd44717ddfdfe0b41c6112d5afd3b1bc8070e4f6a86cb26c3355b2496abd092",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/baked/materials.rs",
+      "sha256": "ae08d2f7c026fa887294abcd5e81c8dace4025ba2df5bb8e791f6789a414f4c3",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/baked/mod.rs",
+      "sha256": "f1b6220c4f03bfeec21e48371b48e4ada89b67b785ffde2c7f85b4cd9bcca18f",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/baked/textures.rs",
+      "sha256": "53abd7958e05cb84f2beb5ce260930aa6be088ebd8fbbef836a5e72204a538c5",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/mod.rs",
+      "sha256": "8b9d3ce38d67a7a1f8b986ad85373baa4ceae950fee9d0cb72362e2a020a2be5",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mat_exp42.rs",
+      "sha256": "bb98a1c4b32f1f4350f3e50b57d2f1902bf8cde5310bd2e2d3d149b048900c2f",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mat_flag.rs",
+      "sha256": "0b70d4c36409a6ece3cfe8340cc4138637a1aba9168a34a8ca19a3b53eee63fd",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mat_rock_wet.rs",
+      "sha256": "0a8b4f8c91c8ba6043bf957b212f011ce0891face2345e587ee6024864ffd07b",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mat_terrain_layers.rs",
+      "sha256": "b73c7fe5bc7ddf573e49436ae211760dea7c76bb2026f1bb12fad417d9c690e2",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mat_tex_layers.rs",
+      "sha256": "a97e40a08998bc091b1b1e3c6a53bb8dadf1d341625d9ab98d67eea5118ec044",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mat_water.rs",
+      "sha256": "fa14313fcbaabae108e27759387d36565e50889be2cfa53eb684bbc58eac9ca1",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_env/mod.rs",
+      "sha256": "257e7b2908544c4438e3b4d02acfcdca2e94ab0f80a019c76e6266d19c3ee17b",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_fx/mat_coords.rs",
+      "sha256": "d16ce6bff49bafbb86143d22cfe9b0ff4d84968bc74277dde72cf0aa86b39758",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_fx/mat_curve_bands.rs",
+      "sha256": "88f2166f822c054fd8cf1dd785c773ba1678155cf3f56aad47c7e8625abb34eb",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_fx/mat_global_tint.rs",
+      "sha256": "cd26e17fef841ebefa4d2cac10079170a3e436d1491d0b0e6d34b83267fad6f2",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_fx/mat_hologram.rs",
+      "sha256": "c7e03f142174a79d90c5132cd484293ac6f8d43e61389db5b96d56137c97f139",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_fx/mod.rs",
+      "sha256": "b1e66f46a5ebb2334865fc92515dae09e387dec6d9a532d5b5ae75fa13765a10",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_kw/mod.rs",
+      "sha256": "d4428d64401785fc3a84ec113409af5baeddde7ecf9acb19ec2dd159c6666111",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_ui/mat_dissolve.rs",
+      "sha256": "631910a6dc251d401a88adad2534a72ef00e6f3b65def8c669726d5a12640a3c",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_ui/mod.rs",
+      "sha256": "41d68981458b370fcb7051f24a5cc6facfb98546094a2a1aa5755ad9591d33f5",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_kw/dir_loop/mat_type.rs",
+      "sha256": "c7455b277952662405da57ff09f7536ed6d167aef5c0c57f511c03a302872c8e",
+      "unchanged": true
+    },
+    {
+      "path": "crates/quillshade/src/material/materials/dir_kw/dir_loop/mod.rs",
+      "sha256": "6f4942e5f577fb9abb0b9392aed00454896fed9ea58776c66348d1c09c619ade",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/project.ron",
+      "sha256": "a0c5ef351cd5d998418e2abb2b62312de7d95f0071e62d1f824fb946345b5471",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/light/day.environment.ron",
+      "sha256": "9f17dd653306894182f7e4c436cf3ecf1fa0c3ed4d2162887fa6e7ed0be1e127",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/light/night.environment.ron",
+      "sha256": "56c4273a237edd50359736b64a3734b99119559272d932cb07980cc80bbed7c0",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/light/sky.texture.ron",
+      "sha256": "ffe9d9d9f396c4cd172fbc2aab6fa61be4f817354890f2382649affc93108863",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/light/smooth.curve.ron",
+      "sha256": "341f78f54e9bf1168369305a978d6d3f14a5ec111de41c9b39ef56be17ab16f7",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/pulse.curve.ron",
+      "sha256": "45c9993d63bd3845c1b298b60fdef2b0e044d75421cbcb2edd6e6c229291d58c",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/rock_layer.function.ron",
+      "sha256": "40c875e9b7a21d78437c270cd400d4cb48aa464df13105aff5ec49cfef5353af",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/steps.curve.ron",
+      "sha256": "46659289f26699ace417ab7909af772b655966b4e67255bf693b1e8367ca5ec9",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/terrain.gradients.ron",
+      "sha256": "403a42869282a6705a35581daea95145bd457f08839e6502aacd5f173047a7d8",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/tex_layer.function.ron",
+      "sha256": "0294d630cecd656c4d56efa1566b96b42d7e18aa6e96068c91b0956c52fdff0d",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/tex_layer_outer.function.ron",
+      "sha256": "f4456e8ee95ff7f7b1da480e74bbf0404a5d7b6ae8204f6e6ddc86fa4bd91bc5",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/tuning.consts.ron",
+      "sha256": "6fe585a44c01aae0657b2776432c17f0112d7c56a991a532a2aa7c72c47debc0",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/common/wet_mask.function.ron",
+      "sha256": "1a1f40895a3ea61074f8b7d2573fb0cdd27c62c14ff1f461e65a391dd7dd56e7",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/env/exp42.material.ron",
+      "sha256": "1fbe233ca60d93a01268713408dbe7e27defd728cff2e442b22a655d691c04b8",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/env/flag.material.ron",
+      "sha256": "60df44a0f5b56f8f3cb5c7a28b4987ab4d44ddc08d00df86ff58a41c523fe560",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/env/rock_wet.material.ron",
+      "sha256": "845b2943125a87d0c82cfcebf70d51535a0adec38c657dc075458e7a2d304bb0",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/env/terrain_layers.material.ron",
+      "sha256": "8341174f6ccf57c73bbaf33c073843317eef5f6dfed73e501bf32c581a0dc203",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/env/tex_layers.material.ron",
+      "sha256": "dfdd605ec9fec8c1a7605bdf7c6be8eca9e288dd7df6418e5a46f35d14a62f4c",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/env/water.material.ron",
+      "sha256": "a3ee5c88b60a3391b2b842254fcaced493c6ad538755638e7abfb621ca591507",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/fx/coords.material.ron",
+      "sha256": "03a74fdd5534d6c0ebb218211bc5d94e3c09b7093b1fcc8c6eac2889f96eb5cf",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/fx/curve_bands.material.ron",
+      "sha256": "80f5b1abf1fbab5b1ebca48e6e5fbfd8f28d4f420d0fcff4d2e1526fd8a293ee",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/fx/global_tint.material.ron",
+      "sha256": "2cf2064d8ac280dc4d8b975727c224788d488976f5760dc498c121f215cc01d4",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/fx/hologram.material.ron",
+      "sha256": "59a8798f34a304cfd363f9848bddca73ae8f628d4837b990ed05f6362b718ebc",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/kw/fn.function.ron",
+      "sha256": "495892496330a2a5869d1266fa6e81e214b61b715f2544b984d5f740fbb3d86b",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/textures/atlas.texture.ron",
+      "sha256": "936c546b88e9185e042127b028b15e85ce383c10e9dfd21ecfa54c199ae4baeb",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/textures/rock_albedo.texture.ron",
+      "sha256": "f4576056cffc861a68983aff28fe806cff5b911c9b23de0e72cc5ffa5c48b606",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/textures/rock_normal.texture.ron",
+      "sha256": "a8b9846f4908f0021a8c0d8301fb5d9ca0d66351ae09693dfbab821425a30990",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/textures/sprite.texture.ron",
+      "sha256": "a19b71e4da177e66c845cdc2863af3206f5296653f422543f06cbc5abee153cb",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/textures/water_normal.texture.ron",
+      "sha256": "a60a8ebc97a765463e0911b92744706f302f5baf81ff8116baec4fa6ddf7c458",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/ui/dissolve.material.ron",
+      "sha256": "eef303ff99d8a25d7eb17b9f0372c2a6076e1bc52cd41da533316cbad5e18072",
+      "unchanged": true
+    },
+    {
+      "path": "quillshade/material/kw/loop/type.material.ron",
+      "sha256": "f7f4e87dcfda64792f55b5ed18276e5ce21732f750f7955dab03e678751f1312",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/atlas.png",
+      "sha256": "1753cd529a3a997e8c07adf27294bfbc50ed78cf60bff980fa18c08bb15f8f5d",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/rock_albedo.ktx2",
+      "sha256": "687c54f2a4eb3886527e0244fc584408f8843fe5b390177c7ee3a1092040e0fb",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/rock_albedo.png",
+      "sha256": "2f80352a95105282e79001439af7e845bcd08576bbf17f82ee557c98f27b673e",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/rock_normal.png",
+      "sha256": "fc93864439d36c241c1799bd3684dfa0e5f06e7d9bcc0f2d8fdd19e6b9fb9631",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/sky_cube.ktx2",
+      "sha256": "4e8a09fa66d13cddfb278b2da71c3a6bb660aa55b32e0d08d72b45c97fed6f20",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/sprite.png",
+      "sha256": "65bef3be359412ae8deb258b63f471d93a528a94e23e5b43e5ddb21cff92959e",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/water_normal.ktx2",
+      "sha256": "df80ef996f4ae9f134acd9ebbbf134ca82c3f92dbc96b8da59afeff76c69a844",
+      "unchanged": true
+    },
+    {
+      "path": "assets/textures/water_normal.png",
+      "sha256": "c75fecc3827e3ad750eb9e266284c503cc6007a1aa9f692326f1ed974aa2714a",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/baked.ron",
+      "sha256": "c7461855fed83f58c19d5676337e1a9299f56fc5e37da9fed162ca210a455585",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/gradients/.autogen",
+      "sha256": "131fa617969c78957ad1f1fdd68922c5d54a4343f505fbf17374fcbff8da3b8a",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/internal/.autogen",
+      "sha256": "c09a4e02481e9b8b650a38f8da1bd4811fdcc0bedafe57ae8e431bae75e95acf",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/internal/default.png",
+      "sha256": "b998b93e2c54d006a06241ecc328c7ca9c954656465a3db37fd985986944530e",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/gradients/common/terrain.png",
+      "sha256": "f5f4e83665444bf0553466ae5202bb77d28868a599f490e75b61be9583793296",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_env/mat_exp42.wesl",
+      "sha256": "3e9a407515c51b537b2d8edcf88e224d3255471fde46dcc1bf8de4a9fc97e293",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_env/mat_flag.wesl",
+      "sha256": "b019f9c4e6bdccedc41c2baa008fed3fbf8702cacc82593b73b9915b876863c6",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_env/mat_rock_wet.wesl",
+      "sha256": "8e619ba23e478c62e35fd90c528639285365c2794a4c3984005b23bdd86c183a",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_env/mat_terrain_layers.wesl",
+      "sha256": "fe6194856d476fdb35fcd9deb90f7e04369bb5cb0d12ec55993ddbc304931fcb",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_env/mat_tex_layers.wesl",
+      "sha256": "1215c0743c4f4c0d093e715f8d3a3c4db587c19d7727aa41adaf716aaa1591cd",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_env/mat_water.wesl",
+      "sha256": "85a7114ab355f6bbdaa8ae5e9e0d52f095fb4573c7ae2015ca5d3517a98b78c9",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_fx/mat_coords.wesl",
+      "sha256": "ba8046127e01cd9213ceb38b81b177ad90ba81dec4e002a3dadb7e04bfd0f1c1",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_fx/mat_curve_bands.wesl",
+      "sha256": "de4f30cf7ed21c8f33283a398d5e1567883eba0dd1f0a84dfd26df82ed55108b",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_fx/mat_global_tint.wesl",
+      "sha256": "b38b92f7517866b96b49ec68a7254a09b2167b95eff2da711934ccdb8da3b058",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_fx/mat_hologram.wesl",
+      "sha256": "1a407ca6a8cfe60a8078ac656a11beeab40bd8bbb90b5cb2b652baf3daf46680",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_ui/mat_dissolve.wesl",
+      "sha256": "bbdf97293ec21e65ec366a53645ebf4639fe2b20e027291ab3992266d8de6bbd",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/color.wesl",
+      "sha256": "a702e79d7e67b0844cf3de94d3ad2bb448d75004c539ab558b220f38453238a2",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/curve.wesl",
+      "sha256": "a272a132c50714daa738ef66fb9de05cd28174a4dfa093c176f981b3a84f8f82",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/material.wesl",
+      "sha256": "6d3883e4b6030579d7e1b54009c156bd73a718efde7e189aa34462ed6ff392db",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/math.wesl",
+      "sha256": "f379c9f8f153bf0a540d87847885154e459436a12f748c9704c86bea85b4d290",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/noise.wesl",
+      "sha256": "ecb9d14035743279a529405d1bf7bd9a0222de587af2e322eaa92cd8165f9700",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/pattern.wesl",
+      "sha256": "b932b5992797fbd8702d3535c53a5b1dfb81e7824ba53030a5b9e19205f33ee4",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/scene.wesl",
+      "sha256": "f6b01c43995646026e9c22d8c6ae70f66dcf5075cba6d4ff2775cd0f54847249",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/shading.wesl",
+      "sha256": "aa446e091d5597a37da68e89836ec39ce3c1d71911f5f9c979d9561e799c9dc5",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/texture.wesl",
+      "sha256": "c9a23bceee002278feef350e9d59cbb3497d42be0cf2e0bd28a6ede0f4da1a2c",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/transform.wesl",
+      "sha256": "72ffeb7fa321164f4b4a8f8f8d28a0143c286edafd233b5d672881c68c345ae8",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/stdlib/uv.wesl",
+      "sha256": "2b1da2f0f50b326d1eda6479e4a4a872e03e08c7c53ee589b044fcb4f93fcb1b",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/functions/dir_common/fun_rock_layer.wesl",
+      "sha256": "9f98752a0c994bd929bf7102b32b7816e684bfa7f7ab78a7692b75fddc9f146c",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/functions/dir_common/fun_tex_layer.wesl",
+      "sha256": "6fc68e3250ff7c26685e779a0424e7613e9a3622df3b7fefb0ea6a49dfac1c42",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/functions/dir_common/fun_tex_layer_outer.wesl",
+      "sha256": "20046ebb0dc53fcbf1c6fa8806cc199fe2b562126005a4d58ec20aec66ddf9cf",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/functions/dir_common/fun_wet_mask.wesl",
+      "sha256": "14e449f7f37fab6861bf7401554322969d42621d267c24faa097f00988387c72",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/functions/dir_kw/fun_fn.wesl",
+      "sha256": "c92a5c7301e9bd703acdc4ce3d09e7b734e5ed8795929e62cb865b4665b0b1ac",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/dir_kw/dir_loop/mat_type.wesl",
+      "sha256": "68d080d9c8bda0d4d5df97cf3cd37865766f1208453ff1b6ada52a7b81839276",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/curves/dir_common/crv_pulse.wesl",
+      "sha256": "38a16c9466d87186fb66188b0f8dc69442417732504166648ad4cefc43e1b618",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/material/autogen/curves/dir_common/crv_steps.wesl",
+      "sha256": "87ea2187bd782822ecc66ca62468a57e8dd288fad8d96ef3849b762a88253dbb",
+      "unchanged": true
+    },
+    {
+      "path": "assets/quillshade/light/autogen/baked.ron",
+      "sha256": "58d2c9258586bd89ce902bf2b7491d286668a53df84670d08b2031160f4b21cb",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/Cargo.toml",
+      "sha256": "77f52314fe89f0a2e57aa098beb110e3ac5ca27aad13f76b9b38a9d0985d705f",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/LICENSE",
+      "sha256": "d2d89e2a1f1e703e47e8c71e27bca8d46577b7697c192182942b8b2357a9ce8b",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/README.md",
+      "sha256": "70e1ce64702e04839f34cf724b850d09244c5ff5ffeecac925c591523541fe57",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/auto_layout.rs",
+      "sha256": "e494759434d48cac266e0e40da5085727f5eb6ac4150e020ec62658c2e64c20f",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/comment_frames.rs",
+      "sha256": "acce186ea3155e53b15b280d51f6c3cda36b3028e5faf1033a3303f1d476dbc4",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/edge_styles.rs",
+      "sha256": "455e4b6a80e851c9f0d6e55e7b2eddba3930971fe5b0b6362d020b49f2d1b0b9",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/editor.rs",
+      "sha256": "61d250c3c6669ec07ec6d38bc0fa7808ac686a35c90ef7f41a59add059222be3",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/geometry_nodes.rs",
+      "sha256": "96fc3cd9c12bd717e664a6369dd8514a648db24d97d6aab86fa0379bf106ff61",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/keyboard.rs",
+      "sha256": "17df3cfba5b70bc583304de0a58dbc82bb721af6122c2878145e3893d3c54c41",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/math_graph.rs",
+      "sha256": "e6faf94450746cd3425ca393f948e6e633ad442f13c161a9c6aa049f74113484",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/minimal.rs",
+      "sha256": "94f0865e91f66fa5ee5c2c4623ad04794392295c64dcf21461341000aa1e4e3b",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/minimap.rs",
+      "sha256": "324e609dae10a0b54698215a2cb58040ab029f814dddf8d974fa202dd9cdd42e",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/quick_start.rs",
+      "sha256": "db56034679f137c3190cea49c781cf3c5996b4fe607fed2170d401c4fdfef8e8",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/reroute.rs",
+      "sha256": "66f962fe9b2492c12f607fd0b498f43d371efa02db8284d42045367686861923",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/save_load.rs",
+      "sha256": "fff2b948b889a5377926118b6fde1dd3321586b1731d7502940cfb2ee35fc41d",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/scene_builder_3d.rs",
+      "sha256": "85db26b48fb18eed5aa8cc82550702f6da234a66d3883928ebd299006ae1110c",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/shader_world.rs",
+      "sha256": "8cf7b290f1966ee166cf7b8ab5087b697ae8ea8ffa7d85ca899de7a6713b719c",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/stress.rs",
+      "sha256": "8006eaca339b693d4c7085120de040629fc7e1476c9ac275a5ae2d6f83af3002",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/styled.rs",
+      "sha256": "3a85e9b8bc4d23fc8926839a099dfcd17baef11dd822ea353c22f6cefdd57ddc",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/subgraph.rs",
+      "sha256": "d1b09e155f0caf082c847a8b39f2de1561c34524ef0b7055b764115b07080cc5",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/type_conversion.rs",
+      "sha256": "f836ade4dc6af755b63661bc28b058f8401f453b50b1ce2c5275ee8110baf75d",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/components.rs",
+      "sha256": "f38475281286cf0512fc2e100f67f7019505d1bd22fbc807687a48e148e87e56",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/edit.rs",
+      "sha256": "298fd2c1555c05212ca8c1ee768ec2b3c61a8d226bdab6ba92f018a38ce797ec",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/geometry.rs",
+      "sha256": "2a65aa03fbde64e0fb73b06025195d8eec2527b863ff71021655570e42d5c783",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/interaction.rs",
+      "sha256": "7f19d76877954c864b1fe212c95cfe184f80669c1f7a7e5026da0d70817efd6b",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/keyboard.rs",
+      "sha256": "e202f358b2f443ba878e79aab70c1d4b25d74b0c41b57a300e166a06b8290a0a",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/lib.rs",
+      "sha256": "ffc3f739bd1680e6d1e938898dce7dffb750cd9bd9edb1815582910d4e3bffc3",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/query.rs",
+      "sha256": "55fa02535ad939f1fc2fc792b04d50f1133ef5051ed60b767b21e8fbec902b5d",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/scene.rs",
+      "sha256": "8716b524572c6b9841c486dede5af821017d7d2f3834a12aaac019c3ab8992ef",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/tests/edits.rs",
+      "sha256": "4d29d05b5d9a06290a131fbdf446ca6d395ffd0b9214011257c182dff315c31b",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/tests/interaction.rs",
+      "sha256": "56c8c9458cc027e0f6d6b15f42a60b68591da15dd1500d76f8a63bf91a1add7c",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/tests/keyboard.rs",
+      "sha256": "48721378563f1096c396d88d0b4c4c56116535aa3766f5f49c0790ad1effe2e9",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/tests/scene.rs",
+      "sha256": "b1d21b06b466cdf965f308d092ca3fcac19e12156b015b4653ef3d8e106ed302",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/style/grid.wesl",
+      "sha256": "23dc463dfeb08fc26e7d2eb3a8abf0d318dfcf06ea220d0d86ffdce48a8f0ba2",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/style/kit.rs",
+      "sha256": "11819bd6b2e005c9cf0b07931edd974d7a7db4d7f1756f6debe55761fa009c64",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/style/mod.rs",
+      "sha256": "c1bc9e32d994f617f1ed66872379fdb3b419f1055fcf8005b7c54395a59d2af5",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/style/render.rs",
+      "sha256": "8a1445bca8cbf0aeb1a6663ac8804e1266ee5f505a1cd4c9b99ff1ef7dca8ffc",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/src/style/wire.wesl",
+      "sha256": "30cc51095d9daccf91f8377c3d156bc6aa42e23e94f95205b4006131afaa7518",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/feathers_fixes/mod.rs",
+      "sha256": "cb807b005d84b6043f313b0a32e133fdb62f8380ac48d062437ce7f3bd836c53",
+      "unchanged": true
+    },
+    {
+      "path": "vendor/bevy_noodle/examples/shaders/world.wesl",
+      "sha256": "e38ba86d258fd8c0f976449c2a1e8a73e1d97ed2b00a40353673afef063db193",
+      "unchanged": true
+    }
+  ]
+}

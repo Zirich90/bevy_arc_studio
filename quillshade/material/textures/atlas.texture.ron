@@ -1,0 +1,7 @@
+TextureAsset(
+  format_version: 1,
+  path: "textures/atlas.png",
+  settings: TextureSettings(
+    sampler: Some(SamplerSettings()),
+  ),
+)

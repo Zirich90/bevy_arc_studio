@@ -1,6 +1,104 @@
 //! Pure math core: world passport, heightfield, erosion, splatmap, scatter, gizmo math, undo history.
 //! No dependency on render ECS systems; unit-testable.
 
+/// Stable, application-owned graph document. Noodle entities are a disposable view of this model.
+#[derive(Resource, Reflect, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[reflect(Resource, Clone)]
+pub struct StudioGraph {
+    pub version: u32,
+    pub nodes: Vec<StudioGraphNode>,
+    pub edges: Vec<StudioGraphEdge>,
+}
+
+#[derive(Reflect, Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StudioNodeKind {
+    Noise, HydraulicErosion, Temperature, FluidFlow, Biology, Scatter,
+    Fireball, IgniteOil, MeltSnow, Granular, InvalidateNavigation,
+}
+
+impl StudioNodeKind {
+    pub fn event_pipeline(self) -> bool {
+        matches!(self, Self::Fireball | Self::IgniteOil | Self::MeltSnow | Self::Granular | Self::InvalidateNavigation)
+    }
+    pub fn source(self) -> bool { matches!(self, Self::Noise | Self::Fireball) }
+}
+
+#[derive(Reflect, Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct StudioGraphNode {
+    pub id: u32,
+    pub kind: StudioNodeKind,
+    pub position: [f32; 2],
+    /// Preliminary UI parameter; typed simulation settings require a versioned schema migration.
+    pub value: f32,
+}
+
+#[derive(Reflect, Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StudioGraphEdge { pub from: u32, pub to: u32 }
+
+impl StudioGraph {
+    pub fn template(events: bool) -> Self {
+        use StudioNodeKind::*;
+        let kinds: &[StudioNodeKind] = if events { &[Fireball, IgniteOil, MeltSnow, Granular, InvalidateNavigation] }
+            else { &[Noise, HydraulicErosion, Temperature, FluidFlow, Biology, Scatter] };
+        Self { version: 1,
+            nodes: kinds.iter().enumerate().map(|(i, &kind)| StudioGraphNode {
+                id: i as u32 + 1, kind, position: [40.0 + (i % 3) as f32 * 250.0, 80.0 + (i / 3) as f32 * 220.0], value: 1.0,
+            }).collect(),
+            edges: if events {
+                [(1, 2), (1, 3), (1, 4), (4, 5)].into_iter().map(|(from, to)| StudioGraphEdge { from, to }).collect()
+            } else {
+                (1..kinds.len() as u32).map(|from| StudioGraphEdge { from, to: from + 1 }).collect()
+            },
+        }
+    }
+
+    /// Validate the trust boundary before replacing the document or accepting a canvas connection.
+    pub fn validate(&self) -> Result<Vec<u32>, String> {
+        use std::collections::{BTreeMap, BTreeSet};
+        if self.version != 1 { return Err("unsupported graph version".into()); }
+        if self.nodes.len() > 512 || self.edges.len() > 1024 { return Err("graph limit exceeded".into()); }
+        let mut nodes = BTreeMap::new();
+        for n in &self.nodes {
+            if !n.value.is_finite() || !n.position.iter().all(|p| p.is_finite()) { return Err("non-finite node data".into()); }
+            if nodes.insert(n.id, n).is_some() { return Err("duplicate node id".into()); }
+        }
+        let mut input = BTreeSet::new();
+        for e in &self.edges {
+            let a = nodes.get(&e.from).ok_or("missing source")?;
+            let b = nodes.get(&e.to).ok_or("missing target")?;
+            if a.kind.event_pipeline() != b.kind.event_pipeline() || b.kind.source() || e.from == e.to {
+                return Err("incompatible graph ports".into());
+            }
+            if !input.insert(e.to) { return Err("input capacity exceeded".into()); }
+        }
+        let mut order = Vec::new();
+        let mut seen = BTreeSet::new();
+        while seen.len() < nodes.len() {
+            let next = nodes.keys().find(|id| !seen.contains(*id) && self.edges.iter().filter(|e| e.to == **id).all(|e| seen.contains(&e.from)));
+            let Some(&id) = next else { return Err("graph cycle".into()); };
+            seen.insert(id); order.push(id);
+        }
+        Ok(order)
+    }
+}
+
+#[cfg(test)]
+mod integration_graph_tests {
+    use super::*;
+    #[test]
+    fn templates_roundtrip_and_reject_invalid_topology() {
+        for events in [false, true] {
+            let mut g = StudioGraph::template(events);
+            assert_eq!(g.validate().unwrap().len(), g.nodes.len());
+            assert_eq!(ron::from_str::<StudioGraph>(&ron::to_string(&g).unwrap()).unwrap(), g);
+            g.edges.push(g.edges[0]); assert!(g.validate().is_err());
+        }
+        let mut g = StudioGraph::template(false);
+        g.edges = vec![StudioGraphEdge { from: 2, to: 3 }, StudioGraphEdge { from: 3, to: 2 }];
+        assert!(g.validate().is_err());
+        g.edges.clear(); g.nodes[0].value = f32::NAN; assert!(g.validate().is_err());
+    }
+}
 use std::collections::HashSet;
 use std::hash::Hash;
 

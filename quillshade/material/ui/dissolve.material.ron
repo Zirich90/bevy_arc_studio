@@ -1,0 +1,186 @@
+Asset(
+  format_version: 1,
+  kind: Material(Sprite2d(SpriteSettings(
+    blend: Blend,
+  ))),
+  name: "dissolve",
+  nodes: {
+    "n01": Node(
+      kind: "output::Sprite2d",
+      pos: (1400.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "param::Scalar",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Float(0.4),
+        "max": Float(1.0),
+        "min": Float(0.0),
+        "name": Str("amount"),
+      },
+    ),
+    "n03": Node(
+      kind: "param::Color",
+      pos: (0.0, 135.0),
+      params: {
+        "default": Color((1.0, 0.6, 0.1, 1.0)),
+        "name": Str("edge_color"),
+      },
+    ),
+    "n04": Node(
+      kind: "param::Scalar",
+      pos: (0.0, 351.0),
+      params: {
+        "default": Float(0.05),
+        "name": Str("edge_width"),
+      },
+    ),
+    "n05": Node(
+      kind: "stdlib::SpriteTexture",
+      pos: (0.0, 540.0),
+      params: {},
+    ),
+    "n06": Node(
+      kind: "stdlib::TextureCoordinate",
+      pos: (280.0, 810.0),
+      params: {
+        "tiling": Float2((8.0, 8.0)),
+      },
+    ),
+    "n07": Node(
+      kind: "stdlib::AppendVector",
+      pos: (490.0, 810.0),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::Noise",
+      pos: (700.0, 810.0),
+      params: {
+        "function": Str("Perlin"),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::Subtract",
+      pos: (910.0, 675.0),
+      params: {},
+    ),
+    "n10": Node(
+      kind: "stdlib::Step",
+      pos: (1092.0, 607.5),
+      params: {},
+      inputs: {
+        "a": Float(0.0),
+      },
+    ),
+    "n11": Node(
+      kind: "stdlib::Step",
+      pos: (1092.0, 756.0),
+      params: {},
+    ),
+    "n12": Node(
+      kind: "stdlib::OneMinus",
+      pos: (1232.0, 756.0),
+      params: {},
+    ),
+    "n13": Node(
+      kind: "stdlib::Multiply",
+      pos: (1330.0, 675.0),
+      params: {},
+    ),
+    "n14": Node(
+      kind: "stdlib::Lerp",
+      pos: (1190.0, 270.0),
+      params: {},
+    ),
+    "n15": Node(
+      kind: "stdlib::Multiply",
+      pos: (1190.0, 472.5),
+      params: {},
+    ),
+    "n16": Node(
+      kind: "stdlib::AppendVector",
+      pos: (1330.0, 337.5),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n16", "out"),
+      to: ("n01", "color"),
+    ),
+    Edge(
+      from: ("n06", "out"),
+      to: ("n07", "a"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n08", "position"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n09", "a"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n09", "b"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n10", "b"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n11", "a"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n11", "b"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n12", "x"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n13", "a"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n13", "b"),
+    ),
+    Edge(
+      from: ("n05", "rgb"),
+      to: ("n14", "a"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n14", "alpha"),
+    ),
+    Edge(
+      from: ("n03", "rgb"),
+      to: ("n14", "b"),
+    ),
+    Edge(
+      from: ("n05", "a"),
+      to: ("n15", "a"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n15", "b"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n16", "a"),
+    ),
+    Edge(
+      from: ("n15", "out"),
+      to: ("n16", "b"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

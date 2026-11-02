@@ -1,0 +1,15 @@
+TextureAsset(
+  format_version: 1,
+  path: "textures/water_normal.ktx2",
+  settings: TextureSettings(
+    is_srgb: false,
+    sampler: Some(SamplerSettings(
+      address_mode_u: Repeat,
+      address_mode_v: Repeat,
+      address_mode_w: Repeat,
+      mag_filter: Linear,
+      min_filter: Linear,
+      mipmap_filter: Linear,
+    )),
+  ),
+)

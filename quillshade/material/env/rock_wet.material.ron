@@ -1,0 +1,258 @@
+Asset(
+  format_version: 1,
+  kind: Material(Pbr3d(PbrSettings(
+    blend: Mask,
+    two_sided: false,
+    shading: Lit,
+  ))),
+  name: "rock_wet",
+  nodes: {
+    "01m5s455rm9dm7z9kxbad7x87e": Node(
+      kind: "stdlib::NamedRoute",
+      pos: (765.1182, -956.15),
+      params: {
+        "name": Str("albedo"),
+      },
+    ),
+    "01m5s45mg5rdgm9c68t9bq0abw": Node(
+      kind: "stdlib::NamedRouteUsage",
+      pos: (1539.7871, -652.31464),
+      params: {
+        "route": Str("01m5s455rm9dm7z9kxbad7x87e"),
+      },
+    ),
+    "01m5s4627d6nhvxda96dkq6m25": Node(
+      kind: "stdlib::NamedRoute",
+      pos: (762.7104, -1099.4967),
+      params: {
+        "name": Str("r_wet_mask"),
+      },
+    ),
+    "01m5s46teq0pyf283b3a96s4da": Node(
+      kind: "stdlib::NamedRouteUsage",
+      pos: (927.6546, -436.13312),
+      params: {
+        "route": Str("01m5s4627d6nhvxda96dkq6m25"),
+      },
+    ),
+    "01m5s47f603sg399gxryx6bp3p": Node(
+      kind: "stdlib::NamedRoute",
+      pos: (206.62381, -838.9257),
+      params: {
+        "name": Str("r_opacity"),
+      },
+    ),
+    "01m5s47szygyqq6a7zewb7ykgx": Node(
+      kind: "stdlib::NamedRouteUsage",
+      pos: (1552.7684, -138.2656),
+      params: {
+        "route": Str("01m5s47f603sg399gxryx6bp3p"),
+      },
+    ),
+    "n01": Node(
+      kind: "output::Pbr3d",
+      pos: (1827.2538, -472.7735),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "param::TextureSample2D",
+      pos: (-136.09784, -988.7245),
+      params: {
+        "default": Str("textures/rock_albedo"),
+        "name": Str("albedo"),
+      },
+    ),
+    "n03": Node(
+      kind: "param::TextureSample2D",
+      pos: (1533.1292, -16.522425),
+      params: {
+        "default": Str("textures/rock_normal"),
+        "name": Str("normal_map"),
+        "sampler_type": Str("Normal"),
+      },
+    ),
+    "n04": Node(
+      kind: "param::Color",
+      pos: (-135.21205, -714.25256),
+      params: {
+        "default": Color((0.6288158, 0.14549951, 0.65770394, 1.0)),
+        "name": Str("tint"),
+      },
+    ),
+    "n05": Node(
+      kind: "param::Scalar",
+      pos: (209.74829, -1132.3137),
+      params: {
+        "default": Float(0.3),
+        "group": Str("Surface"),
+        "max": Float(1.0),
+        "min": Float(0.0),
+        "name": Str("wetness"),
+      },
+    ),
+    "n06": Node(
+      kind: "param::Scalar",
+      pos: (42.95868, 24.378235),
+      params: {
+        "default": Float(1.0),
+        "max": Float(10.0),
+        "min": Float(0.0),
+        "name": Str("speed"),
+      },
+    ),
+    "n07": Node(
+      kind: "stdlib::Multiply",
+      pos: (213.78462, -990.0447),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "function::common/wet_mask",
+      pos: (519.6215, -1006.14874),
+      params: {},
+    ),
+    "n09": Node(
+      kind: "stdlib::Lerp",
+      pos: (1173.5908, -476.924),
+      params: {},
+      inputs: {
+        "a": Float(1.358),
+        "b": Float(0.15),
+      },
+    ),
+    "n10": Node(
+      kind: "stdlib::Time",
+      pos: (31.342651, -92.53511),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Multiply",
+      pos: (241.34262, -65.53517),
+      params: {},
+    ),
+    "n12": Node(
+      kind: "stdlib::Sin",
+      pos: (451.34262, -65.53517),
+      params: {},
+    ),
+    "n13": Node(
+      kind: "stdlib::Saturate",
+      pos: (633.3425, -65.53517),
+      params: {},
+    ),
+    "n14": Node(
+      kind: "stdlib::Constant3Vector",
+      pos: (564.6335, 79.20438),
+      params: {
+        "value": Float3((0.0, 0.05, 0.1)),
+      },
+    ),
+    "n15": Node(
+      kind: "stdlib::Multiply",
+      pos: (827.7401, -65.3965),
+      params: {},
+    ),
+    "n16": Node(
+      kind: "stdlib::Multiply",
+      pos: (1173.5908, -310.924),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n08", "tint"),
+      to: ("01m5s455rm9dm7z9kxbad7x87e", "in"),
+    ),
+    Edge(
+      from: ("n08", "mask"),
+      to: ("01m5s4627d6nhvxda96dkq6m25", "in"),
+    ),
+    Edge(
+      from: ("n02", "a"),
+      to: ("01m5s47f603sg399gxryx6bp3p", "in"),
+    ),
+    Edge(
+      from: ("01m5s45mg5rdgm9c68t9bq0abw", "out"),
+      to: ("n01", "base_color"),
+    ),
+    Edge(
+      from: ("n16", "out"),
+      to: ("n01", "emissive"),
+    ),
+    Edge(
+      from: ("n03", "rgb"),
+      to: ("n01", "normal"),
+    ),
+    Edge(
+      from: ("01m5s47szygyqq6a7zewb7ykgx", "out"),
+      to: ("n01", "opacity_mask"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n01", "roughness"),
+    ),
+    Edge(
+      from: ("n02", "rgb"),
+      to: ("n07", "a"),
+    ),
+    Edge(
+      from: ("n04", "rgb"),
+      to: ("n07", "b"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n08", "base_color"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n08", "wetness"),
+    ),
+    Edge(
+      from: ("01m5s46teq0pyf283b3a96s4da", "out"),
+      to: ("n09", "alpha"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n11", "a"),
+    ),
+    Edge(
+      from: ("n06", "out"),
+      to: ("n11", "b"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n12", "x"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n13", "x"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n15", "a"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n15", "b"),
+    ),
+    Edge(
+      from: ("n15", "out"),
+      to: ("n16", "a"),
+    ),
+    Edge(
+      from: ("01m5s46teq0pyf283b3a96s4da", "out"),
+      to: ("n16", "b"),
+    ),
+  ],
+  comments: [
+    Frame(
+      id: "c01",
+      title: "Emissive pulse",
+      rect: (3.3426514, -146.53513, 1008.0, 351.0),
+      nodes: [],
+    ),
+  ],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

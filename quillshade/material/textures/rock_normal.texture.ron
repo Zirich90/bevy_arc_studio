@@ -1,0 +1,7 @@
+TextureAsset(
+  format_version: 1,
+  path: "textures/rock_normal.png",
+  settings: TextureSettings(
+    is_srgb: false,
+  ),
+)

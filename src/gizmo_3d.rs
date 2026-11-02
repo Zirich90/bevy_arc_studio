@@ -736,6 +736,7 @@ pub fn clone_sources(ids: &[Entity], q: &Query<(&mut Transform, &mut Visibility)
 #[allow(clippy::too_many_arguments)]
 fn scene_edit_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
+    studio: Res<StudioState>,
     mut egui: EguiContexts,
     mut commands: Commands,
     mut sel: ResMut<EditorSelection>,
@@ -748,7 +749,7 @@ fn scene_edit_hotkeys(
     deleted: Query<(), With<Deleted>>,
     parents: Query<&ChildOf>,
 ) {
-    if egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false) || gz.drag.is_some() {
+    if studio.tool == "node_graph" || egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false) || gz.drag.is_some() {
         return;
     }
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);

@@ -1,0 +1,123 @@
+[package]
+name = "bevy_noodle"
+version = "0.5.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "A headless, entity-based node graph library for Bevy UI: you style the nodes, it handles the graph."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/gold-silver-copper/bevy_noodle"
+documentation = "https://docs.rs/bevy_noodle"
+keywords = ["bevy", "node-graph", "node-editor", "visual-scripting", "ui"]
+categories = ["game-development", "gui", "visualization"]
+include = ["Cargo.toml", "README.md", "CHANGELOG.md", "LICENSE", "clippy.toml", "src/**", "examples/**", "tests/**"]
+
+[features]
+default = []
+# Optional look: wire and grid shaders, selection box, port highlighting and
+# node-building helpers. The core draws nothing.
+default_style = ["bevy/ui_bevy_render", "bevy/bevy_scene"]
+# Graph snapshots (save/load, undo) with Bevy's `DynamicWorld`.
+scene = ["bevy/bevy_world_serialization"]
+
+[dependencies]
+bevy = { version = "0.20", default-features = false, features = [
+    "ui_api",
+    "bevy_picking",
+    "ui_picking",
+] }
+
+# Bevy's recommended setup: optimized dependencies make the examples fast
+# without `--release`. Only applies when building this repository.
+[profile.dev.package."*"]
+opt-level = 3
+
+[dev-dependencies]
+bevy = { version = "0.20", features = ["bevy_feathers"] }
+# Reading saved graphs in the save_load example.
+ron = "0.12"
+serde = { version = "1", features = ["derive"] }
+
+[[test]]
+name = "scene"
+required-features = ["scene"]
+
+[[example]]
+name = "quick_start"
+required-features = ["default_style"]
+
+[[example]]
+name = "styled"
+required-features = ["default_style"]
+
+[[example]]
+name = "math_graph"
+required-features = ["default_style"]
+
+[[example]]
+name = "edge_styles"
+required-features = ["default_style"]
+
+[[example]]
+name = "editor"
+required-features = ["default_style", "scene"]
+
+[[example]]
+name = "save_load"
+required-features = ["default_style", "scene"]
+
+[[example]]
+name = "subgraph"
+required-features = ["default_style"]
+
+[[example]]
+name = "scene_builder_3d"
+required-features = ["default_style"]
+
+[[example]]
+name = "stress"
+required-features = ["default_style"]
+
+[[example]]
+name = "keyboard"
+required-features = ["default_style"]
+
+[[example]]
+name = "comment_frames"
+required-features = ["default_style"]
+
+[[example]]
+name = "reroute"
+required-features = ["default_style"]
+
+[[example]]
+name = "type_conversion"
+required-features = ["default_style"]
+
+[[example]]
+name = "minimap"
+required-features = ["default_style"]
+
+[[example]]
+name = "auto_layout"
+required-features = ["default_style"]
+
+[[example]]
+name = "geometry_nodes"
+required-features = ["default_style"]
+
+[[example]]
+name = "shader_world"
+required-features = ["default_style"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"

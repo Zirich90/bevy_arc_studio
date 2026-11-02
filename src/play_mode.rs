@@ -45,6 +45,7 @@ pub struct PlayModeSnapshot {
     pub camera: Vec<CompSnap>,
     pub ents: Vec<EntitySnap>,
     pub heights: Vec<f32>,
+    graph: Option<crate::arc_core::StudioGraph>,
     world_hist: Option<UndoHistory<WorldSpec>>,
     scene_hist: Option<SceneHistory>,
     terrain_hist: Option<TerrainHistory>,
@@ -86,6 +87,7 @@ pub fn capture(w: &mut World) {
         camera,
         ents,
         heights,
+        graph: w.get_resource::<crate::arc_core::StudioGraph>().cloned(),
         world_hist: w.get_resource::<UndoHistory<WorldSpec>>().cloned(),
         scene_hist: w.get_resource::<SceneHistory>().cloned(),
         terrain_hist: w.get_resource::<TerrainHistory>().cloned(),
@@ -107,6 +109,7 @@ pub fn restore(w: &mut World) -> String {
     };
     let ids = tracked_types(w);
     let known: HashSet<Entity> = s.ents.iter().map(|e| e.entity).collect();
+    if let Some(graph) = s.graph.take() { w.insert_resource(graph); }
 
     // spawned during play
     let strays: Vec<Entity> = {
@@ -240,6 +243,7 @@ mod tests {
         app.register_type::<Transform>().register_type::<Visibility>();
         app.register_scene_component::<Door>().register_scene_component::<LevelTile>();
         app.init_resource::<StudioState>()
+            .insert_resource(crate::arc_core::StudioGraph::template(false))
             .init_resource::<EditorSelection>()
             .init_resource::<WorldSpec>()
             .init_resource::<UndoHistory<WorldSpec>>()
@@ -275,6 +279,7 @@ mod tests {
 
         // play: open the door, move a prop, delete one, spawn a combat effect and a stray object, edit history, change spec
         let w = app.world_mut();
+        *w.resource_mut::<crate::arc_core::StudioGraph>() = crate::arc_core::StudioGraph::template(true);
         w.get_mut::<Door>(door).unwrap().is_open = true;
         w.get_mut::<Transform>(prop).unwrap().translation = Vec3::new(9.0, 9.0, 9.0);
         w.entity_mut(doomed).insert(Deleted);
@@ -290,6 +295,7 @@ mod tests {
         set_mode(&mut app, StudioMode::Edit);
         let w = app.world();
         assert!(!w.get::<Door>(door).unwrap().is_open);
+        assert_eq!(*w.resource::<crate::arc_core::StudioGraph>(), crate::arc_core::StudioGraph::template(false));
         assert_eq!(w.get::<LevelTile>(door), Some(&tile));
         assert_eq!(w.get::<Transform>(prop).unwrap().translation, Vec3::new(1.0, 2.0, 3.0));
         assert!(w.get::<Deleted>(doomed).is_none());

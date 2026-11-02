@@ -140,7 +140,7 @@ pub fn build_dynamic_world(world: &World, entities: impl Iterator<Item = Entity>
     let filter = component_filter(world.resource::<SceneComponentRegistry>());
     DynamicWorldBuilder::from_world(world, &registry)
         .with_component_filter(filter)
-        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<SceneMeta>().allow::<crate::water::WaterBodies>())
+        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<SceneMeta>().allow::<crate::water::WaterBodies>().allow::<StudioGraph>())
         .extract_entities(entities)
         .remove_empty_entities()
         .extract_resources()
@@ -218,10 +218,16 @@ fn load_scene(
             let reg = registry.read();
             let dw = dynamic_world_from_json(&json, &reg, &mut srv).map_err(|e| format!("{path}: {e}"))?;
             let version = scene_version(&dw).map_err(|e| format!("{path}: {e}"))?;
+            let graph = match dw.resources.iter().find(|r| r.represents::<StudioGraph>()) {
+                Some(r) => StudioGraph::from_reflect(r.as_ref()).ok_or("invalid StudioGraph resource")?,
+                None => StudioGraph::template(false),
+            };
+            graph.validate()?;
             let hbytes = std::fs::read(heights_path(&path)).map_err(|e| format!("{}: {e}", heights_path(&path)))?;
             let heights: Vec<f32> = hbytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
 
             *water = default(); // scenes saved before water bodies existed carry none
+            spawner.commands.insert_resource(graph);
             for res in &dw.resources {
                 if let Some(b) = res.represents::<crate::water::WaterBodies>().then(|| crate::water::WaterBodies::from_reflect(res.as_ref())).flatten() {
                     *water = crate::water::WaterBodies { items: b.items, ..default() };
@@ -253,7 +259,14 @@ fn load_scene(
                     let door = rest.iter().filter(|c| c.represents::<crate::level_builder::Door>()).find_map(|c| crate::level_builder::Door::from_reflect(c.as_ref()));
                     if let Some(tile) = tile {
                         spawner.commands.queue(move |world: &mut World| {
-                            crate::level_builder::spawn_loaded_tile(world, tile, door, Some(tf));
+                            let e = crate::level_builder::spawn_loaded_tile(world, tile, door, Some(tf));
+                            let registry = world.resource::<AppTypeRegistry>().clone();
+                            let registry = registry.read();
+                            for c in &rest {
+                                let Some(info) = c.get_represented_type_info() else { continue };
+                                let Some(rc) = registry.get(info.type_id()).and_then(|r| r.data::<ReflectComponent>()) else { continue };
+                                rc.insert(&mut world.entity_mut(e), c.as_ref(), &registry);
+                            }
                         });
                         n += 1;
                     }
@@ -343,6 +356,23 @@ mod tests {
         let found: Vec<_> = back.entities[0].components.iter().filter_map(|c| Marker::from_reflect(c.as_ref())).collect();
         assert_eq!(found, vec![Marker { hp: 7, tag: "npc".into() }]);
         assert!(back.resources.iter().any(|r| UnitScale::from_reflect(r.as_ref()).is_some_and(|u| u.world_per_foot == 0.3048)));
+    }
+
+    #[test]
+    fn graph_and_quillshade_binding_roundtrip() {
+        use crate::quillshade_bridge::QuillshadeBinding;
+        let mut app = test_app();
+        let graph = StudioGraph::template(true);
+        app.register_type::<StudioGraph>().insert_resource(graph.clone())
+            .register_type::<QuillshadeBinding>().register_scene_component::<QuillshadeBinding>();
+        let e = app.world_mut().spawn((Transform::default(), UserProp { kind: "pine".into() }, QuillshadeBinding { material: "env/water".into() })).id();
+        let dw = build_dynamic_world(app.world(), std::iter::once(e));
+        let registry = app.world().resource::<AppTypeRegistry>().clone();
+        let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
+        let mut server = app.world().resource::<AssetServer>().clone();
+        let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
+        assert!(back.resources.iter().any(|r| StudioGraph::from_reflect(r.as_ref()) == Some(graph.clone())));
+        assert!(back.entities[0].components.iter().any(|c| QuillshadeBinding::from_reflect(c.as_ref()).is_some_and(|b| b.material == "env/water")));
     }
 
     #[test]

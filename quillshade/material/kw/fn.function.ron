@@ -1,0 +1,61 @@
+Asset(
+  format_version: 1,
+  kind: Function,
+  name: "fn",
+  nodes: {
+    "n01": Node(
+      kind: "output::FunctionInput",
+      pos: (0.0, 0.0),
+      params: {
+        "name": Str("in"),
+        "order": Int(0),
+        "type": Type(Float),
+      },
+    ),
+    "n02": Node(
+      kind: "stdlib::Multiply",
+      pos: (280.0, 0.0),
+      params: {},
+      inputs: {
+        "b": Float(2.0),
+      },
+    ),
+    "n03": Node(
+      kind: "output::FunctionOutput",
+      pos: (560.0, 0.0),
+      params: {
+        "name": Str("out"),
+        "order": Int(0),
+        "type": Type(Float),
+      },
+    ),
+    "n04": Node(
+      kind: "output::FunctionOutput",
+      pos: (560.0, 162.0),
+      params: {
+        "name": Str("let"),
+        "order": Int(1),
+        "type": Type(Float),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n01", "out"),
+      to: ("n02", "a"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n03", "value"),
+    ),
+    Edge(
+      from: ("n01", "out"),
+      to: ("n04", "value"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

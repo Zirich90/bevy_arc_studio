@@ -1,0 +1,187 @@
+Asset(
+  format_version: 1,
+  kind: Material(Unlit3d(UnlitSettings(
+    blend: Opaque,
+    two_sided: false,
+  ))),
+  name: "global_tint",
+  nodes: {
+    "n01": Node(
+      kind: "output::Unlit3d",
+      pos: (1540.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "stdlib::GlobalConstVec3",
+      pos: (0.0, 0.0),
+      params: {
+        "const": Int(1001),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "n03": Node(
+      kind: "stdlib::GlobalConstVec4",
+      pos: (0.0, 135.0),
+      params: {
+        "const": Int(1002),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "n04": Node(
+      kind: "stdlib::ComponentMask",
+      pos: (210.0, 135.0),
+      params: {
+        "a": Bool(false),
+        "b": Bool(true),
+        "g": Bool(true),
+        "r": Bool(true),
+      },
+    ),
+    "n05": Node(
+      kind: "stdlib::GlobalConstF32",
+      pos: (0.0, 270.0),
+      params: {
+        "const": Int(1003),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "n06": Node(
+      kind: "stdlib::Lerp",
+      pos: (420.0, 67.5),
+      params: {},
+    ),
+    "n07": Node(
+      kind: "stdlib::TextureCoordinate",
+      pos: (0.0, 472.5),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::GlobalConstVec2",
+      pos: (0.0, 607.5),
+      params: {
+        "const": Int(1004),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::Multiply",
+      pos: (210.0, 540.0),
+      params: {},
+    ),
+    "n10": Node(
+      kind: "stdlib::BreakOutFloat2",
+      pos: (420.0, 540.0),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Frac",
+      pos: (630.0, 540.0),
+      params: {},
+    ),
+    "n12": Node(
+      kind: "stdlib::GlobalToggle",
+      pos: (630.0, 675.0),
+      params: {
+        "const": Int(1005),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "n13": Node(
+      kind: "stdlib::Lerp",
+      pos: (840.0, 540.0),
+      params: {},
+      inputs: {
+        "a": Float(1.0),
+      },
+    ),
+    "n14": Node(
+      kind: "stdlib::Multiply",
+      pos: (1050.0, 270.0),
+      params: {},
+    ),
+    "n15": Node(
+      kind: "stdlib::GlobalCompileBool",
+      pos: (1050.0, 67.5),
+      params: {
+        "const": Int(1006),
+        "table": Str("common/tuning"),
+      },
+    ),
+    "n16": Node(
+      kind: "stdlib::If",
+      pos: (1260.0, 135.0),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n16", "out"),
+      to: ("n01", "color"),
+    ),
+    Edge(
+      from: ("n03", "out"),
+      to: ("n04", "x"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n06", "a"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n06", "alpha"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n06", "b"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n09", "a"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n09", "b"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n10", "v"),
+    ),
+    Edge(
+      from: ("n10", "x"),
+      to: ("n11", "x"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n13", "alpha"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n13", "b"),
+    ),
+    Edge(
+      from: ("n06", "out"),
+      to: ("n14", "a"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n14", "b"),
+    ),
+    Edge(
+      from: ("n15", "out"),
+      to: ("n16", "cond"),
+    ),
+    Edge(
+      from: ("n06", "out"),
+      to: ("n16", "false_value"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n16", "true_value"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

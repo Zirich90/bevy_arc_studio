@@ -1,4 +1,7 @@
 pub mod game_process;
+pub mod quillshade_bridge;
+mod quillshade_catalog;
+pub mod node_graph;
 pub mod arc_core;
 pub mod behavior;
 pub mod camera;
@@ -96,6 +99,7 @@ impl Plugin for BevyArcStudioPlugin {
                 movement::MovementPlugin,
                 world_io::WorldIoPlugin,
                 behavior::BehaviorPlugin,
-            ));
+            ))
+            .add_plugins((quillshade_bridge::QuillshadeBridgePlugin, node_graph::NodeGraphPlugin));
     }
 }

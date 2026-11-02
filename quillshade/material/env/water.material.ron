@@ -1,0 +1,174 @@
+Asset(
+  format_version: 1,
+  kind: Material(Pbr3d(PbrSettings(
+    blend: Blend,
+    two_sided: false,
+    shading: Lit,
+  ))),
+  name: "water",
+  nodes: {
+    "n01": Node(
+      kind: "output::Pbr3d",
+      pos: (1400.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "param::TextureObject",
+      pos: (0.0, 405.0),
+      params: {
+        "default": Str("textures/water_normal"),
+        "name": Str("normals"),
+      },
+    ),
+    "n03": Node(
+      kind: "param::Color",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Color((0.0, 0.15, 0.3, 1.0)),
+        "name": Str("deep_color"),
+      },
+    ),
+    "n04": Node(
+      kind: "stdlib::Panner",
+      pos: (280.0, 337.5),
+      params: {},
+      inputs: {
+        "speed": Float2((0.03, 0.01)),
+      },
+    ),
+    "n05": Node(
+      kind: "stdlib::Panner",
+      pos: (280.0, 540.0),
+      params: {},
+      inputs: {
+        "speed": Float2((-0.02, 0.025)),
+      },
+    ),
+    "n06": Node(
+      kind: "stdlib::TextureSample",
+      pos: (560.0, 337.5),
+      params: {
+        "sampler_type": Str("Normal"),
+      },
+    ),
+    "n07": Node(
+      kind: "stdlib::TextureSample",
+      pos: (560.0, 567.0),
+      params: {
+        "sampler_type": Str("Normal"),
+      },
+    ),
+    "n08": Node(
+      kind: "stdlib::Add",
+      pos: (840.0, 445.5),
+      params: {},
+    ),
+    "n09": Node(
+      kind: "stdlib::Normalize",
+      pos: (1050.0, 445.5),
+      params: {},
+    ),
+    "n10": Node(
+      kind: "stdlib::Fresnel",
+      pos: (560.0, 810.0),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Custom",
+      pos: (840.0, 810.0),
+      params: {
+        "code": Str("let v = saturate(f * k);\nreturn 0.55 + 0.4 * v;"),
+        "inputs": Str("f: Float, k: Float"),
+        "output_type": Type(Float),
+      },
+      inputs: {
+        "k": Float(1.5),
+      },
+    ),
+    "n12": Node(
+      kind: "stdlib::DepthFade",
+      pos: (1120.0, 810.0),
+      params: {},
+      inputs: {
+        "distance": Float(0.3),
+      },
+    ),
+    "n13": Node(
+      kind: "stdlib::Constant",
+      pos: (1120.0, 202.5),
+      params: {
+        "value": Float(0.05),
+      },
+    ),
+    "n14": Node(
+      kind: "stdlib::Constant",
+      pos: (1120.0, 297.0),
+      params: {
+        "value": Float(0.8),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n03", "rgb"),
+      to: ("n01", "base_color"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n01", "normal"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n01", "opacity"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n01", "roughness"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n01", "specular"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n06", "tex"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n06", "uv"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n07", "tex"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n07", "uv"),
+    ),
+    Edge(
+      from: ("n06", "rgb"),
+      to: ("n08", "a"),
+    ),
+    Edge(
+      from: ("n07", "rgb"),
+      to: ("n08", "b"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n09", "x"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n11", "f"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n12", "opacity"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

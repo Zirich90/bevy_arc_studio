@@ -1,0 +1,128 @@
+Asset(
+  format_version: 1,
+  kind: Material(Unlit3d(UnlitSettings(
+    blend: Opaque,
+    two_sided: false,
+  ))),
+  name: "curve_bands",
+  nodes: {
+    "n01": Node(
+      kind: "output::Unlit3d",
+      pos: (1400.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "stdlib::TextureCoordinate",
+      pos: (0.0, 0.0),
+      params: {},
+    ),
+    "n03": Node(
+      kind: "stdlib::BreakOutFloat2",
+      pos: (210.0, 0.0),
+      params: {},
+    ),
+    "n04": Node(
+      kind: "stdlib::Time",
+      pos: (0.0, 202.5),
+      params: {},
+    ),
+    "n05": Node(
+      kind: "stdlib::Multiply",
+      pos: (210.0, 202.5),
+      params: {},
+      inputs: {
+        "b": Float(0.25),
+      },
+    ),
+    "n06": Node(
+      kind: "stdlib::Add",
+      pos: (420.0, 135.0),
+      params: {},
+    ),
+    "n07": Node(
+      kind: "stdlib::Frac",
+      pos: (588.0, 135.0),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::SampleCurve",
+      pos: (770.0, 135.0),
+      params: {
+        "curve": Str("common/pulse"),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::SampleCurve",
+      pos: (770.0, -67.5),
+      params: {
+        "curve": Str("common/steps"),
+        "type": Str("Simple"),
+      },
+    ),
+    "n10": Node(
+      kind: "stdlib::Multiply",
+      pos: (980.0, 67.5),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Lerp",
+      pos: (1190.0, 0.0),
+      params: {},
+      inputs: {
+        "a": Float3((0.05, 0.02, 0.1)),
+        "b": Float3((1.0, 0.55, 0.1)),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n11", "out"),
+      to: ("n01", "color"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n03", "v"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n05", "a"),
+    ),
+    Edge(
+      from: ("n03", "y"),
+      to: ("n06", "a"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n06", "b"),
+    ),
+    Edge(
+      from: ("n06", "out"),
+      to: ("n07", "x"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n08", "t"),
+    ),
+    Edge(
+      from: ("n03", "x"),
+      to: ("n09", "t"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n10", "a"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n10", "b"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n11", "alpha"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

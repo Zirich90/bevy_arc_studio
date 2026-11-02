@@ -103,6 +103,8 @@ pub struct SpawnerItem {
 
 #[derive(Resource, Default)]
 pub struct EditorRegistry {
+    /// Typed material dispatch generated from Quillshade output; stable ids are persisted by bindings.
+    pub quillshade_materials: Vec<crate::quillshade_bridge::QuillshadeMaterialDef>,
     panels: Vec<PanelDef>,
     tools: Vec<ToolDef>,
     scene_components: Vec<SceneComponentDef>,

@@ -1,0 +1,149 @@
+Asset(
+  format_version: 1,
+  kind: Function,
+  name: "wet_mask",
+  nodes: {
+    "n01": Node(
+      kind: "output::FunctionInput",
+      pos: (-336.0, 0.0),
+      params: {
+        "default": Float4((0.5, 0.5, 0.5, 0.5)),
+        "name": Str("wetness"),
+        "order": Int(0),
+        "type": Type(Float),
+      },
+    ),
+    "n02": Node(
+      kind: "output::FunctionInput",
+      pos: (224.0, 426.0),
+      params: {
+        "default": Float4((0.5, 0.5, 0.5, 0.5)),
+        "name": Str("base_color"),
+        "order": Int(1),
+        "type": Type(Float3),
+      },
+    ),
+    "n03": Node(
+      kind: "stdlib::Noise",
+      pos: (224.0, 0.0),
+      params: {
+        "function": Str("Value"),
+      },
+      inputs: {
+        "scale": Float(2.0),
+      },
+    ),
+    "n04": Node(
+      kind: "stdlib::OneMinus",
+      pos: (-56.0, 0.0),
+      params: {},
+    ),
+    "n05": Node(
+      kind: "stdlib::Subtract",
+      pos: (224.0, 142.0),
+      params: {},
+      inputs: {
+        "b": Float(0.1),
+      },
+    ),
+    "n06": Node(
+      kind: "stdlib::Add",
+      pos: (224.0, 284.0),
+      params: {},
+      inputs: {
+        "b": Float(0.1),
+      },
+    ),
+    "n07": Node(
+      kind: "stdlib::SmoothStep",
+      pos: (504.0, 0.0),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::Multiply",
+      pos: (504.0, 166.0),
+      params: {},
+      inputs: {
+        "b": Float(0.4),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::Lerp",
+      pos: (784.0, 0.0),
+      params: {},
+    ),
+    "n10": Node(
+      kind: "output::FunctionOutput",
+      pos: (1064.0, 0.0),
+      params: {
+        "name": Str("mask"),
+        "order": Int(0),
+        "type": Type(Float),
+      },
+    ),
+    "n11": Node(
+      kind: "output::FunctionOutput",
+      pos: (1064.0, 94.0),
+      params: {
+        "name": Str("tint"),
+        "order": Int(1),
+        "type": Type(Float3),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n01", "out"),
+      to: ("n04", "x"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n05", "a"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n06", "a"),
+    ),
+    Edge(
+      from: ("n06", "out"),
+      to: ("n07", "max"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n07", "min"),
+    ),
+    Edge(
+      from: ("n03", "out"),
+      to: ("n07", "x"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n08", "a"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n09", "a"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n09", "alpha"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n09", "b"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n10", "value"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n11", "value"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

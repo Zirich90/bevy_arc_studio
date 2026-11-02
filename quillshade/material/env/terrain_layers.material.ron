@@ -1,0 +1,168 @@
+Asset(
+  format_version: 1,
+  kind: Material(Pbr3d(PbrSettings(
+    blend: Opaque,
+    two_sided: false,
+    shading: Lit,
+    output: Wrapped,
+  ))),
+  name: "terrain_layers",
+  nodes: {
+    "n01": Node(
+      kind: "output::Pbr3d",
+      pos: (1260.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "stdlib::Constant3Vector",
+      pos: (-210.0, -202.5),
+      params: {
+        "value": Float3((0.15, 0.45, 0.1)),
+      },
+    ),
+    "n03": Node(
+      kind: "stdlib::MakeMaterialAttributesPbr",
+      pos: (350.0, -202.5),
+      params: {},
+      inputs: {
+        "roughness": Float(0.7),
+      },
+    ),
+    "n04": Node(
+      kind: "stdlib::Constant3Vector",
+      pos: (0.0, 135.0),
+      params: {
+        "value": Float3((0.4, 0.38, 0.35)),
+      },
+    ),
+    "n05": Node(
+      kind: "function::common/rock_layer",
+      pos: (350.0, 135.0),
+      params: {},
+    ),
+    "n06": Node(
+      kind: "stdlib::WorldAlignedBlend",
+      pos: (350.0, 405.0),
+      params: {},
+    ),
+    "n07": Node(
+      kind: "stdlib::Lerp",
+      pos: (840.0, 0.0),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::Constant3Vector",
+      pos: (840.0, 337.5),
+      params: {
+        "value": Float3((0.0, 0.02, 0.0)),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::WorldPosition",
+      pos: (-1050.0, -472.5),
+      params: {},
+    ),
+    "n10": Node(
+      kind: "stdlib::BreakOutFloat3",
+      pos: (-840.0, -472.5),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Multiply",
+      pos: (-630.0, -472.5),
+      params: {},
+      inputs: {
+        "b": Float(0.25),
+      },
+    ),
+    "n12": Node(
+      kind: "stdlib::Add",
+      pos: (-420.0, -472.5),
+      params: {},
+      inputs: {
+        "b": Float(0.5),
+      },
+    ),
+    "n13": Node(
+      kind: "stdlib::Saturate",
+      pos: (-210.0, -472.5),
+      params: {},
+    ),
+    "n14": Node(
+      kind: "stdlib::SampleGradient",
+      pos: (0.0, -472.5),
+      params: {
+        "collection": Str("common/terrain"),
+        "gradient": Int(1007),
+      },
+    ),
+    "n15": Node(
+      kind: "stdlib::Multiply",
+      pos: (140.0, -202.5),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n07", "out"),
+      to: ("n01", "attributes"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n01", "world_position_offset"),
+    ),
+    Edge(
+      from: ("n15", "out"),
+      to: ("n03", "base_color"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n05", "tint"),
+    ),
+    Edge(
+      from: ("n05", "layer"),
+      to: ("n07", "a"),
+    ),
+    Edge(
+      from: ("n06", "mask"),
+      to: ("n07", "alpha"),
+    ),
+    Edge(
+      from: ("n03", "attributes"),
+      to: ("n07", "b"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n10", "v"),
+    ),
+    Edge(
+      from: ("n10", "y"),
+      to: ("n11", "a"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n12", "a"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n13", "x"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n14", "t"),
+    ),
+    Edge(
+      from: ("n02", "out"),
+      to: ("n15", "a"),
+    ),
+    Edge(
+      from: ("n14", "rgb"),
+      to: ("n15", "b"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

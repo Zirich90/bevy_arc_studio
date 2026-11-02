@@ -1,0 +1,50 @@
+Asset(
+  format_version: 1,
+  kind: Function,
+  name: "rock_layer",
+  nodes: {
+    "n01": Node(
+      kind: "output::FunctionInput",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Float4((0.45, 0.45, 0.45, 0.45)),
+        "name": Str("tint"),
+        "order": Int(0),
+        "type": Type(Float3),
+      },
+    ),
+    "n02": Node(
+      kind: "stdlib::MakeMaterialAttributesPbr",
+      pos: (350.0, 0.0),
+      params: {},
+      inputs: {
+        "normal": Float3((0.1, 0.0, 1.0)),
+        "roughness": Float(0.9),
+      },
+    ),
+    "n03": Node(
+      kind: "output::FunctionOutput",
+      pos: (700.0, 0.0),
+      params: {
+        "name": Str("layer"),
+        "order": Int(0),
+        "type": Type(MaterialAttributesPbr),
+      },
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n01", "out"),
+      to: ("n02", "base_color"),
+    ),
+    Edge(
+      from: ("n02", "attributes"),
+      to: ("n03", "value"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

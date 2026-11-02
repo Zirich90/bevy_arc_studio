@@ -1,0 +1,169 @@
+Asset(
+  format_version: 1,
+  kind: Material(Pbr3d(PbrSettings(
+    blend: Opaque,
+    two_sided: true,
+    shading: Lit,
+  ))),
+  name: "flag",
+  nodes: {
+    "n01": Node(
+      kind: "output::Pbr3d",
+      pos: (1260.0, 0.0),
+      params: {},
+    ),
+    "n02": Node(
+      kind: "param::Color",
+      pos: (0.0, 0.0),
+      params: {
+        "default": Color((0.8, 0.1, 0.1, 1.0)),
+        "name": Str("color"),
+      },
+    ),
+    "n03": Node(
+      kind: "param::Scalar",
+      pos: (0.0, 405.0),
+      params: {
+        "default": Float(0.2),
+        "name": Str("strength"),
+      },
+    ),
+    "n04": Node(
+      kind: "stdlib::Constant",
+      pos: (840.0, 202.5),
+      params: {
+        "value": Float(0.6),
+      },
+    ),
+    "n05": Node(
+      kind: "stdlib::TextureCoordinate",
+      pos: (0.0, 540.0),
+      params: {},
+    ),
+    "n06": Node(
+      kind: "stdlib::BreakOutFloat2",
+      pos: (210.0, 540.0),
+      params: {},
+    ),
+    "n07": Node(
+      kind: "stdlib::Time",
+      pos: (0.0, 702.0),
+      params: {},
+    ),
+    "n08": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 702.0),
+      params: {},
+      inputs: {
+        "b": Float(2.0),
+      },
+    ),
+    "n09": Node(
+      kind: "stdlib::Multiply",
+      pos: (420.0, 567.0),
+      params: {},
+      inputs: {
+        "b": Float(6.0),
+      },
+    ),
+    "n10": Node(
+      kind: "stdlib::Add",
+      pos: (630.0, 634.5),
+      params: {},
+    ),
+    "n11": Node(
+      kind: "stdlib::Sin",
+      pos: (812.0, 634.5),
+      params: {},
+    ),
+    "n12": Node(
+      kind: "stdlib::Multiply",
+      pos: (980.0, 634.5),
+      params: {},
+    ),
+    "n13": Node(
+      kind: "stdlib::Multiply",
+      pos: (1120.0, 540.0),
+      params: {},
+    ),
+    "n14": Node(
+      kind: "stdlib::Constant3Vector",
+      pos: (980.0, 405.0),
+      params: {
+        "value": Float3((0.0, 0.0, 1.0)),
+      },
+    ),
+    "n15": Node(
+      kind: "stdlib::Multiply",
+      pos: (1190.0, 445.5),
+      params: {},
+    ),
+  },
+  edges: [
+    Edge(
+      from: ("n02", "rgb"),
+      to: ("n01", "base_color"),
+    ),
+    Edge(
+      from: ("n04", "out"),
+      to: ("n01", "roughness"),
+    ),
+    Edge(
+      from: ("n15", "out"),
+      to: ("n01", "world_position_offset"),
+    ),
+    Edge(
+      from: ("n05", "out"),
+      to: ("n06", "v"),
+    ),
+    Edge(
+      from: ("n07", "out"),
+      to: ("n08", "a"),
+    ),
+    Edge(
+      from: ("n06", "x"),
+      to: ("n09", "a"),
+    ),
+    Edge(
+      from: ("n09", "out"),
+      to: ("n10", "a"),
+    ),
+    Edge(
+      from: ("n08", "out"),
+      to: ("n10", "b"),
+    ),
+    Edge(
+      from: ("n10", "out"),
+      to: ("n11", "x"),
+    ),
+    Edge(
+      from: ("n11", "out"),
+      to: ("n12", "a"),
+    ),
+    Edge(
+      from: ("n06", "x"),
+      to: ("n12", "b"),
+    ),
+    Edge(
+      from: ("n12", "out"),
+      to: ("n13", "a"),
+    ),
+    Edge(
+      from: ("n03", "out"),
+      to: ("n13", "b"),
+    ),
+    Edge(
+      from: ("n14", "out"),
+      to: ("n15", "a"),
+    ),
+    Edge(
+      from: ("n13", "out"),
+      to: ("n15", "b"),
+    ),
+  ],
+  comments: [],
+  meta: Meta(
+    description: "",
+    tags: [],
+  ),
+)

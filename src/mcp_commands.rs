@@ -26,6 +26,15 @@ use crate::world_io::{SceneIo, SceneIoQueue, is_reflect_path};
 
 #[derive(Reflect, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum StudioCommand {
+    /// Generated 3D material binding; undoable, reflected, included in scene/prefab/PIE snapshots.
+    AssignQuillshadeMaterial { target: Target, material: String },
+    /// Immediate generated environment preset (domain-relative path, e.g. day).
+    SetQuillshadeEnvironment { preset: String },
+    /// Validated application-owned graph RON; one shared undo transaction.
+    ReplaceStudioGraph { ron: String },
+    SetGraphPanel { open: bool },
+    /// Catalog, graph document and explicit runtime capability status for agents.
+    DescribeIntegration,
     ApplyPreset(WorldPreset),
     SetQuality(QualityPreset),
     SetTime(f32),
@@ -535,6 +544,21 @@ pub fn execute_commands(
             StudioCommand::SetComponent { target, component, value } => {
                 queue_world_cmd(&mut spawner.commands, "SetComponent", move |w| operators::set_component(w, &target, &component, &value))
             }
+            StudioCommand::AssignQuillshadeMaterial { target, material } => queue_world_cmd(&mut spawner.commands, "AssignQuillshadeMaterial", move |w| crate::quillshade_bridge::assign(w, &target, &material)),
+            StudioCommand::DescribeIntegration => queue_world_cmd(&mut spawner.commands, "DescribeIntegration", |w| Ok(serde_json::json!({
+                "materials": w.resource::<crate::editor_registry::EditorRegistry>().quillshade_materials.iter().map(|m| m.id).collect::<Vec<_>>(),
+                "environments": quillshade::light::Preset::ALL.iter().map(|p| p.as_str()).collect::<Vec<_>>(),
+                "graph": w.resource::<StudioGraph>(),
+                "graph_ron": ron::to_string(w.resource::<StudioGraph>()).map_err(|e| e.to_string())?,
+                "multiphysics_evaluator": false,
+                "per_layer_and_basin_materials": false
+            }).to_string())),
+            StudioCommand::SetQuillshadeEnvironment { preset } => queue_world_cmd(&mut spawner.commands, "SetQuillshadeEnvironment", move |w| crate::quillshade_bridge::environment(w, &preset)),
+            StudioCommand::ReplaceStudioGraph { ron } => queue_world_cmd(&mut spawner.commands, "ReplaceStudioGraph", move |w| {
+                let graph = ron::from_str(&ron).map_err(|e| format!("graph RON: {e}"))?;
+                crate::node_graph::replace(w, graph)
+            }),
+            StudioCommand::SetGraphPanel { open } => { studio.tool = if open { "node_graph" } else { "select" }.into(); Ok(format!("node graph panel: {open}")) },
             StudioCommand::EditMaterial { target } => queue_world_cmd(&mut spawner.commands, "EditMaterial", move |w| {
                 let e = operators::resolve(w, &target)?;
                 crate::materials::edit_material(w, e)

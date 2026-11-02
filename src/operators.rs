@@ -77,7 +77,7 @@ const UNDOABLE: &[&str] = &[
 ];
 
 pub fn is_undoable(op: &str) -> bool {
-    UNDOABLE.contains(&op)
+    UNDOABLE.contains(&op) || matches!(op, "AssignQuillshadeMaterial" | "ReplaceStudioGraph")
 }
 
 fn type_schema(short: &str) -> Value {
