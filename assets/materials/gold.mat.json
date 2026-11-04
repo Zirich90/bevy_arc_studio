@@ -1,0 +1,17 @@
+{
+  "preset": "gold",
+  "base_color": [
+    0.1,
+    0.4,
+    1.0,
+    1.0
+  ],
+  "metallic": 1.0,
+  "roughness": 0.25,
+  "reflectance": 0.2,
+  "emissive": [
+    0,
+    0,
+    0
+  ]
+}

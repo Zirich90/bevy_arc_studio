@@ -551,7 +551,12 @@ fn act_attack(combat: &mut Combat, actors: &mut Actors, units: &UnitScale, att: 
     Ok(())
 }
 
-fn act_fireball(combat: &mut Combat, actors: &mut Actors, units: &UnitScale, caster: Entity, center: Vec2) -> Result<(), String> {
+enum FireballOutcome {
+    Disrupted,
+    Cast { damage_roll: i32 },
+}
+
+fn act_fireball(combat: &mut Combat, actors: &mut Actors, units: &UnitScale, caster: Entity, center: Vec2) -> Result<FireballOutcome, String> {
     let (dc, cn, cp) = {
         let (_, a, s, _, tf) = actors.get(caster).map_err(|_| "no caster")?;
         (s.spell_dc, a.name.clone(), p2(tf))
@@ -566,7 +571,7 @@ fn act_fireball(combat: &mut Combat, actors: &mut Actors, units: &UnitScale, cas
     if provoke(combat, actors, units, caster) {
         combat.say(LogKind::Gate, "Fireball is disrupted!");
         check_end(combat, actors);
-        return Ok(());
+        return Ok(FireballOutcome::Disrupted);
     }
     let rolled = combat.dice.roll(6, 6);
     combat.say(LogKind::Info, format!("{cn} casts Fireball (15 ft burst, DC {dc}): 6d6 = {rolled}"));
@@ -602,7 +607,7 @@ fn act_fireball(combat: &mut Combat, actors: &mut Actors, units: &UnitScale, cas
         }
     }
     check_end(combat, actors);
-    Ok(())
+    Ok(FireballOutcome::Cast { damage_roll: rolled })
 }
 
 // ───────────────────────────── Systems ─────────────────────────────
@@ -688,6 +693,9 @@ fn move_driver(
 
 #[allow(clippy::too_many_arguments)]
 fn player_input(
+    mut world_effects: MessageWriter<bevy_arc_studio::simulation::WorldEffect>,
+    mut effect_sequence: Local<u64>,
+    (simulation, session): (Res<bevy_arc_studio::simulation::SimulationState>, Res<bevy_arc_studio::play_mode::PlayModeSnapshot>),
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     nav: Res<NavMap>,
@@ -837,8 +845,21 @@ fn player_input(
         ActionMode::Fireball => {
             combat.burst = Some(ground);
             if clicked {
-                if let Err(e) = act_fireball(&mut combat, &mut actors, &units, cur.entity, ground) {
-                    msg = Some(e);
+                match act_fireball(&mut combat, &mut actors, &units, cur.entity, ground) {
+                    Err(e) => msg = Some(e),
+                    Ok(FireballOutcome::Disrupted) => {}
+                    Ok(FireballOutcome::Cast { damage_roll }) => {
+                        *effect_sequence = (*effect_sequence).max(simulation.effect_cursor).saturating_add(1);
+                        world_effects.write(bevy_arc_studio::simulation::WorldEffect {
+                            id: *effect_sequence,
+                            session_id: session.session_id,
+                            tick: simulation.tick,
+                            source: cur.entity.to_bits(),
+                            position_m: [ground.x as f64, ground.y as f64],
+                            radius_m: units.feet_to_world(FIREBALL_RADIUS_FT) as f64,
+                            energy_j: f64::from(damage_roll) * 100_000.0,
+                        });
+                    }
                 }
             }
         }

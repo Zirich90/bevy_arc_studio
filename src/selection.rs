@@ -113,7 +113,7 @@ fn mark_pickable(
         let mut cur = e;
         loop {
             if objs.contains(cur) {
-                commands.entity(e).insert(Pickable::default());
+                commands.entity(e).try_insert(Pickable::default());
                 break;
             }
             match parents.get(cur) {
@@ -126,7 +126,7 @@ fn mark_pickable(
 
 fn init_spawn_scale(mut commands: Commands, q: Query<(Entity, &Transform), (With<SceneObject>, Without<SpawnScale>)>) {
     for (e, tf) in &q {
-        commands.entity(e).insert(SpawnScale(tf.scale));
+        commands.entity(e).try_insert(SpawnScale(tf.scale));
     }
 }
 

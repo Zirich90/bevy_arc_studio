@@ -1,0 +1,2 @@
+# I2.04 prompt
+Continue goal: complete I2. Implement persisted Quillshade environment selection and transition progress, resource Undo/Redo and PIE rollback. Capture and restore camera/global/light ownership, remove managed lights on release. Use public upstream runtime APIs; never edit generated output. Validate scene roundtrip, transition resume, component restoration and viewed BRP screenshot. Preserve transparent compact graph requested by owner.

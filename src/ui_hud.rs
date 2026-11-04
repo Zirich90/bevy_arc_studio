@@ -14,7 +14,6 @@ fn metric(ui: &mut egui::Ui, name: &str, value: String) {
 }
 
 pub fn draw(ctx: &egui::Context, d: &mut UiData) {
-    if d.studio.tool == "node_graph" { return; }
     let fps = d.diag.get(&FrameTimeDiagnosticsPlugin::FPS).and_then(|x| x.smoothed()).unwrap_or(0.0);
     let ms = d.diag.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME).and_then(|x| x.smoothed()).unwrap_or(0.0);
     let ents = d.diag.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT).and_then(|x| x.value()).unwrap_or(0.0);

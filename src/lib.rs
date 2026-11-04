@@ -19,6 +19,9 @@ pub mod selection;
 pub mod terrain_render;
 pub mod ui;
 pub mod water;
+pub mod terrain_surfaces;
+pub mod environment;
+pub mod simulation;
 pub mod mcp_commands;
 pub mod operators;
 pub mod play_mode;
@@ -100,6 +103,6 @@ impl Plugin for BevyArcStudioPlugin {
                 world_io::WorldIoPlugin,
                 behavior::BehaviorPlugin,
             ))
-            .add_plugins((quillshade_bridge::QuillshadeBridgePlugin, node_graph::NodeGraphPlugin));
+            .add_plugins((quillshade_bridge::QuillshadeBridgePlugin, node_graph::NodeGraphPlugin, simulation::SimulationPlugin));
     }
 }

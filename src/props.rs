@@ -479,7 +479,8 @@ fn anchor_props(grid: Res<TerrainGrid>, mut commands: Commands, q: Query<(Entity
     for (e, so, tf) in &q {
         if matches!(so.category, ObjectCategory::Vegetation | ObjectCategory::Rock) {
             let (x, z) = (tf.translation.x, tf.translation.z);
-            commands.entity(e).insert(GroundAnchor { xz: Vec2::new(x, z), ground: grid.0.sample_height(x, z) });
+            // Simulation may replace scatter entities before deferred commands apply.
+            commands.entity(e).try_insert(GroundAnchor { xz: Vec2::new(x, z), ground: grid.0.sample_height(x, z) });
         }
     }
 }
@@ -528,18 +529,19 @@ fn follow_terrain(
         if matches!(so.name.as_str(), "GrassClump" | "PineTree") {
             let wet = g < surface(xz.x, xz.y) - 0.05;
             if wet && !deleted {
-                commands.entity(e).insert((Deleted, Drowned, Visibility::Hidden));
+                commands.entity(e).try_insert((Deleted, Drowned, Visibility::Hidden));
             } else if !wet && drowned {
-                commands.entity(e).remove::<(Deleted, Drowned)>().insert(Visibility::Inherited);
+                commands.entity(e).try_remove::<(Deleted, Drowned)>().try_insert(Visibility::Inherited);
             }
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn sync_props(
+pub(crate) fn sync_props(
     mut commands: Commands,
     version: Res<TerrainVersion>,
+    simulation: Option<Res<crate::simulation::SimulationState>>,
     mut seen: Local<Option<u32>>,
     spec: Res<WorldSpec>,
     grid: Res<TerrainGrid>,
@@ -558,7 +560,8 @@ fn sync_props(
         commands.entity(e).despawn();
     }
     let mut cx = Ctx { grid: &grid.0, spec: &spec, next_id: 0 };
-    for (n, it) in generate_scatter_plan(&spec, &grid.0).iter().enumerate() {
+    let plan=simulation.as_ref().filter(|s|s.graph_active && s.source.as_ref().is_some_and(|source|crate::terrain_render::geometry_matches(source,&spec))).and_then(|s|s.fields.as_ref()).map(|f|f.scatter.clone()).unwrap_or_else(||generate_scatter_plan(&spec,&grid.0));
+    for (n, it) in plan.iter().enumerate() {
         let tf = Transform { translation: it.pos, rotation: it.rot, scale: Vec3::splat(it.scale) };
         let n = n as u32;
         match it.kind {

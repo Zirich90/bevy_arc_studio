@@ -126,7 +126,7 @@ impl Plugin for MovementPlugin {
                 cfg.depth_bias = -0.3;
                 cfg.line.width = 5.0;
             })
-            .add_systems(Update, (refresh_nav, play_input, move_actors.run_if(|s: Res<StudioState>| s.mode != StudioMode::Paused), draw_paths).chain())
+            .add_systems(Update, (refresh_nav.after(crate::simulation::sync), play_input, move_actors.run_if(|s: Res<StudioState>| s.mode != StudioMode::Paused), draw_paths).chain())
             .add_systems(EguiPrimaryContextPass, draw_path_label);
     }
 }
@@ -151,12 +151,23 @@ pub fn footprint_of(tf: &Transform, so: &SceneObject) -> Option<Footprint> {
 
 type TileQuery<'w, 's> = Query<'w, 's, (&'static LevelTile, Option<&'static Door>, &'static Transform), Without<Deleted>>;
 
-fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, bodies: &[WaterBody], objs: &Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: &TileQuery, cell_size: f32) {
+fn nav_surface<'a>(
+    grid: &'a HeightfieldGrid,
+    water: f32,
+    bodies: &'a [WaterBody],
+    simulation: Option<&'a crate::simulation::SimulationState>,
+) -> impl Fn(f32, f32) -> f32 + 'a {
+    let fallback = crate::water::surface_fn(grid, water, bodies);
+    move |x, z| simulation.and_then(|state| state.water_surface_at(x, z))
+        .unwrap_or_else(|| fallback(x, z))
+}
+
+fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, bodies: &[WaterBody], objs: &Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: &TileQuery, cell_size: f32, simulation: Option<&crate::simulation::SimulationState>) {
     let mut fps: Vec<Footprint> = objs.iter().filter_map(|(tf, so)| footprint_of(tf, so)).collect();
     fps.extend(tiles.iter().filter_map(|(t, d, tf)| tile_footprint(t, d, tf, cell_size)));
     // no water at all (empty grid scene) means no water bodies either
     let bodies = if water == f32::NEG_INFINITY { &[][..] } else { bodies };
-    nav.grid = Some(NavGrid::build_with(grid, &crate::water::surface_fn(grid, water, bodies), &fps, AGENT_RADIUS));
+    nav.grid = Some(NavGrid::build_with(grid, &nav_surface(grid, water, bodies, simulation), &fps, AGENT_RADIUS));
     nav.dirty = false;
     nav.water = water;
     nav.bodies = bodies.to_vec();
@@ -167,6 +178,8 @@ fn rebuild(nav: &mut NavMap, grid: &HeightfieldGrid, water: f32, bodies: &[Water
 fn refresh_nav(
     time: Res<Time>,
     version: Res<TerrainVersion>,
+    region: Option<Res<crate::simulation::DirtyTerrain>>,
+    simulation: Option<Res<crate::simulation::SimulationState>>,
     grid: Res<TerrainGrid>,
     spec: Res<WorldSpec>,
     bodies: Res<WaterBodies>,
@@ -180,7 +193,23 @@ fn refresh_nav(
     mut gone: RemovedComponents<SceneObject>,
     mut nav: ResMut<NavMap>,
 ) {
-    let any = !changed.is_empty() || !doors.is_empty() || undeleted.read().count() > 0 || gone.read().count() > 0;
+    let restored = undeleted.read().count() > 0;
+    let removed = gone.read().count() > 0;
+    let any = !changed.is_empty() || !doors.is_empty() || restored || removed;
+    let water = nav_water_level(&spec);
+    if !any && !nav.dirty && version.is_changed() && nav.water == water
+        && nav.bodies == bodies.items
+        && let Some(region) = region.filter(|r| r.revision == version.0)
+        && let Some(raster) = nav.grid.as_mut()
+    {
+        let mut footprints: Vec<_> = objs.iter().filter_map(|(tf, so)| footprint_of(tf, so)).collect();
+        footprints.extend(tiles.iter().filter_map(|(t, d, tf)| tile_footprint(t, d, tf, gset.cell_size)));
+        let basins = if water == f32::NEG_INFINITY { &[][..] } else { &bodies.items[..] };
+        raster.update_region(&grid.0, &nav_surface(&grid.0, water, basins, simulation.as_deref()),
+            &footprints, AGENT_RADIUS, region.min, region.max);
+        nav.revision += 1;
+        return;
+    }
     if any || version.is_changed() || grid.is_changed() {
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
@@ -189,15 +218,17 @@ fn refresh_nav(
         nav.dirty = true;
         nav.changed_at = time.elapsed_secs();
     }
-    if nav.dirty && time.elapsed_secs() - nav.changed_at >= REBUILD_DEBOUNCE {
-        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &bodies.items, &objs, &tiles, gset.cell_size);
+    // Continuous simulation revisions must not postpone collision updates indefinitely.
+    let simulation_changed = version.is_changed() && simulation.as_ref().is_some_and(|s| s.graph_active);
+    if nav.dirty && (simulation_changed || time.elapsed_secs() - nav.changed_at >= REBUILD_DEBOUNCE) {
+        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &bodies.items, &objs, &tiles, gset.cell_size, simulation.as_deref());
     }
 }
 
 /// Immediate rebuild (used by commands so queries never see a stale raster).
-fn force_rebuild(grid: Res<TerrainGrid>, spec: Res<WorldSpec>, bodies: Res<WaterBodies>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: TileQuery, gset: Res<GridSettings>, mut nav: ResMut<NavMap>) {
+fn force_rebuild(simulation: Option<Res<crate::simulation::SimulationState>>, grid: Res<TerrainGrid>, spec: Res<WorldSpec>, bodies: Res<WaterBodies>, objs: Query<(&Transform, &SceneObject), Without<Deleted>>, tiles: TileQuery, gset: Res<GridSettings>, mut nav: ResMut<NavMap>) {
     if nav.dirty || nav.grid.is_none() {
-        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &bodies.items, &objs, &tiles, gset.cell_size);
+        rebuild(&mut nav, &grid.0, nav_water_level(&spec), &bodies.items, &objs, &tiles, gset.cell_size, simulation.as_deref());
     }
 }
 

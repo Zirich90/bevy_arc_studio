@@ -140,7 +140,7 @@ pub fn build_dynamic_world(world: &World, entities: impl Iterator<Item = Entity>
     let filter = component_filter(world.resource::<SceneComponentRegistry>());
     DynamicWorldBuilder::from_world(world, &registry)
         .with_component_filter(filter)
-        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<SceneMeta>().allow::<crate::water::WaterBodies>().allow::<StudioGraph>())
+        .with_resource_filter(WorldFilter::deny_all().allow::<WorldSpec>().allow::<UnitScale>().allow::<SceneMeta>().allow::<crate::water::WaterBodies>().allow::<crate::terrain_surfaces::TerrainSurfaces>().allow::<crate::environment::Environment>().allow::<crate::simulation::SimulationState>().allow::<StudioGraph>())
         .extract_entities(entities)
         .remove_empty_entities()
         .extract_resources()
@@ -191,7 +191,7 @@ fn save_scene(world: &mut World) {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn load_scene(
+pub(crate) fn load_scene(
     mut io: ResMut<SceneIoQueue>,
     mut resume: ResMut<ResumeAfterScene>,
     mut q: ResMut<StudioCommandQueue>,
@@ -222,15 +222,26 @@ fn load_scene(
                 Some(r) => StudioGraph::from_reflect(r.as_ref()).ok_or("invalid StudioGraph resource")?,
                 None => StudioGraph::template(false),
             };
-            graph.validate()?;
+            let graph = graph.migrate()?;
+            if let Some(state)=dw.resources.iter().find_map(|r|r.represents::<crate::simulation::SimulationState>().then(||crate::simulation::SimulationState::from_reflect(r.as_ref())).flatten()) {state.validate()?;}
+            if let Some(env) = dw.resources.iter().find_map(|r| r.represents::<crate::environment::Environment>().then(|| crate::environment::Environment::from_reflect(r.as_ref())).flatten()) { env.validate()?; }
             let hbytes = std::fs::read(heights_path(&path)).map_err(|e| format!("{}: {e}", heights_path(&path)))?;
             let heights: Vec<f32> = hbytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
 
             *water = default(); // scenes saved before water bodies existed carry none
             spawner.commands.insert_resource(graph);
+            spawner.commands.insert_resource(crate::terrain_surfaces::TerrainSurfaces::default());
+            spawner.commands.insert_resource(crate::environment::Environment::default());
+            spawner.commands.insert_resource(crate::simulation::SimulationState::default());
             for res in &dw.resources {
-                if let Some(b) = res.represents::<crate::water::WaterBodies>().then(|| crate::water::WaterBodies::from_reflect(res.as_ref())).flatten() {
-                    *water = crate::water::WaterBodies { items: b.items, ..default() };
+                if let Some(state)=res.represents::<crate::simulation::SimulationState>().then(||crate::simulation::SimulationState::from_reflect(res.as_ref())).flatten() {
+                    spawner.commands.insert_resource(state);
+                } else if let Some(env) = res.represents::<crate::environment::Environment>().then(|| crate::environment::Environment::from_reflect(res.as_ref())).flatten() {
+                    spawner.commands.insert_resource(env);
+                } else if let Some(s) = res.represents::<crate::terrain_surfaces::TerrainSurfaces>().then(|| crate::terrain_surfaces::TerrainSurfaces::from_reflect(res.as_ref())).flatten() {
+                    spawner.commands.insert_resource(s);
+                } else if let Some(b) = res.represents::<crate::water::WaterBodies>().then(|| crate::water::WaterBodies::from_reflect(res.as_ref())).flatten() {
+                    *water = crate::water::WaterBodies { items: b.items, material: b.material, ..default() };
                 } else if let Some(s) = res.represents::<WorldSpec>().then(|| WorldSpec::from_reflect(res.as_ref())).flatten() {
                     *spec = s;
                     spec.sanitize();
@@ -360,19 +371,20 @@ mod tests {
 
     #[test]
     fn graph_and_quillshade_binding_roundtrip() {
-        use crate::quillshade_bridge::QuillshadeBinding;
+        use crate::quillshade_bridge::{QuillshadeBinding, MaterialParameter, MaterialValue};
         let mut app = test_app();
         let graph = StudioGraph::template(true);
         app.register_type::<StudioGraph>().insert_resource(graph.clone())
             .register_type::<QuillshadeBinding>().register_scene_component::<QuillshadeBinding>();
-        let e = app.world_mut().spawn((Transform::default(), UserProp { kind: "pine".into() }, QuillshadeBinding { material: "env/water".into() })).id();
+        let binding = QuillshadeBinding { material: "env/water".into(), layout: "SG_LAYOUT_test".into(), parameters: vec![MaterialParameter { name: "inp_deep_color".into(), value: MaterialValue::Vector([0.1, 0.2, 0.3, 1.0]) }] };
+        let e = app.world_mut().spawn((Transform::default(), UserProp { kind: "pine".into() }, binding.clone())).id();
         let dw = build_dynamic_world(app.world(), std::iter::once(e));
         let registry = app.world().resource::<AppTypeRegistry>().clone();
         let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
         let mut server = app.world().resource::<AssetServer>().clone();
         let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
         assert!(back.resources.iter().any(|r| StudioGraph::from_reflect(r.as_ref()) == Some(graph.clone())));
-        assert!(back.entities[0].components.iter().any(|c| QuillshadeBinding::from_reflect(c.as_ref()).is_some_and(|b| b.material == "env/water")));
+        assert!(back.entities[0].components.iter().any(|c| QuillshadeBinding::from_reflect(c.as_ref()) == Some(binding.clone())));
     }
 
     #[test]
@@ -413,16 +425,39 @@ mod tests {
     #[test]
     fn water_bodies_roundtrip_in_scene() {
         use crate::water::{WaterBodies, WaterBody};
+        use crate::quillshade_bridge::{QuillshadeBinding, MaterialParameter, MaterialValue};
         let mut app = test_app();
         app.register_type::<WaterBodies>().register_type::<WaterBody>().init_resource::<WaterBodies>();
-        app.world_mut().resource_mut::<WaterBodies>().items = vec![WaterBody { seed: [3.0, -4.0], level: 9.5 }];
+        app.register_type::<QuillshadeBinding>();
+        let binding = QuillshadeBinding { material: "env/water".into(), parameters: vec![MaterialParameter { name: "inp_color".into(), value: MaterialValue::Vector([0.1, 0.2, 0.3, 1.0]) }], ..default() };
+        app.world_mut().resource_mut::<WaterBodies>().items = vec![WaterBody { seed: [3.0, -4.0], level: 9.5, material: Some(binding.clone()) }];
+        app.world_mut().resource_mut::<WaterBodies>().material = Some(binding.clone());
         let dw = build_dynamic_world(app.world(), std::iter::empty());
         let registry = app.world().resource::<AppTypeRegistry>().clone();
         let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
         let mut server = app.world().resource::<AssetServer>().clone();
         let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
         let got = back.resources.iter().filter(|r| r.represents::<WaterBodies>()).find_map(|r| WaterBodies::from_reflect(r.as_ref())).expect("bodies saved");
-        assert_eq!(got.items, vec![WaterBody { seed: [3.0, -4.0], level: 9.5 }]);
+        assert_eq!(got.items, vec![WaterBody { seed: [3.0, -4.0], level: 9.5, material: Some(binding.clone()) }]);
+        assert_eq!(got.material, Some(binding));
+    }
+
+    #[test]
+    fn terrain_surface_slots_roundtrip_in_scene() {
+        use crate::{terrain_surfaces::TerrainSurfaces, quillshade_bridge::QuillshadeBinding};
+        let mut app = test_app();
+        app.register_type::<TerrainSurfaces>().register_type::<QuillshadeBinding>();
+        let binding = QuillshadeBinding { material: "env/rock_wet".into(), ..default() };
+        let mut surfaces = TerrainSurfaces { master: Some(binding.clone()), ..default() };
+        surfaces.layers[5] = Some(binding);
+        app.insert_resource(surfaces.clone());
+        let dw = build_dynamic_world(app.world(), std::iter::empty());
+        let registry = app.world().resource::<AppTypeRegistry>().clone();
+        let json = dynamic_world_to_json(&dw, &registry.read()).unwrap();
+        let mut server = app.world().resource::<AssetServer>().clone();
+        let back = dynamic_world_from_json(&json, &registry.read(), &mut server).unwrap();
+        let got = back.resources.iter().find_map(|r| r.represents::<TerrainSurfaces>().then(|| TerrainSurfaces::from_reflect(r.as_ref())).flatten()).unwrap();
+        assert_eq!(got, surfaces);
     }
 
     #[test]

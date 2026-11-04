@@ -33,6 +33,7 @@ impl Plugin for UiPlugin {
 
 #[derive(SystemParam)]
 pub struct UiData<'w, 's> {
+    pub graph: Res<'w, crate::arc_core::StudioGraph>,
     pub spec: ResMut<'w, WorldSpec>,
     pub wh: ResMut<'w, UndoHistory<WorldSpec>>,
     pub sh: ResMut<'w, SceneHistory>,
@@ -51,6 +52,7 @@ pub struct UiData<'w, 's> {
     pub thumbs: ResMut<'w, crate::thumbnails::Thumbnails>,
     pub gset: ResMut<'w, crate::level_builder::GridSettings>,
     pub water: ResMut<'w, crate::water::WaterBodies>,
+    pub terrain_surfaces: Res<'w, crate::terrain_surfaces::TerrainSurfaces>,
     pub lbs: ResMut<'w, crate::level_builder::LevelBuilderState>,
     pub order: Res<'w, UndoOrder>,
     pub th: Res<'w, TerrainHistory>,

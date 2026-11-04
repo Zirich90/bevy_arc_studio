@@ -142,14 +142,29 @@ impl NavGrid {
     /// Like `build`, with the water surface looked up per world point (x, z) so water bodies can differ from the global level.
     pub fn build_with(grid: &HeightfieldGrid, water_at: &dyn Fn(f32, f32) -> f32, obstacles: &[Footprint], agent_radius: f32) -> Self {
         let mut g = Self::new(grid.size, NAV_CELL);
+        let bounds = Vec2::splat(grid.size * 0.5);
+        g.update_region(grid, water_at, &[], agent_radius, -bounds, bounds);
+        for footprint in obstacles {
+            g.block(footprint, agent_radius);
+        }
+        g
+    }
+
+    pub fn update_region(
+        &mut self, grid: &HeightfieldGrid, water_at: &dyn Fn(f32, f32) -> f32,
+        obstacles: &[Footprint], agent_radius: f32, min: Vec2, max: Vec2,
+    ) {
+        let (Some(lo), Some(hi)) = (self.clamped_cell(min), self.clamped_cell(max)) else { return };
         let (cos_block, cos_diff) = (MAX_SLOPE_DEG.to_radians().cos(), DIFFICULT_SLOPE_DEG.to_radians().cos());
-        for j in 0..g.n {
-            for i in 0..g.n {
-                let c = g.cell_center(i, j);
+        let inflate = agent_radius + self.cell * 0.25;
+        for j in lo.1..=hi.1 {
+            for i in lo.0..=hi.0 {
+                let c = self.cell_center(i, j);
                 let h = grid.sample_height(c.x, c.y);
                 let ny = grid.sample_normal(c.x, c.y).y;
                 let water_level = water_at(c.x, c.y);
-                g.cells[j * g.n + i] = if ny < cos_block || h < water_level - WADE_DEPTH {
+                self.cells[j * self.n + i] = if ny < cos_block || h < water_level - WADE_DEPTH
+                    || obstacles.iter().any(|fp| fp.contains(c, inflate)) {
                     NavCell::Blocked
                 } else if h < water_level || ny < cos_diff {
                     NavCell::Difficult
@@ -158,10 +173,6 @@ impl NavGrid {
                 };
             }
         }
-        for fp in obstacles {
-            g.block(fp, agent_radius);
-        }
-        g
     }
 
     /// Mark every cell touched by `fp` grown by `inflate` (plus a quarter cell so thin props never slip between samples).
@@ -482,6 +493,44 @@ mod tests {
         assert_eq!(nav.at(Vec2::new(12.0, 0.0)), NavCell::Blocked, "steep");
         let dry = NavGrid::build(&h, -0.1, &[], AGENT_RADIUS);
         assert_eq!(dry.at(Vec2::new(0.0, 0.0)), NavCell::Free);
+    }
+
+    #[test]
+    fn dirty_raster_changes_theta_star_route() {
+        let mut terrain = HeightfieldGrid::new(65, 32.0);
+        let mut nav = NavGrid::build(&terrain, 0.0, &[], AGENT_RADIUS);
+        let start = Vec2::new(-10.0, 0.0);
+        let goal = Vec2::new(10.0, 0.0);
+        let before = nav.find_path(start, goal).unwrap();
+        for z in 26..=38 {
+            for x in 28..=36 {
+                let index = terrain.idx(x, z);
+                terrain.heights[index] = -2.0;
+            }
+        }
+        nav.update_region(&terrain, &|_, _| 0.0, &[], AGENT_RADIUS,
+            Vec2::new(-4.0, -5.0), Vec2::new(4.0, 5.0));
+        let after = nav.find_path(start, goal).unwrap();
+        let rebuilt = NavGrid::build(&terrain, 0.0, &[], AGENT_RADIUS);
+        assert_eq!(nav.cells, rebuilt.cells);
+        assert_ne!(format!("{before:?}"), format!("{after:?}"));
+    }
+
+    #[test]
+    fn localized_flood_changes_route_without_changing_terrain() {
+        let terrain = HeightfieldGrid::new(65, 32.0);
+        let mut nav = NavGrid::build(&terrain, 0.0, &[], AGENT_RADIUS);
+        let start = Vec2::new(-10.0, 0.0);
+        let goal = Vec2::new(10.0, 0.0);
+        let before = nav.find_path(start, goal).unwrap();
+        let flooded = |x: f32, z: f32| {
+            if x.abs() < 2.0 && z.abs() < 3.0 { 1.0 } else { 0.0 }
+        };
+        nav.update_region(&terrain, &flooded, &[], AGENT_RADIUS, Vec2::splat(-4.0), Vec2::splat(4.0));
+        let rebuilt = NavGrid::build_with(&terrain, &flooded, &[], AGENT_RADIUS);
+        assert_eq!(nav.cells, rebuilt.cells);
+        assert_eq!(nav.at(Vec2::ZERO), NavCell::Blocked);
+        assert_ne!(format!("{before:?}"), format!("{:?}", nav.find_path(start, goal).unwrap()));
     }
 
     #[test]

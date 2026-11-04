@@ -1,0 +1,2 @@
+# I2.05 prompt
+Complete the typed/versioned StudioGraph document and v1 value:f32 migration, then deterministic CPU Noise -> HydraulicErosion -> Temperature -> FluidFlow -> Biology -> Scatter evaluation. Parameters must affect real outputs. Keep pure calculations in src/arc_core.rs. Persist/Undo/PIE the authoritative model and runtime state; validate domain ports, finite ranges and bounded workloads. Add targeted deterministic/topology/migration tests and BRP scenarios with viewed screenshots. Full I2 remains active until physics, PF2e/navigation and Graph UX also pass.

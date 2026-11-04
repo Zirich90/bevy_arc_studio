@@ -23,7 +23,7 @@ bevy = { version = "0.20.0", features = [
 bevy_egui = "0.43.1"
 bevy_brp_extras = "0.23.0" # CLAUDE.md pinned 0.20.0, but 0.20.x targets Bevy 0.19; 0.23 targets Bevy 0.20
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 noise = "0.9"
 rand = "0.8"
 quillshade = { path = "crates/quillshade" }

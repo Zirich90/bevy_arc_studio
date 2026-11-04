@@ -18,12 +18,71 @@ struct GraphView {
 }
 
 pub fn replace(w: &mut World, graph: StudioGraph) -> Result<String, String> {
-    graph.validate()?;
+    let graph = graph.migrate()?;
+    if *w.resource::<StudioGraph>() == graph {
+        return Ok("Graph unchanged".into());
+    }
     let before = operators::snap_resource::<StudioGraph>(w);
     w.insert_resource(graph);
     let after = operators::snap_resource::<StudioGraph>(w);
     operators::record_edit(w, "Edit node graph", before, after, false);
     Ok("graph updated".into())
+}
+
+pub fn save(w: &World, path: &str) -> Result<String, String> {
+    let document = ron::ser::to_string_pretty(w.resource::<StudioGraph>(), Default::default())
+        .map_err(|error| error.to_string())?;
+    std::fs::write(path, document).map_err(|error| error.to_string())?;
+    Ok(format!("Graph saved to {path}"))
+}
+
+pub fn auto_layout(w: &mut World) -> Result<String, String> {
+    let mut graph = w.resource::<StudioGraph>().clone().migrate()?;
+    let mut depth = std::collections::BTreeMap::new();
+    for _ in 0..graph.nodes.len() {
+        for edge in &graph.edges {
+            let next = depth.get(&edge.from).copied().unwrap_or(0usize) + 1;
+            let target = depth.entry(edge.to).or_insert(0);
+            *target = (*target).max(next);
+        }
+    }
+    let mut rows = std::collections::BTreeMap::new();
+    for node in &mut graph.nodes {
+        let column = depth.get(&node.id).copied().unwrap_or(0);
+        let row = rows.entry(column % 3).or_insert(0usize);
+        node.position = [12.0 + (column % 3) as f32 * 213.0, *row as f32 * 150.0];
+        *row += 1;
+    }
+    replace(w, graph)
+}
+
+pub fn add_node(w: &mut World, kind: crate::arc_core::StudioNodeKind) -> Result<String, String> {
+    let mut graph = w.resource::<StudioGraph>().clone();
+    let id = graph.nodes.iter().map(|node| node.id).max().unwrap_or(0)
+        .checked_add(1).ok_or("No available node ID")?;
+    let row = graph.nodes.len() / 3;
+    let column = graph.nodes.len() % 3;
+    graph.nodes.push(crate::arc_core::StudioGraphNode {
+        id,
+        kind,
+        position: [12.0 + column as f32 * 213.0, row as f32 * 150.0],
+        value: 1.0,
+        params: crate::arc_core::NodeParameters::for_kind(kind),
+    });
+    replace(w, graph)
+}
+
+pub fn load(w: &mut World, path: &str) -> Result<String, String> {
+    use std::io::Read;
+    const MAX_BYTES: u64 = 1_048_576;
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut document = String::new();
+    file.take(MAX_BYTES + 1).read_to_string(&mut document).map_err(|error| error.to_string())?;
+    if document.len() as u64 > MAX_BYTES {
+        return Err("Graph file exceeds 1 MiB".into());
+    }
+    let graph = ron::from_str(&document).map_err(|error| error.to_string())?;
+    replace(w, graph)
 }
 
 fn node_id(w: &World, mut e: Entity) -> Option<u32> {
@@ -146,12 +205,14 @@ fn sync_canvas(w: &mut World) {
     if open && view.root.is_none() {
         let root = w.commands().spawn_scene(bsn! {
             @kit::canvas()
-            Node { position_type: PositionType::Absolute, left: px(285), top: px(115), width: percent(57), height: percent(68) }
+            bevy_noodle::style::EdgeStyle { below_nodes: true, ..bevy_noodle::style::EdgeStyle::default() }
+            CanvasView { zoom: 0.8, ..CanvasView::default() }
+            Node { position_type: PositionType::Absolute, left: px(275), top: px(270), width: percent(55), height: percent(40) }
             GlobalZIndex(30)
-            BackgroundColor(Color::srgb(0.055, 0.065, 0.08))
+            BackgroundColor(Color::NONE)
         }).id();
         w.flush();
-        w.entity_mut(root).observe(applied).observe(connection);
+        w.entity_mut(root).remove::<bevy_noodle::style::CanvasGrid>().observe(applied).observe(connection);
         for n in &doc.nodes {
             let title = format!("{}: {:?}", n.id, n.kind);
             let ty = PortType::named(if n.kind.event_pipeline() {
@@ -200,6 +261,31 @@ fn sync_canvas(w: &mut World) {
     w.insert_resource(view);
 }
 
+fn parameter_fields(ui: &mut egui::Ui, params: &mut crate::arc_core::NodeParameters) {
+    use crate::arc_core::NodeParameters::*;
+    macro_rules! fields {
+        ($($value:ident),+ $(,)?) => {{ $(
+            ui.horizontal(|ui| {
+                ui.label(stringify!($value).replace('_', " "));
+                ui.add(egui::DragValue::new($value));
+            });
+        )+ }};
+    }
+    match params {
+        Noise { seed, frequency, warp } => fields!(seed, frequency, warp),
+        HydraulicErosion { seed, droplets, thermal_iterations } => fields!(seed, droplets, thermal_iterations),
+        Temperature { ambient_c, lapse_c_per_m, diffusion } => fields!(ambient_c, lapse_c_per_m, diffusion),
+        FluidFlow { rain_depth_m, conductivity, iterations } => fields!(rain_depth_m, conductivity, iterations),
+        Biology { growth, min_water_m, optimum_c } => fields!(growth, min_water_m, optimum_c),
+        Scatter { seed, density, spacing_m } => fields!(seed, density, spacing_m),
+        Fireball { energy_j, radius_m } => fields!(energy_j, radius_m),
+        IgniteOil { ignition_c } => fields!(ignition_c),
+        MeltSnow { latent_heat_j_per_kg } => fields!(latent_heat_j_per_kg),
+        Granular { talus_degrees, iterations } => fields!(talus_degrees, iterations),
+        InvalidateNavigation | Legacy => {}
+    }
+}
+
 fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::Filter) {
     use crate::mcp_commands::StudioCommand as Cmd;
     let open = d.studio.tool == "node_graph";
@@ -223,6 +309,51 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
             });
         }
     }
+    if ui.button("Evaluate world graph").clicked() {d.queue.push(Cmd::EvaluateStudioGraph {target:None});}
+    ui.menu_button("Add node", |ui| {
+        use crate::arc_core::StudioNodeKind::*;
+        for kind in [Noise, HydraulicErosion, Temperature, FluidFlow, Biology, Scatter,
+            Fireball, IgniteOil, MeltSnow, Granular, InvalidateNavigation] {
+            if ui.button(format!("{kind:?}")).clicked() {
+                d.queue.push(Cmd::AddStudioGraphNode { kind });
+                ui.close();
+            }
+        }
+    });
+    ui.collapsing("Node parameters", |ui| {
+        for node in &d.graph.nodes {
+            ui.push_id(node.id, |ui| {
+                ui.collapsing(format!("{}: {:?}", node.id, node.kind), |ui| {
+                    let id = ui.id().with("parameter_draft");
+                    let (original, mut draft) = ui.data_mut(|data| data.get_temp::<(
+                        crate::arc_core::NodeParameters, crate::arc_core::NodeParameters,
+                    )>(id)).filter(|(original, _)| *original == node.params)
+                        .unwrap_or_else(|| (node.params.clone(), node.params.clone()));
+                    parameter_fields(ui, &mut draft);
+                    if ui.add_enabled(draft != original, egui::Button::new("Apply")).clicked() {
+                        d.queue.push(Cmd::SetStudioGraphParameters { id: node.id, params: draft.clone() });
+                    }
+                    ui.data_mut(|data| data.insert_temp(id, (original, draft)));
+                });
+            });
+        }
+    });
+    let path_id = ui.id().with("studio_graph_path");
+    let mut path = ui.data_mut(|data| data.get_temp::<String>(path_id))
+        .unwrap_or_else(|| "scenes/studio_graph.ron".into());
+    ui.text_edit_singleline(&mut path);
+    ui.data_mut(|data| data.insert_temp(path_id, path.clone()));
+    ui.horizontal(|ui| {
+        if ui.button("Auto layout").clicked() {
+            d.queue.push(Cmd::AutoLayoutStudioGraph);
+        }
+        if ui.button("Save RON").clicked() {
+            d.queue.push(Cmd::SaveStudioGraph { path: path.clone() });
+        }
+        if ui.button("Load RON").clicked() {
+            d.queue.push(Cmd::LoadStudioGraph { path });
+        }
+    });
     ui.weak("Drag nodes and ports. Ctrl+Z / Ctrl+Y use Studio history. Domain evaluators are separate runtime adapters.");
 }
 

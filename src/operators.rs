@@ -428,6 +428,10 @@ pub fn remove_component(w: &mut World, target: &Target, component: &str) -> Resu
     if before.value.is_none() {
         return Err(format!("entity has no {component}"));
     }
+    if tid == TypeId::of::<crate::quillshade_bridge::QuillshadeBinding>() && w.get::<crate::prefab_variants::PrefabMember>(e).is_some() {
+        drop(reg);
+        return crate::quillshade_bridge::write_member_binding(w, e, None).ok_or("prefab member disappeared")?;
+    }
     let rc = reg.get_type_data::<ReflectComponent>(tid).ok_or("not a component")?;
     rc.remove(&mut w.get_entity_mut(e).map_err(|e| e.to_string())?);
     drop(reg);

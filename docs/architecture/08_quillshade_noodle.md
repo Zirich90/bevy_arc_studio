@@ -53,6 +53,8 @@ flowchart LR
 - On<ConnectionCheck>: проверка домена, направления, ёмкости входа и DAG; On<EditApplied>: запись финального состояния в ComponentHistory.
 - Graph edits используют существующий UndoOrder. Промежуточный drag не пишет историю; replay не создаёт новую транзакцию.
 - Graph resource включён в сцены и snapshot PIE, транзиентные UI entities туда не входят.
+- I2.02: typed numeric overrides f32/Vec4, layout guards, отдельные material handles и rebasing Hot Reload без потери overrides; linked-member edits записываются в PrefabOverrides.
+- Canvas без фонового прямоугольника и сетки, масштаб нод 80%, компактные шаблоны слева под HUD; HUD и панель отдельной игры не скрываются при открытии графа.
 
 ## Контракты данных
 
@@ -60,9 +62,10 @@ flowchart LR
 
 `*.material.ron`, `*.environment.ron`, `project.ron` сохраняют upstream schema. Их source of truth — Quillshade.
 `baked.ron` и WESL — generated asset data. Значения hot reload допускаются только в прежнем SG_LAYOUT; новая структура требует regen/catalog/check/restart.
-Параметры материалов пока редактируются в исходном Quillshade. Reflect-инспектор студии меняет binding, а не автоматически поля arbitrary GPU material.
+Reflect-инспектор студии редактирует типизированные numeric overrides generated uniforms. `QuillshadeBinding` хранит `material`, `layout` и список `parameters` (`Float`/`Vector`); padding, неизвестные имена, неподходящие типы и non-finite значения отклоняются. Структура материала по-прежнему меняется через исходный Quillshade, regen/catalog/check/restart.
 
 BRP-проверка 2026-11-02: 11 материалов, assign/Undo/Redo, graph Undo/Redo, PIE rollback и scene roundtrip корня linked-префаба + level tile PASS. Прямой binding на дочернем элементе linked-префаба не сохраняется сценой: члены пересоздаются из prefab source. Назначать корню для наследования; сохранение индивидуального material override члена требует отдельного контракта PrefabOverrides. Rust: 142 теста PASS, один doctest ignored. Для снимков истории StudioGraph и QuillshadeBinding явно зарегистрирован Reflect Clone.
+Обновление I2.02 от 2026-11-03: ограничение прямого member binding устранено маршрутизацией assign/parameters/Reflect/remove через persistent PrefabOverrides корня. BRP подтвердил Undo/Redo, remove, scene roundtrip и Stop PIE индивидуального member override; изменение базового RON обновило независимые instances с сохранением override. Историческая проверка выше описывает состояние каркаса до I2.02.
 Не обещать runtime-изменение структуры Rust без пересборки.
 
 ```json
@@ -74,7 +77,7 @@ BRP-проверка 2026-11-02: 11 материалов, assign/Undo/Redo, grap
 ```
 
 Команды идут через StudioCommandQueue, результаты — CommandResults. Для визуальной проверки использовать `brp_extras/screenshot`.
-Assign и Replace undoable. Переключение environment пока runtime operation, не транзакция и не сохранённый выбор сцены.
+Assign и Replace undoable. I2.04: environment intent хранится в reflected resource (preset, duration, elapsed, from-values JSON), сохраняется в сцене и PIE, операции записываются в ресурсный Undo. I2.04 принят: BRP Undo/Redo/PIE/scene resume/Pause/managed-light release PASS; camera ownership восстановлен. Переход линейный, app-owned sampler использует публичный EnvironmentValues::interpolate и LightRuntime::apply_manifest_data; generated output не меняется. Скриншоты day/night/restored просмотрены.
 
 ### Граф
 
@@ -91,13 +94,14 @@ Assign и Replace undoable. Переключение environment пока runtim
 
 Stable node ids `u32`; позиции в graph units. Один вход/выход domain state либо world effect; выход допускает fan-out.
 Лимит 512 nodes / 1024 edges; версия 1; finite numeric values; DAG; source nodes без входа.
-`value` — минимальное сохраняемое поле UI-модели, не окончательная schema simulation parameters. До evaluator ADR заменить его типизированными settings с миграцией версии.
-Граф определяет топологию. Выполнение `Temperature`, `FluidFlow`, `Biology`, `Granular` пока не реализовано.
+`value` — поле совместимости v1; схема v2 использует типизированный enum `NodeParameters`. Импорт v1 выполняется через `StudioGraph::migrate` перед Replace/scene load: frequency/ambient/droplets/density/growth сохраняют основные величины, нормализованные legacy effect values масштабируются к параметрам по умолчанию. Пример выше — legacy import; новые templates записывают version 2 и params. I2.05 принят. CPU evaluator применяет Noise, эрозию, температуру, потоки, Biology и Scatter к сцене. BRP проверил миграцию v1, совпадение с mesh и объектами, Undo/Redo, PIE и сохранение. См. [аудит I2.05](../clean_room_audit/logs/stage_i2_05_log.md).
+Фиксированный шаг мультифизики в работе. Статический расчёт графа и runtime физики имеют отдельные проверки.
 
 ### Целевой runtime contract (следующие этапы)
 
 - WorldPipeline: Noise → HydraulicErosion → Temperature → FluidFlow → Biology → Scatter.
 - WorldState: grid id/revision; heights m; temperature K; water/lava/oil mass kg и velocity m/s; snow/ice kg; biomass kg/m².
+  В CPU-модели снег и лёд составляют общую твёрдую фазу воды. Её масса вычисляется из запаса воды и энтальпии ячейки. MeltSnow меняет локальную удельную теплоту плавления, сохраняя массу и энергию. Температура внутри backend хранится в °C, эквивалент в K получается прибавлением 273,15. Запас биомассы хранится в кг на ячейку, плотность получается делением на её площадь.
 - EffectPipeline: Fireball → IgniteOil / MeltSnow / Granular → InvalidateNavigation. Для параллельных реакций использовать fan-out, не считать последовательность обязательной.
 - WorldEffect: event id + session id + simulation tick + source id + position metres + radius metres + energy joules.
 - PF2e публикует эффект только после успешного, не прерванного каста. Игровые feet переводятся через UnitScale; формула энергии — отдельное продуктовое решение.
@@ -125,9 +129,9 @@ Stable node ids `u32`; позиции в graph units. Один вход/выхо
 ### Последовательность реализации I2
 
 1. Принять подключение: cargo check/test, BRP assign/remove/undo/redo, native drag/connect, screenshot обоих panel modes.
-2. Material parameters: типизированные отражённые overrides generated uniforms; отдельный instance handle, отсутствие изменения чужих объектов, guards layout.
-3. Surface bindings: отдельные terrain master / splat layers / basin / tile / prefab slots. Текущий `SPLAT_LAYERS=6` (sand, gravel, grass, moss, rock, snow), несмотря на пять слоёв в исходном описании. Нужен shader interface с фактическим числом splat weights; для разных водоёмов — раздельные draw sections или texture indirection. Текущий единый water mesh нельзя честно назвать per-basin material binding.
-4. Environment ownership: persisted preset/transition, undo/PIE rollback, возврат всех camera/IBL/skybox/light components без остаточных managed lights.
+2. Material parameters: типизированные отражённые overrides generated uniforms; отдельный instance handle, отсутствие изменения чужих объектов, guards layout. Реализовано в I2.02: `QuillshadeBinding.layout/parameters`, numeric f32/Vec4, private handles, rebasing после baked Hot Reload; linked-member edits сохраняются в PrefabOverrides. BRP-проверка: `scripts/verify_material_parameters_brp.ps1 -HotReload`; подготовка upstream backend: `scripts/prepare_quillshade_regen.ps1 -UpstreamRoot <clone>`. Generated output не правится вручную.
+3. Surface bindings: отдельные terrain master / splat layers / basin / tile / prefab slots. Текущий `SPLAT_LAYERS=6` (sand, gravel, grass, moss, rock, snow), несмотря на пять слоёв в исходном описании. Вода принята отдельно в I2.03: draw sections по владельцу бассейна, persistent global/per-basin binding, параметры, Undo/Redo, scene/PIE (`scripts/verify_water_materials_brp.ps1`, `stage_i2_03_water_log.md`). Terrain master + шесть layer sections приняты через `scripts/verify_terrain_materials_brp.ps1 -HotReload`: каждый слой получает собственный generated material instance; нормализованные веса задают неперекрывающиеся интервалы stochastic coverage. Studio-адаптер изменяет только загруженный WESL в памяти, generated-файлы остаются исходными. Проверены нулевой и ненулевой веса, независимость параметров, source Hot Reload, Undo/Redo и scene/PIE; скриншоты и ограничения в `stage_i2_03_terrain_log.md`. WPO сохраняет GPU-семантику исходного shader, collision принадлежит CPU terrain.
+4. Environment ownership — принят I2.04: persisted preset/duration/elapsed/from-values, Undo/Redo, PIE и scene resume; возврат camera/IBL/skybox/global/light components, managed lights удаляются. 104 library tests и BRP PASS, три screenshot просмотрены.
 5. World evaluator: сначала существующие HeightfieldGrid::generate/erode_hydraulic + Poisson scatter; затем температурные/фазовые/потоковые модели с тестами баланса массы/энергии.
 6. PF2e evaluator: успешный Fireball публикует WorldEffect; масло горит, снег тает, Granular меняет высоты; каждое действие имеет воспроизводимый тест.
 7. Навигация: dirty-region update, фактический Theta* путь до/после изменения; отсутствие тика при Pause; Stop восстанавливает все поля и историю.

@@ -68,6 +68,14 @@ fn sync_reflect(world: &mut World) {
     }
     let edits = std::mem::take(&mut world.resource_mut::<ReflectEdits>().0);
     for (e, tid, value) in edits {
+        if tid == std::any::TypeId::of::<crate::quillshade_bridge::QuillshadeBinding>()
+            && world.get::<crate::prefab_variants::PrefabMember>(e).is_some()
+        {
+            if let Some(binding) = crate::quillshade_bridge::QuillshadeBinding::from_reflect(value.as_partial_reflect()) {
+                let _ = crate::quillshade_bridge::write_binding(world, &crate::operators::Target::Entity(e), binding);
+            }
+            continue;
+        }
         let before = snap(world, e, tid);
         {
             let reg = registry.read();

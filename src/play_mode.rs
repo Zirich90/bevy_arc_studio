@@ -39,6 +39,7 @@ pub struct EntitySnap {
 #[derive(Resource, Default)]
 pub struct PlayModeSnapshot {
     pub active: bool,
+    pub session_id: u64,
     /// Mode the transition logic last acted on.
     seen: StudioMode,
     pub spec: Option<WorldSpec>,
@@ -46,6 +47,10 @@ pub struct PlayModeSnapshot {
     pub ents: Vec<EntitySnap>,
     pub heights: Vec<f32>,
     graph: Option<crate::arc_core::StudioGraph>,
+    water: Option<crate::water::WaterBodies>,
+    surfaces: Option<crate::terrain_surfaces::TerrainSurfaces>,
+    environment: Option<crate::environment::Environment>,
+    simulation: Option<crate::simulation::SimulationState>,
     world_hist: Option<UndoHistory<WorldSpec>>,
     scene_hist: Option<SceneHistory>,
     terrain_hist: Option<TerrainHistory>,
@@ -81,6 +86,7 @@ pub fn capture(w: &mut World) {
     let spec = w.get_resource::<WorldSpec>().cloned();
     let heights = w.get_resource::<TerrainGrid>().map(|g| g.0.heights.clone()).unwrap_or_default();
     let snapshot = PlayModeSnapshot {
+        session_id: w.resource::<PlayModeSnapshot>().session_id.saturating_add(1),
         active: true,
         seen: w.resource::<StudioState>().mode,
         spec,
@@ -88,6 +94,10 @@ pub fn capture(w: &mut World) {
         ents,
         heights,
         graph: w.get_resource::<crate::arc_core::StudioGraph>().cloned(),
+        water: w.get_resource::<crate::water::WaterBodies>().cloned(),
+        surfaces: w.get_resource::<crate::terrain_surfaces::TerrainSurfaces>().cloned(),
+        environment: w.get_resource::<crate::environment::Environment>().cloned(),
+        simulation: w.get_resource::<crate::simulation::SimulationState>().cloned(),
         world_hist: w.get_resource::<UndoHistory<WorldSpec>>().cloned(),
         scene_hist: w.get_resource::<SceneHistory>().cloned(),
         terrain_hist: w.get_resource::<TerrainHistory>().cloned(),
@@ -104,12 +114,20 @@ pub fn capture(w: &mut World) {
 pub fn restore(w: &mut World) -> String {
     crate::behavior::reset_session(w);
     let mut s = match w.get_resource_mut::<PlayModeSnapshot>() {
-        Some(mut s) if s.active => std::mem::take(&mut *s),
+        Some(mut s) if s.active => {
+            let snapshot = std::mem::take(&mut *s);
+            s.session_id = snapshot.session_id;
+            snapshot
+        }
         _ => return "Stop: no snapshot".into(),
     };
     let ids = tracked_types(w);
     let known: HashSet<Entity> = s.ents.iter().map(|e| e.entity).collect();
     if let Some(graph) = s.graph.take() { w.insert_resource(graph); }
+    if let Some(water) = s.water.take() { w.insert_resource(water); }
+    if let Some(surfaces) = s.surfaces.take() { w.insert_resource(surfaces); }
+    if let Some(environment) = s.environment.take() { w.insert_resource(environment); }
+    if let Some(simulation) = s.simulation.take() { w.insert_resource(simulation); }
 
     // spawned during play
     let strays: Vec<Entity> = {
@@ -246,6 +264,10 @@ mod tests {
             .insert_resource(crate::arc_core::StudioGraph::template(false))
             .init_resource::<EditorSelection>()
             .init_resource::<WorldSpec>()
+            .init_resource::<crate::water::WaterBodies>()
+            .init_resource::<crate::terrain_surfaces::TerrainSurfaces>()
+            .init_resource::<crate::environment::Environment>()
+            .init_resource::<crate::simulation::SimulationState>()
             .init_resource::<UndoHistory<WorldSpec>>()
             .init_resource::<SceneHistory>()
             .init_resource::<TerrainHistory>()
@@ -287,6 +309,10 @@ mod tests {
         let stray = w.spawn((so(99), Transform::default())).id();
         w.resource_mut::<SceneHistory>().record("play edit", step(prop, 1.0), step(prop, 2.0));
         w.resource_mut::<WorldSpec>().time_of_day = 0.123;
+        w.resource_mut::<crate::water::WaterBodies>().material = Some(crate::quillshade_bridge::QuillshadeBinding { material: "env/water".into(), ..default() });
+        w.resource_mut::<crate::environment::Environment>().preset = Some("night".into());
+        w.resource_mut::<crate::simulation::SimulationState>().tick=42;
+        w.resource_mut::<crate::terrain_surfaces::TerrainSurfaces>().layers[3] = Some(crate::quillshade_bridge::QuillshadeBinding { material: "env/rock_wet".into(), ..default() });
         app.update();
         set_mode(&mut app, StudioMode::Paused);
         assert!(app.world().resource::<PlayModeSnapshot>().active, "Playing -> Paused keeps the snapshot");
@@ -302,6 +328,10 @@ mod tests {
         assert!(w.get_entity(fx).is_err() && w.get_entity(stray).is_err());
         assert_eq!(w.resource::<SceneHistory>().undo_len(), 1, "UndoHistory is exactly as before Play");
         assert_ne!(w.resource::<WorldSpec>().time_of_day, 0.123);
+        assert!(w.resource::<crate::water::WaterBodies>().material.is_none(), "Stop restores water surface bindings");
+        assert_eq!(w.resource::<crate::simulation::SimulationState>().tick,0,"Stop restores CPU simulation clock");
+        assert!(w.resource::<crate::environment::Environment>().preset.is_none(), "Stop restores environment");
+        assert!(w.resource::<crate::terrain_surfaces::TerrainSurfaces>().layers[3].is_none(), "Stop restores splat surface bindings");
         assert!(!w.resource::<PlayModeSnapshot>().active);
         assert!(w.resource::<StudioState>().status.starts_with("Stop: scene restored"));
     }
@@ -312,11 +342,16 @@ mod tests {
         let w = app.world_mut();
         let door = w.spawn((so(1), Transform::default(), Door::default())).id();
         assert!(cmd_set_play_mode(w, StudioMode::Playing).unwrap().starts_with("Play:"));
+        let first_session = w.resource::<PlayModeSnapshot>().session_id;
         w.get_mut::<Door>(door).unwrap().is_open = true;
         assert!(cmd_set_play_mode(w, StudioMode::Paused).unwrap().starts_with("mode Paused"));
+        assert_eq!(w.resource::<PlayModeSnapshot>().session_id, first_session);
         assert!(cmd_set_play_mode(w, StudioMode::Edit).unwrap().starts_with("Stop: scene restored"));
         assert!(!w.get::<Door>(door).unwrap().is_open);
         assert!(cmd_set_play_mode(w, StudioMode::Edit).unwrap().contains("unchanged"));
+        assert_eq!(w.resource::<PlayModeSnapshot>().session_id, first_session);
+        cmd_set_play_mode(w, StudioMode::Playing).unwrap();
+        assert_eq!(w.resource::<PlayModeSnapshot>().session_id, first_session + 1);
     }
 
     #[test]

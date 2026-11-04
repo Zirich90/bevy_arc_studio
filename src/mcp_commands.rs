@@ -28,10 +28,19 @@ use crate::world_io::{SceneIo, SceneIoQueue, is_reflect_path};
 pub enum StudioCommand {
     /// Generated 3D material binding; undoable, reflected, included in scene/prefab/PIE snapshots.
     AssignQuillshadeMaterial { target: Target, material: String },
+    SetQuillshadeParameters { target: Target, layout: String, parameters: Vec<crate::quillshade_bridge::MaterialParameter> },
+    SetWaterMaterial { seed: Option<[f32; 2]>, binding: Option<crate::quillshade_bridge::QuillshadeBinding> },
     /// Immediate generated environment preset (domain-relative path, e.g. day).
     SetQuillshadeEnvironment { preset: String },
+    TransitionEnvironment { preset: Option<String>, duration: f32 },
     /// Validated application-owned graph RON; one shared undo transaction.
     ReplaceStudioGraph { ron: String },
+    SaveStudioGraph { path: String },
+    LoadStudioGraph { path: String },
+    AutoLayoutStudioGraph,
+    AddStudioGraphNode { kind: crate::arc_core::StudioNodeKind },
+    SetStudioGraphParameters { id: u32, params: crate::arc_core::NodeParameters },
+    EvaluateStudioGraph { target: Option<u32> },
     SetGraphPanel { open: bool },
     /// Catalog, graph document and explicit runtime capability status for agents.
     DescribeIntegration,
@@ -101,7 +110,14 @@ pub enum StudioCommand {
     /// Row of walls from `from` along the dominant axis to `to`; one undo step.
     BuildWallLine { from: [i32; 2], to: [i32; 2], floor: i32, style: WallStyle },
     /// One tile at grid cell `pos = [x, storey, z]`. Replaces the tile in the same slot (wall→doorway); `facing`/`style` None inherit the wall there.
-    PlaceLevelTile { kind: TileKind, pos: [i32; 3], facing: Option<u8>, style: Option<WallStyle> },
+    PlaceLevelTile {
+        kind: TileKind,
+        pos: [i32; 3],
+        #[reflect(default)]
+        facing: Option<u8>,
+        #[reflect(default)]
+        style: Option<WallStyle>,
+    },
     /// Brush stroke over many cells (floor paint, or `erase` = remove the wall layer / floor of each cell); one undo step.
     PaintLevelTiles { kind: TileKind, cells: Vec<[i32; 3]>, style: WallStyle, erase: bool },
     /// Open/close (`open: None` toggles) the door in a cell; locked doors refuse to open; undoable.
@@ -110,6 +126,7 @@ pub enum StudioCommand {
     SetGrid { enabled: Option<bool>, cell_size: Option<f32>, floor_level: Option<i32>, floor_height: Option<f32>, angle_snap_deg: Option<f32> },
     /// Own water level for the basin at world (x, z): fills a moat or drains a pond without touching the global level. `level: None` removes that body's override; undoable.
     SetWaterBody { x: f32, z: f32, level: Option<f32> },
+    SetTerrainMaterial { layer: Option<usize>, binding: Option<crate::quillshade_bridge::QuillshadeBinding> },
     /// Bind (`enabled`) or unbind the building plane from the terrain. Unbound: storey 0 is `Y = 0`. `site` [x, z] re-grounds on the terrain there.
     SetGroundSnap { enabled: bool, site: Option<[f32; 2]> },
     /// Save the selected objects (with descendants) as `assets/prefabs/<name>.prefab.json`; `path` may be a bare name. Not a scene edit.
@@ -545,15 +562,41 @@ pub fn execute_commands(
                 queue_world_cmd(&mut spawner.commands, "SetComponent", move |w| operators::set_component(w, &target, &component, &value))
             }
             StudioCommand::AssignQuillshadeMaterial { target, material } => queue_world_cmd(&mut spawner.commands, "AssignQuillshadeMaterial", move |w| crate::quillshade_bridge::assign(w, &target, &material)),
-            StudioCommand::DescribeIntegration => queue_world_cmd(&mut spawner.commands, "DescribeIntegration", |w| Ok(serde_json::json!({
+            StudioCommand::SetQuillshadeParameters { target, layout, parameters } => queue_world_cmd(&mut spawner.commands, "SetQuillshadeParameters", move |w| crate::quillshade_bridge::set_parameters(w, &target, &layout, parameters)),
+            StudioCommand::SetWaterMaterial { seed, binding } => queue_world_cmd(&mut spawner.commands, "SetWaterMaterial", move |w| crate::water::set_material(w, seed, binding)),
+            StudioCommand::DescribeIntegration => queue_world_cmd(&mut spawner.commands, "DescribeIntegration", |w| {
+                let instances = crate::quillshade_bridge::material_instances(w);
+                let water = crate::water::describe_sections(w);
+                let terrain = crate::terrain_surfaces::describe(w);
+                Ok(serde_json::json!({
+                "material_instances": instances,
+                "water_sections": water,
+                "terrain_surfaces": w.resource::<crate::terrain_surfaces::TerrainSurfaces>(),
+                "environment": w.resource::<crate::environment::Environment>(),
+                "environment_runtime": crate::environment::describe(w),
+                "terrain_sections": terrain,
                 "materials": w.resource::<crate::editor_registry::EditorRegistry>().quillshade_materials.iter().map(|m| m.id).collect::<Vec<_>>(),
+                "material_parameters": w.resource::<crate::editor_registry::EditorRegistry>().quillshade_materials.iter().map(|m| serde_json::json!({"id":m.id,"layout":m.layout,"parameters":m.defaults})).collect::<Vec<_>>(),
                 "environments": quillshade::light::Preset::ALL.iter().map(|p| p.as_str()).collect::<Vec<_>>(),
                 "graph": w.resource::<StudioGraph>(),
+                "simulation": crate::simulation::describe(w),
                 "graph_ron": ron::to_string(w.resource::<StudioGraph>()).map_err(|e| e.to_string())?,
                 "multiphysics_evaluator": false,
-                "per_layer_and_basin_materials": false
-            }).to_string())),
+                "per_layer_and_basin_materials": true
+            }).to_string())}),
+            StudioCommand::TransitionEnvironment { preset, duration } => queue_world_cmd(&mut spawner.commands, "TransitionEnvironment", move |w| crate::environment::set(w, preset, duration)),
             StudioCommand::SetQuillshadeEnvironment { preset } => queue_world_cmd(&mut spawner.commands, "SetQuillshadeEnvironment", move |w| crate::quillshade_bridge::environment(w, &preset)),
+            StudioCommand::EvaluateStudioGraph { target } => queue_world_cmd(&mut spawner.commands,"EvaluateStudioGraph",move |w|crate::simulation::evaluate(w,target)),
+            StudioCommand::SetStudioGraphParameters { id, params } => queue_world_cmd(&mut spawner.commands, "SetStudioGraphParameters", move |w| {
+                let mut graph = w.resource::<crate::arc_core::StudioGraph>().clone();
+                let node = graph.nodes.iter_mut().find(|node| node.id == id).ok_or("Unknown node ID")?;
+                node.params = params;
+                crate::node_graph::replace(w, graph)
+            }),
+            StudioCommand::AddStudioGraphNode { kind } => queue_world_cmd(&mut spawner.commands, "AddStudioGraphNode", move |w| crate::node_graph::add_node(w, kind)),
+            StudioCommand::AutoLayoutStudioGraph => queue_world_cmd(&mut spawner.commands, "AutoLayoutStudioGraph", crate::node_graph::auto_layout),
+            StudioCommand::SaveStudioGraph { path } => queue_world_cmd(&mut spawner.commands, "SaveStudioGraph", move |w| crate::node_graph::save(w, &path)),
+            StudioCommand::LoadStudioGraph { path } => queue_world_cmd(&mut spawner.commands, "LoadStudioGraph", move |w| crate::node_graph::load(w, &path)),
             StudioCommand::ReplaceStudioGraph { ron } => queue_world_cmd(&mut spawner.commands, "ReplaceStudioGraph", move |w| {
                 let graph = ron::from_str(&ron).map_err(|e| format!("graph RON: {e}"))?;
                 crate::node_graph::replace(w, graph)
@@ -604,6 +647,7 @@ pub fn execute_commands(
                 queue_world_cmd(&mut spawner.commands, "SetGrid", move |w| lb::cmd_set_grid(w, enabled, cell_size, floor_level, floor_height, angle_snap_deg))
             }
             StudioCommand::SetWaterBody { x, z, level } => queue_world_cmd(&mut spawner.commands, "SetWaterBody", move |w| crate::water::cmd_set_water_body(w, x, z, level)),
+            StudioCommand::SetTerrainMaterial { layer, binding } => queue_world_cmd(&mut spawner.commands, "SetTerrainMaterial", move |w| crate::terrain_surfaces::set(w, layer, binding)),
             StudioCommand::SetGroundSnap { enabled, site } => queue_world_cmd(&mut spawner.commands, "SetGroundSnap", move |w| lb::cmd_set_ground_snap(w, enabled, site)),
             StudioCommand::SaveScene { path } if is_reflect_path(&path) => {
                 spawner.commands.queue(move |w: &mut World| w.resource_mut::<SceneIoQueue>().0.push(SceneIo::Save(path)));

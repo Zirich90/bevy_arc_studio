@@ -155,14 +155,16 @@ fn apply_time_of_day(
 /// Feature toggles & quality preset → add/remove camera components.
 fn apply_toggles(
     spec: Res<WorldSpec>,
+    environment: Option<Res<crate::quillshade_bridge::QuillshadeEnvironment>>,
     mut commands: Commands,
     cam: Query<Entity, (With<Camera3d>, Without<crate::thumbnails::ThumbnailCamera>)>,
     sun: Query<Entity, With<Sun>>,
     mut shadow_map: ResMut<DirectionalLightShadowMap>,
-    mut last: Local<Option<(bool, bool, bool, QualityPreset)>>,
+    mut last: Local<Option<(bool, bool, bool, QualityPreset, bool)>>,
 ) {
     // the time-of-day slider mutates WorldSpec every frame; only react to real toggle changes
-    let key = (spec.bloom, spec.reflections, spec.god_rays, spec.quality_preset);
+    let owned = environment.is_some_and(|e| e.0);
+    let key = (spec.bloom, spec.reflections, spec.god_rays, spec.quality_preset, owned);
     if *last == Some(key) {
         return;
     }
@@ -170,8 +172,9 @@ fn apply_toggles(
     let size = match spec.quality_preset {
         QualityPreset::Low => 1024,
         QualityPreset::Medium => 2048,
-        QualityPreset::High => 4096,
-        QualityPreset::Ultra => 8192,
+        // Four 8192² Depth32Float cascades cost 1 GiB per light, excluding resize overlap.
+        // shortcut: cap Ultra shadows at 4096 until a GPU memory budget is available.
+        QualityPreset::High | QualityPreset::Ultra => 4096,
     };
     if shadow_map.size != size {
         shadow_map.size = size;
@@ -180,7 +183,9 @@ fn apply_toggles(
         let mut c = commands.entity(e);
         if spec.bloom { c.insert(Bloom::NATURAL); } else { c.remove::<Bloom>(); }
         if spec.reflections { c.insert(ScreenSpaceReflections::default()); } else { c.remove::<ScreenSpaceReflections>(); }
-        if spec.god_rays { c.insert(VolumetricFog { ambient_intensity: 0.0, step_count: 48, ..default() }); } else { c.remove::<VolumetricFog>(); }
+        if !owned {
+            if spec.god_rays { c.insert(VolumetricFog { ambient_intensity: 0.0, step_count: 48, ..default() }); } else { c.remove::<VolumetricFog>(); }
+        }
     }
     for e in &sun {
         if spec.god_rays { commands.entity(e).insert(VolumetricLight); } else { commands.entity(e).remove::<VolumetricLight>(); }
@@ -199,6 +204,27 @@ fn flicker_night_lights(spec: Res<WorldSpec>, time: Res<Time>, mut q: Query<(&Ni
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quality_switches_keep_shadow_allocations_bounded() {
+        let mut app = App::new();
+        app.insert_resource(WorldSpec::default())
+            .insert_resource(DirectionalLightShadowMap { size: 4096 })
+            .add_systems(Update, apply_toggles);
+        for (quality, expected) in [
+            (QualityPreset::Low, 1024),
+            (QualityPreset::Medium, 2048),
+            (QualityPreset::High, 4096),
+            (QualityPreset::Ultra, 4096),
+            (QualityPreset::Low, 1024),
+            (QualityPreset::Ultra, 4096),
+        ] {
+            app.world_mut().resource_mut::<WorldSpec>().quality_preset = quality;
+            app.update();
+            assert_eq!(app.world().resource::<DirectionalLightShadowMap>().size, expected);
+            assert_eq!(app.world().resource::<WorldSpec>().quality_preset, quality);
+        }
+    }
 
     #[test]
     fn night_window_matches_spec() {

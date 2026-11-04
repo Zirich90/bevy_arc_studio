@@ -1,0 +1,17 @@
+{
+  "description": "Run explicitly queued ArcStudio Cargo checks and report one short result.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/cargo_stop_hook.py",
+            "timeout": 4600,
+            "statusMessage": "Cargo checks"
+          }
+        ]
+      }
+    ]
+  }
+}

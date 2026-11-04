@@ -18,12 +18,16 @@ use crate::terrain_render::{TerrainGrid, TerrainVersion};
 pub struct WaterBody {
     pub seed: [f32; 2],
     pub level: f32,
+    #[reflect(default)]
+    pub material: Option<crate::quillshade_bridge::QuillshadeBinding>,
 }
 
 #[derive(Resource, Reflect, Default, Clone, Debug)]
 #[reflect(Resource, Default, Clone)]
 pub struct WaterBodies {
     pub items: Vec<WaterBody>,
+    #[reflect(default)]
+    pub material: Option<crate::quillshade_bridge::QuillshadeBinding>,
     pub selected: Option<usize>,
     /// Next left click on the terrain selects (or creates) the body under it.
     pub picking: bool,
@@ -74,12 +78,13 @@ pub fn surface_fn<'a>(grid: &'a HeightfieldGrid, global: f32, bodies: &'a [Water
         let m = grid.n as i32 - 1;
         let (gx, gz) = grid.world_to_grid(x, z);
         let o = owners.get(grid.idx((gx.round() as i32).clamp(0, m) as usize, (gz.round() as i32).clamp(0, m) as usize)).copied().unwrap_or(NO_BODY);
-        if o == NO_BODY { global } else { bodies[o as usize].level.max(global) }
+        if o == NO_BODY { global } else { bodies[o as usize].level }
     }
 }
 
 #[derive(Component)]
 pub struct Water {
+    section: u16,
     nx: usize,
     nz: usize,
     origin: Vec2,
@@ -96,7 +101,7 @@ impl Plugin for WaterPlugin {
             .register_type::<WaterBodies>()
             .register_type::<WaterBody>()
             .add_systems(PostStartup, spawn_water)
-            .add_systems(Update, (pick_water_body, rebuild_water, animate_water).chain());
+            .add_systems(Update, (pick_water_body, rebuild_water, animate_water).chain().after(crate::simulation::sync));
     }
 }
 
@@ -122,19 +127,18 @@ fn wave(x: f32, z: f32, t: f32) -> (f32, f32, f32) {
     (h, dx, dz)
 }
 
-fn build_water_mesh(spec: &WorldSpec, grid: &HeightfieldGrid, bodies: &[WaterBody]) -> (Mesh, Water) {
-    let owner = body_owners(grid, spec.water_level, bodies);
+fn build_water_mesh(spec: &WorldSpec, grid: &HeightfieldGrid, bodies: &[WaterBody], owner: &[u16], section: u16) -> (Mesh, Water) {
     let level_of = |o: u16| if o == NO_BODY { spec.water_level } else { bodies[o as usize].level };
     let m = grid.n as i32 - 1;
-    let level_at = |x: f32, z: f32| {
+    let owner_at = |x: f32, z: f32| {
         let (gx, gz) = grid.world_to_grid(x, z);
-        level_of(owner[grid.idx((gx.round() as i32).clamp(0, m) as usize, (gz.round() as i32).clamp(0, m) as usize)])
+        owner[grid.idx((gx.round() as i32).clamp(0, m) as usize, (gz.round() as i32).clamp(0, m) as usize)]
     };
     // bounding box of every cell that lies below its waterline, padded
     let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
     for j in 0..grid.n {
         for i in 0..grid.n {
-            if grid.heights[grid.idx(i, j)] < level_of(owner[grid.idx(i, j)]) + 0.3 {
+            if owner[grid.idx(i, j)] == section && grid.heights[grid.idx(i, j)] < level_of(section) + 0.3 {
                 let (x, z) = grid.grid_to_world(i, j);
                 lo = lo.min(Vec2::new(x, z));
                 hi = hi.max(Vec2::new(x, z));
@@ -157,7 +161,7 @@ fn build_water_mesh(spec: &WorldSpec, grid: &HeightfieldGrid, bodies: &[WaterBod
     for j in 0..nz {
         for i in 0..nx {
             let (x, z) = (lo.x + i as f32 * cell, lo.y + j as f32 * cell);
-            let lvl = level_at(x, z);
+            let lvl = level_of(section);
             pos.push([x, lvl - spec.water_level, z]);
             base.push(lvl - spec.water_level);
             uv.push([i as f32 / nx as f32, j as f32 / nz as f32]);
@@ -174,7 +178,12 @@ fn build_water_mesh(spec: &WorldSpec, grid: &HeightfieldGrid, bodies: &[WaterBod
     for j in 0..nz - 1 {
         for i in 0..nx - 1 {
             let (a, b, c, d) = ((j * nx + i) as u32, (j * nx + i + 1) as u32, ((j + 1) * nx + i) as u32, ((j + 1) * nx + i + 1) as u32);
-            idx.extend_from_slice(&[a, c, b, b, c, d]);
+            for triangle in [[a, c, b], [b, c, d]] {
+                let center = triangle.iter().map(|v| Vec2::new(pos[*v as usize][0], pos[*v as usize][2])).sum::<Vec2>() / 3.0;
+                if owner_at(center.x, center.y) == section && grid.sample_height(center.x, center.y) < level_of(section) + 0.3 {
+                    idx.extend_from_slice(&triangle);
+                }
+            }
         }
     }
     let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
@@ -183,10 +192,14 @@ fn build_water_mesh(spec: &WorldSpec, grid: &HeightfieldGrid, bodies: &[WaterBod
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
         .with_inserted_indices(Indices::U32(idx));
-    (mesh, Water { nx, nz, origin: lo, cell, base })
+    (mesh, Water { section, nx, nz, origin: lo, cell, base })
 }
 
 fn spawn_water(mut commands: Commands, spec: Res<WorldSpec>, grid: Res<TerrainGrid>, bodies: Res<WaterBodies>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    spawn_sections(&mut commands, &spec, &grid.0, &bodies, &mut meshes, &mut mats, 0.0);
+}
+
+fn spawn_sections(commands: &mut Commands, spec: &WorldSpec, grid: &HeightfieldGrid, bodies: &WaterBodies, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, time: f32) {
     let mat = mats.add(StandardMaterial {
         base_color: Color::WHITE, // tinted by per-vertex depth colour
         perceptual_roughness: 0.06,
@@ -196,28 +209,39 @@ fn spawn_water(mut commands: Commands, spec: Res<WorldSpec>, grid: Res<TerrainGr
         alpha_mode: AlphaMode::Opaque, // opaque so ScreenSpaceReflections applies; depth tint stands in for translucency
         ..default()
     });
-    let (mesh, water) = build_water_mesh(&spec, &grid.0, &bodies.items);
-    commands.spawn((Name::new("Water"), water, Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), Transform::from_xyz(0.0, spec.water_level, 0.0)));
+    let owners = body_owners(grid, spec.water_level, &bodies.items);
+    for section in std::iter::once(NO_BODY).chain(0..bodies.items.len() as u16) {
+        let (mut mesh, water) = build_water_mesh(spec, grid, &bodies.items, &owners, section);
+        if mesh.indices().is_none_or(|i| i.is_empty()) { continue; }
+        ripple(&mut mesh, &water, time);
+        let binding = if section == NO_BODY { bodies.material.as_ref() } else { bodies.items[section as usize].material.as_ref() };
+        let mut entity = commands.spawn((Name::new(if section == NO_BODY { "Water: global".into() } else { format!("Water: basin {section}") }), water, Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat.clone()), Transform::from_xyz(0.0, spec.water_level, 0.0)));
+        if let Some(binding) = binding { entity.insert(binding.clone()); }
+    }
 }
 
 /// Rebuild on a new terrain version, or (throttled) after sculpting changed the heights so dug basins fill and raised ones drain.
 fn rebuild_water(
+    mut commands: Commands,
     time: Res<Time>,
     version: Res<TerrainVersion>,
     mut seen: Local<u32>,
     mut sculpt_dirty: Local<bool>,
     mut last: Local<f32>,
     mut snap: Local<Vec<WaterBody>>,
+    mut material: Local<Option<crate::quillshade_bridge::QuillshadeBinding>>,
     spec: Res<WorldSpec>,
     grid: Res<TerrainGrid>,
     bodies: Res<WaterBodies>,
-    mut q: Query<(&mut Water, &Mesh3d, &mut Transform)>,
+    q: Query<Entity, With<Water>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
 ) {
     // the UI holds the resource mutably, so is_changed() fires every frame it is open: compare the data instead
-    let moved = *snap != bodies.items;
+    let moved = *snap != bodies.items || *material != bodies.material;
     if moved {
         snap.clone_from(&bodies.items);
+        material.clone_from(&bodies.material);
     }
     *sculpt_dirty |= grid.is_changed() || moved;
     let sculpt_due = *sculpt_dirty && time.elapsed_secs() - *last >= 0.25;
@@ -227,13 +251,8 @@ fn rebuild_water(
     *seen = version.0;
     *sculpt_dirty = false;
     *last = time.elapsed_secs();
-    for (mut w, h, mut tf) in &mut q {
-        let (mut mesh, nw) = build_water_mesh(&spec, &grid.0, &bodies.items);
-        ripple(&mut mesh, &nw, time.elapsed_secs());
-        let _ = meshes.insert(&h.0, mesh);
-        *w = nw;
-        tf.translation.y = spec.water_level;
-    }
+    for e in &q { commands.entity(e).despawn(); }
+    spawn_sections(&mut commands, &spec, &grid.0, &bodies, &mut meshes, &mut mats, time.elapsed_secs());
 }
 
 fn animate_water(time: Res<Time>, q: Query<(&Water, &Mesh3d)>, mut meshes: ResMut<Assets<Mesh>>, mut last: Local<f32>) {
@@ -246,6 +265,27 @@ fn animate_water(time: Res<Time>, q: Query<(&Water, &Mesh3d)>, mut meshes: ResMu
         let Some(mut mesh) = meshes.get_mut(&h.0) else { continue };
         ripple(&mut mesh, w, t);
     }
+}
+
+pub fn set_material(w: &mut World, seed: Option<[f32; 2]>, binding: Option<crate::quillshade_bridge::QuillshadeBinding>) -> Result<String, String> {
+    if let Some(binding) = &binding { crate::quillshade_bridge::validate_binding(w, binding)?; }
+    let index = match seed {
+        Some(seed) => Some(w.resource::<WaterBodies>().items.iter().position(|b| b.seed == seed).ok_or("unknown water basin seed")?),
+        None => None,
+    };
+    let before = crate::operators::snap_resource::<WaterBodies>(w);
+    let mut bodies = w.resource_mut::<WaterBodies>();
+    if let Some(index) = index { bodies.items[index].material = binding; } else { bodies.material = binding; }
+    let after = crate::operators::snap_resource::<WaterBodies>(w);
+    crate::operators::record_edit(w, "Water material", before, after, false);
+    Ok("water material updated".into())
+}
+
+pub fn describe_sections(w: &mut World) -> Vec<serde_json::Value> {
+    w.query::<(Entity, &Water, &Mesh3d, Option<&crate::quillshade_bridge::QuillshadeBinding>)>().iter(w).map(|(e, water, mesh, binding)| {
+        serde_json::json!({"entity":e.to_bits(), "basin":(water.section != NO_BODY).then_some(water.section), "binding":binding,
+            "triangles":w.resource::<Assets<Mesh>>().get(&mesh.0).and_then(|m| m.indices()).map_or(0, |i| i.len() / 3)})
+    }).collect()
 }
 
 /// Write the animated surface into `mesh`; a freshly rebuilt mesh gets it too, so a rebuild never flashes a flat surface.
@@ -266,6 +306,7 @@ fn ripple(mesh: &mut Mesh, w: &Water, t: f32) {
 
 /// Give the basin at world (x, z) its own water level (creating the body if needed); `None` removes the body again.
 pub fn cmd_set_water_body(w: &mut World, x: f32, z: f32, level: Option<f32>) -> Result<String, String> {
+    if !x.is_finite() || !z.is_finite() || level.is_some_and(|l| !l.is_finite()) { return Err("non-finite water body".into()); }
     let (global, grid) = (w.resource::<WorldSpec>().water_level, w.resource::<TerrainGrid>().0.clone());
     let before = crate::operators::snap_resource::<WaterBodies>(w);
     let mut bodies = w.resource_mut::<WaterBodies>();
@@ -282,7 +323,8 @@ pub fn cmd_set_water_body(w: &mut World, x: f32, z: f32, level: Option<f32>) -> 
             bodies.selected = None;
         }
         (None, Some(l)) => {
-            bodies.items.push(WaterBody { seed: [x, z], level: l });
+            if bodies.items.len() >= NO_BODY as usize { return Err("water basin limit exceeded".into()); }
+            bodies.items.push(WaterBody { seed: [x, z], level: l, material: None });
             bodies.selected = Some(bodies.items.len() - 1);
         }
         (None, None) => return Err("no water body there".into()),
@@ -364,7 +406,7 @@ mod tests {
     fn body_floods_only_its_own_basin() {
         let g = grid();
         let (mx, mz) = g.grid_to_world(5, 5);
-        let bodies = [WaterBody { seed: [mx, mz], level: 9.0 }];
+        let bodies = [WaterBody { seed: [mx, mz], level: 9.0, material: None }];
         let o = body_owners(&g, 6.0, &bodies);
         assert_eq!(o.iter().filter(|&&b| b == 0).count(), 16, "moat basin only");
         assert_eq!(o[g.idx(22, 22)], NO_BODY, "the lake pit keeps the global level");
@@ -372,10 +414,45 @@ mod tests {
     }
 
     #[test]
+    fn water_draw_sections_never_bridge_basins_or_surface_levels() {
+        use bevy::mesh::VertexAttributeValues;
+        let g = grid();
+        let (x, z) = g.grid_to_world(5, 5);
+        let spec = WorldSpec { water_level: 6.0, ..default() };
+        let bodies = [WaterBody { seed: [x, z], level: 9.0, material: None }];
+        let owners = body_owners(&g, spec.water_level, &bodies);
+        for section in [NO_BODY, 0] {
+            let (mesh, water) = build_water_mesh(&spec, &g, &bodies, &owners, section);
+            let Some(VertexAttributeValues::Float32x3(points)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else { panic!("positions"); };
+            let indices: Vec<_> = mesh.indices().unwrap().iter().collect();
+            assert!(!indices.is_empty());
+            let level = if section == NO_BODY { 6.0 } else { 9.0 };
+            for triangle in indices.chunks_exact(3) {
+                let center = triangle.iter().map(|&v| Vec2::new(points[v][0], points[v][2])).sum::<Vec2>() / 3.0;
+                let owner = body_at(&g, 6.0, &bodies, center.x, center.y).map_or(NO_BODY, |i| i as u16);
+                assert_eq!(owner, section);
+                for &vertex in triangle { assert!((points[vertex][1] + spec.water_level - level).abs() < 1e-6); }
+            }
+            assert_eq!(water.section, section);
+        }
+    }
+
+    #[test]
+    fn basin_lowered_below_global_has_the_same_render_and_navigation_level() {
+        let g = grid();
+        let (x, z) = g.grid_to_world(22, 22);
+        let bodies = [WaterBody { seed: [x, z], level: 3.0, material: None }];
+        assert_eq!(surface_fn(&g, 6.0, &bodies)(x, z), 3.0);
+        let spec = WorldSpec { water_level: 6.0, ..default() };
+        let (mesh, _) = build_water_mesh(&spec, &g, &bodies, &body_owners(&g, 6.0, &bodies), 0);
+        assert!(mesh.indices().unwrap().len() > 0);
+    }
+
+    #[test]
     fn level_above_the_rim_spills_over() {
         let g = grid();
         let (mx, mz) = g.grid_to_world(5, 5);
-        let o = body_owners(&g, 6.0, &[WaterBody { seed: [mx, mz], level: 11.0 }]);
+        let o = body_owners(&g, 6.0, &[WaterBody { seed: [mx, mz], level: 11.0, material: None }]);
         assert!(o.iter().filter(|&&b| b == 0).count() > 16);
     }
 
@@ -384,7 +461,7 @@ mod tests {
         use crate::navigation::{NavCell, NavGrid};
         let g = grid();
         let (mx, mz) = g.grid_to_world(5, 5);
-        let bodies = [WaterBody { seed: [mx, mz], level: 9.0 }];
+        let bodies = [WaterBody { seed: [mx, mz], level: 9.0, material: None }];
         let at = surface_fn(&g, 6.0, &bodies);
         assert_eq!((at(mx, mz), at(0.0, 0.0)), (9.0, 6.0));
         let dry = NavGrid::build(&g, 6.0, &[], 0.35);
@@ -397,7 +474,7 @@ mod tests {
     #[test]
     fn seed_on_dry_land_owns_nothing() {
         let g = grid();
-        let o = body_owners(&g, 6.0, &[WaterBody { seed: [0.0, 0.0], level: 6.0 }]);
+        let o = body_owners(&g, 6.0, &[WaterBody { seed: [0.0, 0.0], level: 6.0, material: None }]);
         assert!(o.iter().all(|&b| b == NO_BODY));
     }
     #[test]

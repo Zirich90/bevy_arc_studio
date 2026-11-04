@@ -22,7 +22,7 @@ pub struct PendingHeights(pub Option<Vec<f32>>);
 
 /// The WorldSpec fields that change geometry (everything else is purely visual / lighting).
 #[derive(Resource, Clone, PartialEq)]
-struct GeoKey {
+pub(crate) struct GeoKey {
     terrain: (u32, u32, [u32; 7], u32, u32),
     lake: ([f32; 2], [f32; 2], [f32; 4]),
     biome: [f32; 4],
@@ -45,6 +45,9 @@ impl GeoKey {
         }
     }
 }
+
+pub(crate) fn geometry_matches(a:&WorldSpec,b:&WorldSpec)->bool { GeoKey::of(a)==GeoKey::of(b) }
+pub(crate) fn geometry_is_current(w:&World)->bool {w.get_resource::<GeoKey>().is_none_or(|key|*key==GeoKey::of(w.resource::<WorldSpec>()))}
 
 pub struct TerrainRenderPlugin;
 
@@ -156,7 +159,7 @@ pub fn update_terrain_region(mesh: &mut Mesh, g: &HeightfieldGrid, spec: &WorldS
 }
 
 /// Geometry-relevant spec change (or pending scene heights) → regenerate heightfield + mesh; props/water follow via `TerrainVersion`.
-fn rebuild_on_spec_change(
+pub(crate) fn rebuild_on_spec_change(
     spec: Res<WorldSpec>,
     mut key: ResMut<GeoKey>,
     mut pending: ResMut<PendingHeights>,

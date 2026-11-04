@@ -1,0 +1,1 @@
+Продолжение полной цели I2. Surface contracts: отдельные draw sections водоёмов с persistent per-basin/global bindings, scene/Undo/PIE; далее terrain master и шесть фактических splat weights/layer slots. Generated output только через source RON/upstream backend. Сохранить прозрачный компактный canvas и Ultra guard.
