@@ -1,0 +1,64 @@
+name: Release binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach assets to
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: windows-latest
+            label: windows-x86_64
+          - os: macos-latest
+            label: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bevy system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+      - uses: Swatinem/rust-cache@v2
+      - name: Static linking for distributable
+        shell: bash
+        # dynamic_linking is a dev-only convenience; ship self-contained binaries
+        run: sed -i.bak '/"dynamic_linking",/d' Cargo.toml
+      - name: Build release
+        shell: bash
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: cargo build --release -p bevy_arc_studio
+      - name: Stage package
+        shell: bash
+        run: |
+          mkdir -p package
+          cp target/release/bevy_arc_studio package/ 2>/dev/null || cp target/release/bevy_arc_studio.exe package/
+          cp -r assets scenes modules quillshade package/
+          cp README.md LICENSE-MIT LICENSE-APACHE package/
+      - name: Archive (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: tar -czf arcstudio-${{ matrix.label }}.tar.gz -C package .
+      - name: Archive (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path package\* -DestinationPath arcstudio-${{ matrix.label }}.zip
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+          files: arcstudio-${{ matrix.label }}.*
