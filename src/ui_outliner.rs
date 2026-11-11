@@ -9,6 +9,8 @@ use bevy_egui::egui;
 use crate::mcp_commands::StudioCommand as Cmd;
 use crate::operators::Target;
 use crate::ui::*;
+use crate::ui::i18n::tr;
+use crate::ui::icons::{self, Icon};
 
 pub const OUTLINER_W: f32 = 260.0;
 
@@ -47,14 +49,25 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData, st: &mut OutlinerState) {
     }
 
     let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
-    egui::Panel::left("outliner").exact_size(OUTLINER_W).resizable(false).frame(frame).show(ui, |ui| {
-        ui.label(egui::RichText::new("SCENETREE").strong().size(12.0).color(TEAL));
-        ui.add(egui::TextEdit::singleline(&mut st.search).hint_text("Filter by name...").desired_width(f32::INFINITY));
-        ui.label(egui::RichText::new(format!("{} objects", nodes.len())).size(10.5).color(egui::Color32::from_gray(130)));
+    let width = OUTLINER_W.min((ui.ctx().viewport_rect().width() * 0.22).max(72.0));
+    egui::Panel::left("outliner").exact_size(width).resizable(false).frame(frame).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(tr("SCENE TREE", "ДЕРЕВО СЦЕНЫ")).strong().size(12.0).color(TEAL));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(ui, false, Icon::Close, tr("Hide Scene Tree (reopen from the dock or Window menu)", "Скрыть дерево сцены (вернуть из дока или меню Окно)"), 20.0).clicked() {
+                    d.layout.toggle(crate::ui::layout::Panel::SceneTree);
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            icons::paint(ui, Icon::Search, 13.0, MUTED);
+            ui.add(egui::TextEdit::singleline(&mut st.search).hint_text(tr("Filter by name...", "Фильтр по имени...")).desired_width(f32::INFINITY));
+        });
+        ui.label(egui::RichText::new(format!("{}: {}", tr("Objects", "Объекты"), nodes.len())).size(10.5).color(MUTED));
         ui.separator();
 
         // drop target: scene root
-        let root_row = ui.add(egui::Label::new(egui::RichText::new("▣ Scene (root)").color(egui::Color32::from_gray(170))).sense(egui::Sense::hover()));
+        let root_row = ui.add(egui::Label::new(egui::RichText::new(format!("▣ {}", tr("Scene (root)", "Сцена (корень)"))).color(MUTED)).sense(egui::Sense::hover()));
         if drag_payload_over_root(ui) && root_row.dnd_hover_payload::<Entity>().is_some() {
             ui.painter().rect_stroke(root_row.rect.expand(2.0), 3.0, egui::Stroke::new(1.5, TEAL), egui::StrokeKind::Outside);
         }

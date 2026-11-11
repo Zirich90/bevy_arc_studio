@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::editor_registry::{EditorAppExt, EditorRegistry, PanelDef, PanelLocation};
 use crate::mcp_commands::{CustomCommands, StudioCommand};
 use crate::props::SpawnKinds;
-use crate::ui::{AMBER, TEAL, UiData, chip};
+use crate::ui::{AMBER, TEAL, UiData, chip, i18n::tr, icons::{self, Icon}};
 use crate::ui_inspector::Filter;
 
 pub const MODULES_PANEL: &str = "modules";
@@ -326,20 +326,23 @@ fn init_modules(w: &mut World) {
 }
 
 pub fn modules_tab(ui: &mut egui::Ui, d: &mut UiData, _f: &Filter) {
-    ui.label(egui::RichText::new("Modules").strong().color(TEAL));
-    ui.label("A module whose module.json is in the modules folder is connected; switch it on or off here.");
+    ui.horizontal(|ui| {
+        icons::paint(ui, Icon::Gear, 14.0, TEAL);
+        ui.label(egui::RichText::new(tr("Modules", "Модули")).strong().color(TEAL));
+    });
+    ui.label(tr("A module whose module.json is in the modules folder is connected; switch it on or off here.", "Модуль с module.json в папке modules подключён; здесь его можно включить или выключить."));
     let dir = d.modules.dir.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
     ui.horizontal_wrapped(|ui| {
-        ui.weak(format!("Folder: {dir}"));
-        if chip(ui, false, "Rescan").on_hover_text("Look for module files again").clicked() {
+        ui.weak(format!("{}: {dir}", tr("Folder", "Папка")));
+        if chip(ui, false, tr("Rescan", "Пересканировать")).on_hover_text(tr("Look for module files again", "Снова поискать файлы модулей")).clicked() {
             d.queue.push(StudioCommand::RescanModules);
         }
     });
     let id = ui.make_persistent_id("module_add_path");
     let mut path: String = ui.data_mut(|m| m.get_temp(id)).unwrap_or_default();
     ui.horizontal(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut path).hint_text("path to module.json or a module folder").desired_width(190.0));
-        if chip(ui, false, "Add").on_hover_text("Copy the module file into the modules folder").clicked() && !path.trim().is_empty() {
+        ui.add(egui::TextEdit::singleline(&mut path).hint_text(tr("path to module.json or a module folder", "путь к module.json или папке модуля")).desired_width(190.0));
+        if chip(ui, false, tr("Add", "Добавить")).on_hover_text(tr("Copy the module file into the modules folder", "Скопировать файл модуля в папку modules")).clicked() && !path.trim().is_empty() {
             d.queue.push(StudioCommand::ConnectModule { path: path.trim().to_string() });
             path.clear();
         }
@@ -348,7 +351,7 @@ pub fn modules_tab(ui: &mut egui::Ui, d: &mut UiData, _f: &Filter) {
     ui.separator();
     let found: Vec<FoundModule> = d.modules.found().cloned().collect();
     if found.is_empty() {
-        ui.label("No module files found.");
+        ui.label(tr("No module files found.", "Файлы модулей не найдены."));
     }
     for fm in found {
         let m = &fm.manifest;

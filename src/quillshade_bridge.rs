@@ -224,7 +224,7 @@ fn binding_inspector(ui: &mut egui::Ui, value: &mut dyn bevy::reflect::PartialRe
     };
     let old_material = binding.material.clone();
     let mut changed = false;
-    egui::ComboBox::from_label("Generated material")
+    egui::ComboBox::from_label(crate::ui::i18n::tr("Generated material", "Сгенерированный материал"))
         .selected_text(&binding.material)
         .show_ui(ui, |ui| {
             for id in crate::quillshade_catalog::MATERIAL_IDS {
@@ -238,13 +238,13 @@ fn binding_inspector(ui: &mut egui::Ui, value: &mut dyn bevy::reflect::PartialRe
         binding.parameters.clear();
     }
     if let Some((layout, defaults)) = crate::quillshade_catalog::uniforms(&binding.material) {
-        if ui.button("Add / reset numeric parameters").clicked() {
+        if ui.button(crate::ui::i18n::tr("Add / reset numeric parameters", "Добавить / сбросить числовые параметры")).clicked() {
             binding.layout = layout.into();
             binding.parameters = defaults;
             changed = true;
         }
         if !binding.parameters.is_empty() && binding.layout != layout {
-            ui.colored_label(egui::Color32::YELLOW, "Layout changed. Reset numeric parameters.");
+            ui.colored_label(egui::Color32::YELLOW, crate::ui::i18n::tr("Layout changed. Reset numeric parameters.", "Раскладка изменилась. Сбросьте числовые параметры."));
         } else {
             for p in &mut binding.parameters {
                 ui.horizontal(|ui| {
@@ -257,7 +257,7 @@ fn binding_inspector(ui: &mut egui::Ui, value: &mut dyn bevy::reflect::PartialRe
                     }
                 });
             }
-            if !binding.parameters.is_empty() && ui.button("Clear overrides (follow source)").clicked() {
+            if !binding.parameters.is_empty() && ui.button(crate::ui::i18n::tr("Clear overrides (follow source)", "Сбросить переопределения (следовать источнику)")).clicked() {
                 binding.parameters.clear();
                 binding.layout.clear();
                 changed = true;
@@ -321,8 +321,30 @@ fn reconcile(w: &mut World) {
     }
 }
 
-fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::Filter) {
-    ui.label("Quillshade · generated materials");
+fn terrain_layers(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::Filter) {
+    use crate::ui::i18n::{label, tr};
+    for slot in 0..=crate::arc_core::SPLAT_LAYERS {
+        let layer = slot.checked_sub(1);
+        let current = layer.map_or_else(|| d.terrain_surfaces.master.clone(), |i| d.terrain_surfaces.layers[i].clone());
+        let name = layer.map_or("Terrain master", |i| ["Sand", "Gravel", "Grass", "Moss", "Rock", "Snow"][i]);
+        ui.push_id(("terrain_surface", slot), |ui| {
+            ui.collapsing(label(name), |ui| {
+                let mut binding = current.clone().unwrap_or_else(|| QuillshadeBinding { material: "env/terrain_layers".into(), ..default() });
+                let changed = binding_inspector(ui, &mut binding);
+                if changed || ui.button(tr("Apply surface material", "Применить материал поверхности")).clicked() {
+                    d.queue.push(crate::mcp_commands::StudioCommand::SetTerrainMaterial { layer, binding: Some(binding) });
+                }
+                if current.is_some() && ui.button(tr("Reset surface slot", "Сбросить слот поверхности")).clicked() {
+                    d.queue.push(crate::mcp_commands::StudioCommand::SetTerrainMaterial { layer, binding: None });
+                }
+            });
+        });
+    }
+}
+
+fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, filter: &crate::ui_inspector::Filter) {
+    use crate::ui::i18n::tr;
+    ui.label(egui::RichText::new(tr("Quillshade · generated materials", "Quillshade · сгенерированные материалы")).strong().color(crate::ui::TEAL));
     for m in d.reg.quillshade_materials.clone() {
         if ui.button(m.id).clicked() {
             if let Some(e) = d.sel.primary {
@@ -335,45 +357,31 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
             }
         }
     }
-    ui.weak("Select a scene object, tile or prefab root. Parameters: Quillshade RON; binding: Reflect inspector.");
+    ui.weak(tr("Select a scene object, tile or prefab root. Parameters: Quillshade RON; binding: Reflect inspector.", "Выберите объект сцены, тайл или корень префаба. Параметры: Quillshade RON; привязка: Reflect-инспектор."));
     ui.separator();
-    for slot in 0..=crate::arc_core::SPLAT_LAYERS {
-        let layer = slot.checked_sub(1);
-        let current = layer.map_or_else(|| d.terrain_surfaces.master.clone(), |i| d.terrain_surfaces.layers[i].clone());
-        let name = layer.map_or("Terrain master", |i| ["Sand", "Gravel", "Grass", "Moss", "Rock", "Snow"][i]);
-        ui.push_id(("terrain_surface", slot), |ui| {
-            ui.collapsing(name, |ui| {
-                let mut binding = current.clone().unwrap_or_else(|| QuillshadeBinding { material: "env/terrain_layers".into(), ..default() });
-                let changed = binding_inspector(ui, &mut binding);
-                if changed || ui.button("Apply surface material").clicked() {
-                    d.queue.push(crate::mcp_commands::StudioCommand::SetTerrainMaterial { layer, binding: Some(binding) });
-                }
-                if current.is_some() && ui.button("Reset surface slot").clicked() {
-                    d.queue.push(crate::mcp_commands::StudioCommand::SetTerrainMaterial { layer, binding: None });
-                }
-            });
-        });
+    if d.layout.active() != crate::ui::layout::Layout::Smart {
+        terrain_layers(ui, d, filter);
     }
     ui.separator();
     let seed = d.water.selected.and_then(|i| d.water.items.get(i)).map(|b| b.seed);
-    ui.label(if seed.is_some() { "Selected water basin material" } else { "Global water material" });
+    ui.label(if seed.is_some() { tr("Selected water basin material", "Материал выбранного водоёма") } else { tr("Global water material", "Общий материал воды") });
     let current = if let Some(i) = d.water.selected { d.water.items.get(i).and_then(|b| b.material.clone()) } else { d.water.material.clone() };
     let mut binding = current.clone().unwrap_or_else(|| QuillshadeBinding { material: "env/water".into(), ..default() });
     let mut apply = binding_inspector(ui, &mut binding);
-    apply |= ui.button("Apply to water surface").clicked();
+    apply |= ui.button(tr("Apply to water surface", "Применить к поверхности воды")).clicked();
     if apply { d.queue.push(crate::mcp_commands::StudioCommand::SetWaterMaterial { seed, binding: Some(binding) }); }
-    if current.is_some() && ui.button("Restore standard water").clicked() {
+    if current.is_some() && ui.button(tr("Restore standard water", "Вернуть стандартную воду")).clicked() {
         d.queue.push(crate::mcp_commands::StudioCommand::SetWaterMaterial { seed, binding: None });
     }
-    if ui.button("Restore studio environment").clicked() {
+    if ui.button(tr("Restore studio environment", "Вернуть окружение студии")).clicked() {
         d.queue.push(crate::mcp_commands::StudioCommand::TransitionEnvironment { preset: None, duration: 0.0 });
     }
     for preset in quillshade::light::Preset::ALL {
-        if ui.button(format!("Transition to {} (2 s)", preset.as_str())).clicked() {
+        if ui.button(format!("{} {} (2 s)", tr("Transition to", "Переход к"), preset.as_str())).clicked() {
             d.queue.push(crate::mcp_commands::StudioCommand::TransitionEnvironment { preset: Some(preset.as_str().into()), duration: 2.0 });
         }
         if ui
-            .button(format!("Environment: {}", preset.as_str()))
+            .button(format!("{}: {}", tr("Environment", "Окружение"), preset.as_str()))
             .clicked()
         {
             d.queue.push(
@@ -393,6 +401,7 @@ impl Plugin for QuillshadeBridgePlugin {
             .add_plugins(crate::environment::EnvironmentPlugin)
             .register_type::<QuillshadeBinding>()
             .register_scene_component::<QuillshadeBinding>()
+            .register_panel("terrain_layers", "Terrain Layers", PanelLocation::RightInspector, terrain_layers)
             .register_panel(
                 "quillshade",
                 "Quillshade",

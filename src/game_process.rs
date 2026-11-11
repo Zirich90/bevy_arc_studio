@@ -115,27 +115,38 @@ impl GamePanel {
         self.pending = Some(std::sync::Mutex::new(rx));
     }
 }
+pub(crate) fn toggle_panel(ctx: &bevy_egui::egui::Context) {
+    let id = bevy_egui::egui::Id::new("studio_separate_game_open");
+    ctx.data_mut(|data| {
+        let open = data.get_temp::<bool>(id).unwrap_or_default();
+        data.insert_temp(id, !open);
+    });
+}
+
 fn panel(mut contexts: bevy_egui::EguiContexts, mut panel: ResMut<GamePanel>, game: Res<GameProcess>, mut queue: ResMut<crate::mcp_commands::StudioCommandQueue>) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     let result = panel.pending.as_ref().and_then(|rx| rx.lock().ok()?.try_recv().ok());
     if let Some(result) = result {
         panel.reply = match result { Ok(v) => { if let Some(value) = v.get("components").and_then(|c| c.get(&panel.component)) { panel.value = serde_json::to_string_pretty(value).unwrap_or_default(); } if let Some(rows) = v.as_array() { panel.rows = rows.clone(); } serde_json::to_string_pretty(&v).unwrap_or_default() }, Err(e) => e }; panel.pending = None;
     }
-    bevy_egui::egui::Window::new("Separate game").default_pos([780.0, 100.0]).default_open(true).default_width(430.0).show(ctx, |ui| {
-        ui.label("Saved scene"); ui.text_edit_singleline(&mut panel.path);
+    let id = bevy_egui::egui::Id::new("studio_separate_game_open");
+    let mut open = ctx.data(|data| data.get_temp::<bool>(id)).unwrap_or_default();
+    bevy_egui::egui::Window::new(crate::ui::i18n::tr("Separate game", "Отдельная игра")).default_width(430.0).open(&mut open).show(ctx, |ui| {
+        use crate::ui::i18n::tr;
+        ui.label(tr("Saved scene", "Сохранённая сцена")); ui.text_edit_singleline(&mut panel.path);
         ui.horizontal(|ui| {
-            if ui.button("Launch").clicked() { queue.commands.push(crate::mcp_commands::StudioCommand::Custom { name:"game.start".into(),args:serde_json::json!({"path":panel.path,"port":15704}).to_string() }); }
-            if ui.button("Stop").clicked() { queue.commands.push(crate::mcp_commands::StudioCommand::Custom { name:"game.stop".into(),args:"{}".into() }); }
-            for (label, mode) in [("Pause","Paused"),("Resume","Playing")] { if ui.button(label).clicked() {
+            if ui.button(tr("Launch", "Запустить")).clicked() { queue.commands.push(crate::mcp_commands::StudioCommand::Custom { name:"game.start".into(),args:serde_json::json!({"path":panel.path,"port":15704}).to_string() }); }
+            if ui.button(tr("Stop", "Остановить")).clicked() { queue.commands.push(crate::mcp_commands::StudioCommand::Custom { name:"game.stop".into(),args:"{}".into() }); }
+            for (label, mode) in [(tr("Pause","Пауза"),"Paused"),(tr("Resume","Продолжить"),"Playing")] { if ui.button(label).clicked() {
                 panel.request(game.port,"world.insert_resources",serde_json::json!({"resource":"bevy_arc_studio::mcp_commands::StudioCommandQueue","value":{"commands":[{"SetPlayMode":{"mode":mode}}],"log":[]}}));
             } }
         });
-        if ui.button("Switch game to scene").clicked() {
+        if ui.button(tr("Switch game to scene", "Переключить игру на сцену")).clicked() {
             let params = serde_json::json!({"resource":"bevy_arc_studio::mcp_commands::StudioCommandQueue","value":{"commands":[{"Custom":{"name":"scene.switch","args":serde_json::json!({"path":panel.path}).to_string()}}],"log":[]}});
             panel.request(game.port,"world.insert_resources",params);
         }
-        ui.checkbox(&mut panel.auto_refresh, "Refresh tree every second");
-        let refresh = ui.button("Refresh live entities").clicked() || (game.child.is_some() && panel.auto_refresh && panel.pending.is_none() && panel.last_refresh.elapsed().as_secs_f32() >= 1.0);
+        ui.checkbox(&mut panel.auto_refresh, tr("Refresh tree every second", "Обновлять дерево каждую секунду"));
+        let refresh = ui.button(tr("Refresh live entities", "Обновить живые сущности")).clicked() || (game.child.is_some() && panel.auto_refresh && panel.pending.is_none() && panel.last_refresh.elapsed().as_secs_f32() >= 1.0);
         if refresh { panel.last_refresh = std::time::Instant::now(); panel.request(game.port,"world.query",serde_json::json!({"data":{"components":["bevy_arc_studio::props::SceneObject"],"option":["bevy_ecs::hierarchy::ChildOf","bevy_transform::components::transform::Transform"]}})); }
         let rows = ordered_rows(&panel.rows);
         bevy_egui::egui::ScrollArea::vertical().id_salt("game_tree").max_height(160.0).show(ui, |ui| {
@@ -146,13 +157,13 @@ fn panel(mut contexts: bevy_egui::EguiContexts, mut panel: ResMut<GamePanel>, ga
                 if ui.selectable_label(panel.entity == id, label).clicked() { panel.entity = id; }
             }
         });
-        ui.horizontal(|ui| { ui.label("Entity"); ui.add(bevy_egui::egui::DragValue::new(&mut panel.entity)); });
+        ui.horizontal(|ui| { ui.label(tr("Entity", "Сущность")); ui.add(bevy_egui::egui::DragValue::new(&mut panel.entity)); });
         ui.text_edit_singleline(&mut panel.component); ui.text_edit_multiline(&mut panel.value);
-        if ui.button("Read component from game").clicked() {
+        if ui.button(tr("Read component from game", "Прочитать компонент из игры")).clicked() {
             let params = serde_json::json!({"entity":panel.entity,"components":[panel.component.clone()]});
             panel.request(game.port,"world.get_components",params);
         }
-        if ui.button("Apply component to game").clicked() {
+        if ui.button(tr("Apply component to game", "Применить компонент к игре")).clicked() {
             match serde_json::from_str::<serde_json::Value>(&panel.value) {
                 Ok(value) => { let params=serde_json::json!({"entity":panel.entity,"components":{panel.component.clone():value}}); panel.request(game.port,"world.insert_components",params); }
                 Err(e) => panel.reply=e.to_string(),
@@ -161,6 +172,7 @@ fn panel(mut contexts: bevy_egui::EguiContexts, mut panel: ResMut<GamePanel>, ga
         if panel.pending.is_some() { ui.spinner(); }
         bevy_egui::egui::ScrollArea::vertical().max_height(300.0).show(ui,|ui| { ui.monospace(&panel.reply); });
     });
+    ctx.data_mut(|data| data.insert_temp(id, open));
 }
 
 #[cfg(test)]

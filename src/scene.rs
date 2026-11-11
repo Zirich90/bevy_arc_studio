@@ -41,7 +41,7 @@ fn setup_scene(
     ));
     commands.spawn((
         Name::new("FogVolume"),
-        FogVolume { density_factor: 0.02, scattering: 0.4, absorption: 0.05, ..default() },
+        FogVolume { density_factor: 0.0004, scattering: 0.4, absorption: 0.05, ..default() },
         Transform::from_xyz(0.0, 40.0, 0.0).with_scale(Vec3::new(grid.size, 120.0, grid.size)),
     ));
 

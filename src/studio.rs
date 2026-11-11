@@ -70,6 +70,7 @@ pub struct StudioState {
     pub scene_path: String,
     pub show_water: bool,
     pub show_grass: bool,
+    pub show_stats: bool,
     pub toolbar_h: f32,
     pub status: String,
 }
@@ -87,6 +88,7 @@ impl Default for StudioState {
             scene_path: "scenes/arc_scene.scn.json".into(),
             show_water: true,
             show_grass: true,
+            show_stats: true,
             toolbar_h: 0.0,
             status: "Ready".into(),
         }

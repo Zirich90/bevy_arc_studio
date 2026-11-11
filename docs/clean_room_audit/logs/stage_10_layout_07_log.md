@@ -1,0 +1,13 @@
+# Stage 10 / Layout 07 — Multi-Layout UI acceptance close-out
+
+- Timestamp: 2026-11-11 (local), editor 1600×900, BRP 15702, binary bevy_arc_studio (cargo run -p arc_studio_app).
+- Files changed: src/ui_assets.rs (AssetLoadStats resource + count_asset_loads/tally over AssetEvent<Mesh/Image/StandardMaterial/Gltf>); prefs reset to default after tests (APPDATA/ArcStudio/interface.json).
+- cargo check --offline --message-format=short -q: exit 0 (target/layout_accept_check.log).
+- cargo test --offline --message-format=short -q: 171 passed, 0 failed, 1 doctest ignored (target/layout_accept_tests.log).
+- Layouts vs references: Classic / Focus / Smart match ArcStudio_3_Layouts/*.png (layout_accept_initial/focus/smart/classic_return.png, viewed).
+- Live component edit: Inspector → SceneObject.aabb_half_extents x dragged 1.0→3.5 (layout_accept_aabb.png); BRP world.get_components entity 4294964826 = [3.5,1,1]; Ctrl+Z → [1,1,1] exact (layout_accept_undo_restored.png, viewed).
+- Input capture: orbit-drag over Scene Tree and wheel over Asset Browser left camera Transform (entity 4294966552) bit-identical; wheel scrolled the asset list instead of zooming. Typing qeb into focused Scene Tree filter kept tool=Move and camera unchanged (layout_accept_kbd_capture.png, viewed). Command Palette (View menu) captured "move" → filtered "Tool: Move", tool stayed Move, camera unchanged (layout_accept_palette_typed.png, viewed). Note: BRP send_keys does not synthesize egui consume_key(CTRL,K); palette opened via View menu instead.
+- No asset reload on layout switch: AssetLoadStats added=821 / loaded=627 unchanged across Classic→Focus→Smart→Classic; `modified` grows only from per-frame water/flake animation (water.rs:258, showcase/mod.rs:514), not reload.
+- Pinned module panel: unit test smart_remembers_pinned_panel_while_its_module_is_disabled passed (1 passed). Live: Smart Inspector pinned to Node Graph persisted across workspace switch to Modules (layout_accept_window_menu.png, layout_accept_modules_tab.png, viewed); Classic pin independent (unchecked). No shipped module.json owns a RightInspector panel (pf2e registers spawner/commands only, layout_accept_classic_modules2.png), so disable→remember→restore is exercised by the unit test with a synthetic module panel; pf2e On/Off live toggle recorded earlier in matrix.
+- Screenshots viewed this stage: layout_accept_resume/so_expand2/aabb/undo_restored/kbd_capture/view_menu/palette_typed/layout_menu/smart_start/window_menu/modules_tab/classic_window/classic_modules2.png.
+- Verdict: PASS — all matrix "Осталось" cells closed; matrix and shared memory updated.

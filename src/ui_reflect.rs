@@ -12,7 +12,7 @@ use crate::editor_registry::EditorRegistry;
 use crate::operators::{COALESCE_SECS, CompClock, ComponentHistory, flush_comp_history, record_edit, snap};
 use crate::selection::EditorSelection;
 use crate::studio::HistoryRequest;
-use crate::ui::TEAL;
+use crate::ui::{TEAL, i18n::tr};
 
 /// Components with dedicated UI or computed every frame.
 const HIDDEN: &[&str] = &["Transform", "GlobalTransform", "InheritedVisibility", "ViewVisibility", "ChildOf", "Children"];
@@ -121,12 +121,12 @@ pub fn draw(ui: &mut egui::Ui, view: &mut ReflectView, edits: &mut ReflectEdits,
     let mut action = None;
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Components").strong().color(TEAL));
+        ui.label(egui::RichText::new(tr("Components", "Компоненты")).strong().color(TEAL));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.menu_button("+ Add Component", |ui| {
+            ui.menu_button(tr("+ Add Component", "+ Добавить компонент"), |ui| {
                 let missing: Vec<_> = reg.scene_components().iter().filter(|c| !view.comps.iter().any(|v| v.type_id == c.type_id)).collect();
                 if missing.is_empty() {
-                    ui.weak("all registered components present");
+                    ui.weak(tr("all registered components present", "все зарегистрированные компоненты на месте"));
                 }
                 for c in missing {
                     if ui.button(&c.name).clicked() {
@@ -148,7 +148,7 @@ pub fn draw(ui: &mut egui::Ui, view: &mut ReflectView, edits: &mut ReflectEdits,
             .show_header(ui, |ui| {
                 ui.label(egui::RichText::new(&c.name).strong());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if !PROTECTED.contains(&c.name.as_str()) && ui.small_button("×").on_hover_text("Remove component").clicked() {
+                    if !PROTECTED.contains(&c.name.as_str()) && ui.small_button("×").on_hover_text(tr("Remove component", "Удалить компонент")).clicked() {
                         action = Some(CompAction::Remove(c.name.clone()));
                     }
                 });
@@ -330,7 +330,7 @@ fn edit(ui: &mut egui::Ui, v: &mut dyn PartialReflect, label: &str, depth: usize
         }
         _ => {
             row(ui, label, |ui| {
-                ui.weak("(not editable)");
+                ui.weak(tr("(not editable)", "(не редактируется)"));
                 false
             });
         }

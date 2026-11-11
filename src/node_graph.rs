@@ -288,20 +288,21 @@ fn parameter_fields(ui: &mut egui::Ui, params: &mut crate::arc_core::NodeParamet
 
 fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::Filter) {
     use crate::mcp_commands::StudioCommand as Cmd;
+    use crate::ui::i18n::tr;
     let open = d.studio.tool == "node_graph";
     if ui
         .button(if open {
-            "Close native canvas"
+            tr("Close native canvas", "Закрыть нативный холст")
         } else {
-            "Open native canvas"
+            tr("Open native canvas", "Открыть нативный холст")
         })
         .clicked()
     {
         d.studio.tool = if open { "select" } else { "node_graph" }.into();
     }
     for (label, events) in [
-        ("World / multiphysics graph", false),
-        ("PF2e / environment effects graph", true),
+        (tr("World / multiphysics graph", "Граф мира / мультифизики"), false),
+        (tr("PF2e / environment effects graph", "Граф эффектов окружения PF2e"), true),
     ] {
         if ui.button(label).clicked() {
             d.queue.push(Cmd::ReplaceStudioGraph {
@@ -309,8 +310,8 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
             });
         }
     }
-    if ui.button("Evaluate world graph").clicked() {d.queue.push(Cmd::EvaluateStudioGraph {target:None});}
-    ui.menu_button("Add node", |ui| {
+    if ui.button(tr("Evaluate world graph", "Вычислить граф мира")).clicked() {d.queue.push(Cmd::EvaluateStudioGraph {target:None});}
+    ui.menu_button(tr("Add node", "Добавить ноду"), |ui| {
         use crate::arc_core::StudioNodeKind::*;
         for kind in [Noise, HydraulicErosion, Temperature, FluidFlow, Biology, Scatter,
             Fireball, IgniteOil, MeltSnow, Granular, InvalidateNavigation] {
@@ -320,7 +321,7 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
             }
         }
     });
-    ui.collapsing("Node parameters", |ui| {
+    ui.collapsing(tr("Node parameters", "Параметры нод"), |ui| {
         for node in &d.graph.nodes {
             ui.push_id(node.id, |ui| {
                 ui.collapsing(format!("{}: {:?}", node.id, node.kind), |ui| {
@@ -330,7 +331,7 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
                     )>(id)).filter(|(original, _)| *original == node.params)
                         .unwrap_or_else(|| (node.params.clone(), node.params.clone()));
                     parameter_fields(ui, &mut draft);
-                    if ui.add_enabled(draft != original, egui::Button::new("Apply")).clicked() {
+                    if ui.add_enabled(draft != original, egui::Button::new(tr("Apply", "Применить"))).clicked() {
                         d.queue.push(Cmd::SetStudioGraphParameters { id: node.id, params: draft.clone() });
                     }
                     ui.data_mut(|data| data.insert_temp(id, (original, draft)));
@@ -344,17 +345,17 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
     ui.text_edit_singleline(&mut path);
     ui.data_mut(|data| data.insert_temp(path_id, path.clone()));
     ui.horizontal(|ui| {
-        if ui.button("Auto layout").clicked() {
+        if ui.button(tr("Auto layout", "Автораскладка")).clicked() {
             d.queue.push(Cmd::AutoLayoutStudioGraph);
         }
-        if ui.button("Save RON").clicked() {
+        if ui.button(tr("Save RON", "Сохранить RON")).clicked() {
             d.queue.push(Cmd::SaveStudioGraph { path: path.clone() });
         }
-        if ui.button("Load RON").clicked() {
+        if ui.button(tr("Load RON", "Загрузить RON")).clicked() {
             d.queue.push(Cmd::LoadStudioGraph { path });
         }
     });
-    ui.weak("Drag nodes and ports. Ctrl+Z / Ctrl+Y use Studio history. Domain evaluators are separate runtime adapters.");
+    ui.weak(tr("Drag nodes and ports. Ctrl+Z / Ctrl+Y use Studio history. Domain evaluators are separate runtime adapters.", "Перетаскивайте ноды и порты. Ctrl+Z / Ctrl+Y используют историю Studio. Доменные вычислители — отдельные рантайм-адаптеры."));
 }
 
 pub struct NodeGraphPlugin;

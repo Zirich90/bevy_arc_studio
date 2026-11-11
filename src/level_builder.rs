@@ -22,7 +22,7 @@ use crate::navigation::Footprint;
 use crate::props::{NextObjectId, ObjectCategory, SceneObject, UserProp};
 use crate::selection::Deleted;
 use crate::terrain_render::TerrainGrid;
-use crate::ui::{UiData, chip, TEAL};
+use crate::ui::{UiData, chip, TEAL, i18n::{self, tr}, icons::{self, Icon}};
 use crate::ui_inspector::Filter;
 use crate::world_io::SceneComponentAppExt;
 
@@ -1097,20 +1097,26 @@ fn draw_level_grid(gizmos: &mut Gizmos, g: &GridSettings, hover: Option<IVec3>, 
 
 fn level_panel(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     let _ = f;
-    ui.label(egui::RichText::new("Grid & Storey").strong().color(TEAL));
-    ui.checkbox(&mut d.gset.enabled, "Grid Snap (move: cell, Ctrl = ½ cell; rotate: angle step)");
-    ui.add(egui::Slider::new(&mut d.gset.cell_size, 0.5..=8.0).text("cell size"));
-    ui.add(egui::Slider::new(&mut d.gset.angle_snap_deg, 1.0..=90.0).text("angle snap°"));
-    ui.add(egui::Slider::new(&mut d.gset.floor_height, 2.0..=8.0).text("floor height"));
+    let header = |ui: &mut egui::Ui, kind: Icon, text: &str| {
+        ui.horizontal(|ui| {
+            icons::paint(ui, kind, 14.0, TEAL);
+            ui.label(egui::RichText::new(text).strong().color(TEAL));
+        });
+    };
+    header(ui, Icon::Grid, tr("Grid & Storey", "Сетка и этаж"));
+    ui.checkbox(&mut d.gset.enabled, tr("Grid Snap (move: cell, Ctrl = ½ cell; rotate: angle step)", "Привязка к сетке (перемещение: ячейка, Ctrl = ½ ячейки; вращение: шаг угла)"));
+    ui.add(egui::Slider::new(&mut d.gset.cell_size, 0.5..=8.0).text(tr("cell size", "размер ячейки")));
+    ui.add(egui::Slider::new(&mut d.gset.angle_snap_deg, 1.0..=90.0).text(tr("angle snap°", "шаг угла°")));
+    ui.add(egui::Slider::new(&mut d.gset.floor_height, 2.0..=8.0).text(tr("floor height", "высота этажа")));
     let bound = d.gset.ground_snap;
-    if chip(ui, bound, if bound { "Bound to ground - click to unbind" } else { "Unbound (Y = 0) - click to bind to ground" }).clicked() {
+    if chip(ui, bound, if bound { tr("Bound to ground - click to unbind", "Привязано к земле - клик чтобы отвязать") } else { tr("Unbound (Y = 0) - click to bind to ground", "Не привязано (Y = 0) - клик чтобы привязать к земле") }).clicked() {
         d.gset.ground_snap = !bound;
         if bound {
             d.gset.ground_y = 0.0;
         }
     }
     ui.horizontal(|ui| {
-        ui.label("Floor level");
+        ui.label(tr("Floor level", "Уровень этажа"));
         if ui.button("−").clicked() {
             d.gset.floor_level = (d.gset.floor_level - 1).max(-8);
         }
@@ -1120,37 +1126,37 @@ fn level_panel(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         }
     });
     ui.separator();
-    ui.label(egui::RichText::new("Mode  (hotkey L)").strong().color(TEAL));
+    header(ui, Icon::Cube, tr("Mode  (hotkey L)", "Режим  (клавиша L)"));
     ui.horizontal_wrapped(|ui| {
         for m in BuildMode::ALL {
-            if chip(ui, d.lbs.mode == m, m.label()).clicked() {
+            if chip(ui, d.lbs.mode == m, i18n::label(m.label())).clicked() {
                 d.lbs.mode = m;
                 d.lbs.anchor = None;
             }
         }
     });
-    ui.label(egui::RichText::new("Style").strong().color(TEAL));
+    header(ui, Icon::Folder, tr("Style", "Стиль"));
     ui.horizontal_wrapped(|ui| {
         for s in WallStyle::ALL {
-            if chip(ui, d.lbs.style == s, s.label()).clicked() {
+            if chip(ui, d.lbs.style == s, i18n::label(s.label())).clicked() {
                 d.lbs.style = s;
             }
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Facing (T)");
+        ui.label(tr("Facing (T)", "Направление (T)"));
         for i in 0..4u8 {
             if chip(ui, d.lbs.facing == i, ["+Z / E", "+X", "−Z", "−X"][i as usize]).clicked() {
                 d.lbs.facing = i;
             }
         }
     });
-    ui.small("Room Box / Wall Line: drag on the grid. Floor Brush / Eraser: paint cells. Door / Arch / Torch: click a wall. Esc cancels.");
+    ui.small(tr("Room Box / Wall Line: drag on the grid. Floor Brush / Eraser: paint cells. Door / Arch / Torch: click a wall. Esc cancels.", "Комната / Стена: тяните по сетке. Кисть пола / Ластик: красьте ячейки. Дверь / Арка / Факел: клик по стене. Esc — отмена."));
     ui.separator();
-    ui.label(egui::RichText::new("Doors").strong().color(TEAL));
-    ui.small("Toggle `is_open` on a Door in the Objects inspector, or use the ToggleDoor command.");
+    header(ui, Icon::GridPlus, tr("Doors", "Двери"));
+    ui.small(tr("Toggle `is_open` on a Door in the Objects inspector, or use the ToggleDoor command.", "Переключите `is_open` у двери в инспекторе объектов или используйте команду ToggleDoor."));
     ui.separator();
-    if ui.button("Build demo tavern (2 rooms, door, stairs, torches)").clicked() {
+    if ui.button(tr("Build demo tavern (2 rooms, door, stairs, torches)", "Построить демо-таверну (2 комнаты, дверь, лестница, факелы)")).clicked() {
         let style = d.lbs.style;
         for c in demo_tavern_commands(style) {
             d.queue.push(c);

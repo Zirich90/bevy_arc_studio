@@ -64,6 +64,20 @@ Regenerate with `./scripts/regenerate_quillshade.ps1 -ShaderEditor <path-to-shad
 
 Verified on Windows on 2026-11-02: 142 Rust tests passed, one doctest ignored; BRP material assignment/history, graph history, PIE and prefab-root/tile scene roundtrip passed. `.cargo/config.toml` keeps build output and temporary files in the workspace's `target/` directory (E: on the development machine). [Build memory recovery and rollback](docs/architecture/08_quillshade_noodle.md) are documented; pagefile changes are a separate administrative action, never part of a build.
 
+## Interface layouts
+
+Choose **View → Interface Layout** or press **Ctrl+Shift+1/2/3**. Classic keeps the scene tree, inspector and asset browser around the viewport. Focus puts tools in a vertical dock and opens panels on demand. Smart groups registered panels into Scene, Terrain, World, Build and Modules. Select a tool explicitly to start editing in that mode.
+
+Use **Window** to show and pin panels. Press **Ctrl+K** to search commands, panels and tools. Use the arrows to select an entry, Enter to run it and Esc to close the palette. **F** frames the selection. **Separate Game** sits beside the Play controls.
+
+ArcStudio saves interface preferences to `ArcStudio/interface.json` in the user configuration directory. **View → Interface Layout** can reset the current profile or all profiles.
+
+Use **File → Scene Path…** to edit the scene path, then choose **File → Save Scene** or **File → Load Scene**. The toolbar’s **Save Scene** button uses the same path.
+
+Plugins register a stable panel ID and a shared renderer through `EditorRegistry` using `register_panel` or `register_panel_def`. Unclassified inspector panels appear in Smart → Modules. Panel renderers use the same command queue across layouts.
+
+Register inspector panels at `PanelLocation::RightInspector` to make them available in the Classic inspector, the Focus Window menu, and the corresponding Smart workspace. For a contextual tool, bind its `ToolDef` to the same panel ID so Focus can open it when the tool is active. Module-owned entries disappear from navigation when the module is disabled. Reuse the same ID when re-enabling the module so a pinned inspector can restore its context.
+
 ## Hotkeys
 
 | Key | Action |

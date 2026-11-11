@@ -14,6 +14,7 @@ use crate::gizmo_3d::gizmo_system;
 use crate::studio::{CamStyle, StudioState};
 use crate::terrain_brush::{BrushKind, brush_system};
 use crate::ui::*;
+use crate::ui::i18n::{self, tr};
 use crate::ui_inspector::{Filter, crow, section, srow};
 
 pub const TOOL_TERRAIN_BRUSH: &str = "terrain_brush";
@@ -31,6 +32,7 @@ impl Plugin for WorldEnvironmentPlugin {
 fn register_editor_items(app: &mut App) {
     {
         app.register_panel_def(PanelDef::new("global", "Global Settings", PanelLocation::RightInspector, global_tab).order(0))
+            .register_panel_def(PanelDef::new("terrain_settings", "Terrain Generation", PanelLocation::RightInspector, terrain_tab).order(5))
             .register_panel_def(PanelDef::new("brushes", "Terrain Brushes", PanelLocation::RightInspector, brushes_tab).order(20))
             .register_tool(
                 ToolDef::new(TOOL_TERRAIN_BRUSH, "Terrain Brush").hotkey(KeyCode::KeyB).panel("brushes").hint("Sculpt, paint pines, erase props"),
@@ -91,79 +93,94 @@ fn merge_geo(dst: &mut WorldSpec, s: &WorldSpec) {
 // ───────────────────────────── Global Settings ─────────────────────────────
 
 fn global_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
+    let world_only = d.layout.active() == crate::ui::layout::Layout::Smart;
+    environment_tab(ui, d, f, !world_only, true);
+}
+
+fn terrain_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
+    environment_tab(ui, d, f, true, false);
+}
+
+fn environment_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter, terrain: bool, world: bool) {
     let mut geo = d.draft.0.clone().unwrap_or_else(|| (*d.spec).clone());
     let mut live = (*d.spec).clone();
     let (mut gev, mut lev) = (Ev::default(), Ev::default());
 
-    section(ui, f, "Terrain & Erosion", &["empty grid scene", "seed", "size", "resolution", "base height", "mountain height", "max height", "noise frequency", "domain warp", "erosion droplets", "thermal iterations"], |ui| {
-        if f.ok("empty grid scene") {
-            let mut empty = !geo.terrain_enabled;
-            gev.note(&ui.checkbox(&mut empty, "empty grid scene (no terrain, lake or props)"));
-            geo.terrain_enabled = !empty;
-        }
-        if f.ok("seed") {
-            ui.horizontal(|ui| {
-                ui.label("seed");
-                gev.note(&ui.add(egui::DragValue::new(&mut geo.seed).speed(1.0)));
-            });
-        }
-        srow(ui, f, &mut gev, "size", &mut geo.size, 64.0..=1024.0);
-        srow(ui, f, &mut gev, "resolution", &mut geo.resolution, 65..=513);
-        srow(ui, f, &mut gev, "base height", &mut geo.base_height, 0.0..=60.0);
-        srow(ui, f, &mut gev, "mountain height", &mut geo.mountain_height, 0.0..=150.0);
-        srow(ui, f, &mut gev, "max height", &mut geo.max_height, 20.0..=200.0);
-        srow(ui, f, &mut gev, "noise frequency", &mut geo.noise_frequency, 0.5..=8.0);
-        srow(ui, f, &mut gev, "domain warp", &mut geo.warp_amount, 0.0..=0.5);
-        srow(ui, f, &mut gev, "erosion droplets", &mut geo.erosion_droplets, 0..=150_000);
-        srow(ui, f, &mut gev, "thermal iterations", &mut geo.thermal_iterations, 0..=80);
-    });
-    section(ui, f, "Lake & Water", &["lake x", "lake z", "lake radius", "lake depth", "water level", "shore foam", "camp x", "camp z", "clearing radius"], |ui| {
-        srow(ui, f, &mut gev, "lake x", &mut geo.lake_center[0], -120.0..=120.0);
-        srow(ui, f, &mut gev, "lake z", &mut geo.lake_center[1], -120.0..=120.0);
-        srow(ui, f, &mut gev, "lake radius", &mut geo.lake_radius, 5.0..=80.0);
-        srow(ui, f, &mut gev, "lake depth", &mut geo.lake_depth, 0.0..=15.0);
-        srow(ui, f, &mut gev, "water level", &mut geo.water_level, 0.0..=30.0);
-        srow(ui, f, &mut gev, "shore foam", &mut geo.shore_foam, 0.0..=1.0);
-        water_bodies_ui(ui, &mut d.water, &mut d.queue, geo.water_level);
-        srow(ui, f, &mut gev, "camp x", &mut geo.camp_center[0], -120.0..=120.0);
-        srow(ui, f, &mut gev, "camp z", &mut geo.camp_center[1], -120.0..=120.0);
-        srow(ui, f, &mut gev, "clearing radius", &mut geo.clearing_radius, 3.0..=30.0);
-    });
-    section(ui, f, "Sun & Atmosphere", &["time of day", "auto sun", "sun speed", "sun intensity", "shadows", "bloom", "reflections"], |ui| {
-        if f.ok("time of day") {
-            let r = ui.add(egui::Slider::new(&mut live.time_of_day, 0.0..=24.0).text("time of day").custom_formatter(|v, _| hhmm(v as f32)));
-            lev.note(&r);
-        }
-        crow(ui, f, &mut lev, "auto sun", &mut live.auto_sun);
-        srow(ui, f, &mut lev, "sun speed", &mut live.sun_speed, 0.01..=2.0);
-        srow(ui, f, &mut lev, "sun intensity", &mut live.sun_intensity, 0.0..=2.0);
-        crow(ui, f, &mut lev, "shadows", &mut live.shadows);
-        crow(ui, f, &mut lev, "bloom", &mut live.bloom);
-        crow(ui, f, &mut lev, "reflections", &mut live.reflections);
-    });
-    section(ui, f, "Fog & God Rays", &["fog", "fog density", "fog color", "god rays"], |ui| {
-        crow(ui, f, &mut lev, "fog", &mut live.fog_enabled);
-        if f.ok("fog density") {
-            lev.note(&ui.add(egui::Slider::new(&mut live.fog_density, 0.0..=0.03).text("fog density").fixed_decimals(4)));
-        }
-        if f.ok("fog color") {
-            ui.horizontal(|ui| {
-                let mut c = live.fog_color;
-                let r = egui::color_picker::color_edit_button_rgb(ui, &mut c);
-                ui.label("fog color");
-                if r.changed() {
-                    live.fog_color = c;
-                }
+    if terrain {
+        section(ui, f, "Terrain & Erosion", &["empty grid scene", "seed", "size", "resolution", "base height", "mountain height", "max height", "noise frequency", "domain warp", "erosion droplets", "thermal iterations"], |ui| {
+            let empty_label = tr("empty grid scene (no terrain, lake or props)", "пустая сетка (без рельефа, озера и объектов)");
+            if f.ok("empty grid scene") || f.ok(empty_label) {
+                let mut empty = !geo.terrain_enabled;
+                gev.note(&ui.checkbox(&mut empty, empty_label));
+                geo.terrain_enabled = !empty;
+            }
+            if f.ok("seed") || f.ok(i18n::shown("seed")) {
+                ui.horizontal(|ui| {
+                    ui.label(i18n::shown("seed"));
+                    gev.note(&ui.add(egui::DragValue::new(&mut geo.seed).speed(1.0)));
+                });
+            }
+            srow(ui, f, &mut gev, "size", &mut geo.size, 64.0..=1024.0);
+            srow(ui, f, &mut gev, "resolution", &mut geo.resolution, 65..=513);
+            srow(ui, f, &mut gev, "base height", &mut geo.base_height, 0.0..=60.0);
+            srow(ui, f, &mut gev, "mountain height", &mut geo.mountain_height, 0.0..=150.0);
+            srow(ui, f, &mut gev, "max height", &mut geo.max_height, 20.0..=200.0);
+            srow(ui, f, &mut gev, "noise frequency", &mut geo.noise_frequency, 0.5..=8.0);
+            srow(ui, f, &mut gev, "domain warp", &mut geo.warp_amount, 0.0..=0.5);
+            srow(ui, f, &mut gev, "erosion droplets", &mut geo.erosion_droplets, 0..=150_000);
+            srow(ui, f, &mut gev, "thermal iterations", &mut geo.thermal_iterations, 0..=80);
+        });
+        section(ui, f, "Biome Foliage", &["forest density", "boulder density", "grass density"], |ui| {
+            srow(ui, f, &mut gev, "forest density", &mut geo.forest_density, 0.0..=1.0);
+            srow(ui, f, &mut gev, "boulder density", &mut geo.boulder_density, 0.0..=1.0);
+            srow(ui, f, &mut gev, "grass density", &mut geo.grass_density, 0.0..=1.0);
+        });
+    }
+    if world {
+        section(ui, f, "Lake & Water", &["lake x", "lake z", "lake radius", "lake depth", "water level", "shore foam", "camp x", "camp z", "clearing radius"], |ui| {
+            srow(ui, f, &mut gev, "lake x", &mut geo.lake_center[0], -120.0..=120.0);
+            srow(ui, f, &mut gev, "lake z", &mut geo.lake_center[1], -120.0..=120.0);
+            srow(ui, f, &mut gev, "lake radius", &mut geo.lake_radius, 5.0..=80.0);
+            srow(ui, f, &mut gev, "lake depth", &mut geo.lake_depth, 0.0..=15.0);
+            srow(ui, f, &mut gev, "water level", &mut geo.water_level, 0.0..=30.0);
+            srow(ui, f, &mut gev, "shore foam", &mut geo.shore_foam, 0.0..=1.0);
+            water_bodies_ui(ui, &mut d.water, &mut d.queue, geo.water_level);
+            srow(ui, f, &mut gev, "camp x", &mut geo.camp_center[0], -120.0..=120.0);
+            srow(ui, f, &mut gev, "camp z", &mut geo.camp_center[1], -120.0..=120.0);
+            srow(ui, f, &mut gev, "clearing radius", &mut geo.clearing_radius, 3.0..=30.0);
+        });
+        section(ui, f, "Sun & Atmosphere", &["time of day", "auto sun", "sun speed", "sun intensity", "shadows", "bloom", "reflections"], |ui| {
+            if f.ok("time of day") || f.ok(i18n::shown("time of day")) {
+                let r = ui.add(egui::Slider::new(&mut live.time_of_day, 0.0..=24.0).text(i18n::shown("time of day")).custom_formatter(|v, _| hhmm(v as f32)));
                 lev.note(&r);
-            });
-        }
-        crow(ui, f, &mut lev, "god rays", &mut live.god_rays);
-    });
-    section(ui, f, "Biome Foliage", &["forest density", "boulder density", "grass density"], |ui| {
-        srow(ui, f, &mut gev, "forest density", &mut geo.forest_density, 0.0..=1.0);
-        srow(ui, f, &mut gev, "boulder density", &mut geo.boulder_density, 0.0..=1.0);
-        srow(ui, f, &mut gev, "grass density", &mut geo.grass_density, 0.0..=1.0);
-    });
+            }
+            crow(ui, f, &mut lev, "auto sun", &mut live.auto_sun);
+            srow(ui, f, &mut lev, "sun speed", &mut live.sun_speed, 0.01..=2.0);
+            srow(ui, f, &mut lev, "sun intensity", &mut live.sun_intensity, 0.0..=2.0);
+            crow(ui, f, &mut lev, "shadows", &mut live.shadows);
+            crow(ui, f, &mut lev, "bloom", &mut live.bloom);
+            crow(ui, f, &mut lev, "reflections", &mut live.reflections);
+        });
+        section(ui, f, "Fog & God Rays", &["fog", "fog density", "fog color", "god rays"], |ui| {
+            crow(ui, f, &mut lev, "fog", &mut live.fog_enabled);
+            if f.ok("fog density") || f.ok(i18n::shown("fog density")) {
+                lev.note(&ui.add(egui::Slider::new(&mut live.fog_density, 0.0..=0.03).text(i18n::shown("fog density")).fixed_decimals(4)));
+            }
+            if f.ok("fog color") || f.ok(i18n::shown("fog color")) {
+                ui.horizontal(|ui| {
+                    let mut c = live.fog_color;
+                    let r = egui::color_picker::color_edit_button_rgb(ui, &mut c);
+                    ui.label(i18n::shown("fog color"));
+                    if r.changed() {
+                        live.fog_color = c;
+                    }
+                    lev.note(&r);
+                });
+            }
+            crow(ui, f, &mut lev, "god rays", &mut live.god_rays);
+        });
+    }
+
 
     // live (cheap) fields: transactional preview, one undo entry per drag
     if lev.changed || lev.finish {
@@ -178,7 +195,7 @@ fn global_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         d.draft.0 = Some(geo);
     }
     if d.draft.0.is_some() {
-        ui.colored_label(egui::Color32::from_rgb(240, 190, 80), "Terrain edit pending: release the slider to regenerate (sculpting is reset).");
+        ui.colored_label(AMBER, tr("Terrain edit pending: release the slider to regenerate (sculpting is reset).", "Правка ландшафта ожидает: отпустите ползунок для регенерации (лепка сбрасывается)."));
     }
     if gev.finish {
         if let Some(g) = d.draft.0.take() {
@@ -196,37 +213,38 @@ fn global_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
 // ───────────────────────────── Terrain Brushes ─────────────────────────────
 
 fn brushes_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
-    ui.label(egui::RichText::new("Brush").strong().color(TEAL));
+    ui.label(egui::RichText::new(i18n::shown("Brush")).strong().color(TEAL));
     ui.horizontal_wrapped(|ui| {
         for k in BrushKind::ALL {
-            if f.ok(k.label()) && chip(ui, d.brush.kind == k, k.label()).clicked() {
+            let name = i18n::label(k.label());
+            if (f.ok(k.label()) || f.ok(name)) && chip(ui, d.brush.kind == k, name).clicked() {
                 d.brush.kind = k;
             }
         }
     });
     let (mut r, mut s) = (d.brush.radius, d.brush.strength);
-    if f.ok("brush radius") && ui.add(egui::Slider::new(&mut r, 2.0..=45.0).text("Brush Radius (m)")).changed() {
+    if f.ok("brush radius") && ui.add(egui::Slider::new(&mut r, 2.0..=45.0).text(i18n::shown("Brush Radius (m)"))).changed() {
         d.brush.radius = r;
     }
-    if f.ok("strength") && ui.add(egui::Slider::new(&mut s, 0.5..=20.0).text("Strength")).changed() {
+    if f.ok("strength") && ui.add(egui::Slider::new(&mut s, 0.5..=20.0).text(i18n::shown("Strength"))).changed() {
         d.brush.strength = s;
     }
     ui.separator();
     let help = match d.brush.kind {
-        BrushKind::Raise => "Hold LMB on the terrain: raises ground (m/s = Strength).",
-        BrushKind::Lower => "Hold LMB: digs the ground.",
-        BrushKind::Smooth => "Hold LMB: relaxes bumps inside the ring.",
-        BrushKind::Flatten => "Hold LMB: levels to the height where the stroke began.",
-        BrushKind::PaintPines => "Hold LMB: scatters pines (one undo step per stroke).",
-        BrushKind::EraseProps => "Hold LMB: removes every prop inside the ring.",
+        BrushKind::Raise => tr("Hold LMB on the terrain: raises ground (m/s = Strength).", "Удерживайте ЛКМ на рельефе: подъём грунта (м/с = Сила)."),
+        BrushKind::Lower => tr("Hold LMB: digs the ground.", "Удерживайте ЛКМ: копает грунт."),
+        BrushKind::Smooth => tr("Hold LMB: relaxes bumps inside the ring.", "Удерживайте ЛКМ: сглаживает неровности внутри кольца."),
+        BrushKind::Flatten => tr("Hold LMB: levels to the height where the stroke began.", "Удерживайте ЛКМ: выравнивает по высоте начала штриха."),
+        BrushKind::PaintPines => tr("Hold LMB: scatters pines (one undo step per stroke).", "Удерживайте ЛКМ: рассаживает сосны (один шаг отмены на штрих)."),
+        BrushKind::EraseProps => tr("Hold LMB: removes every prop inside the ring.", "Удерживайте ЛКМ: удаляет все объекты внутри кольца."),
     };
     ui.label(help);
-    ui.weak("RMB+WASD fly · MMB / Alt+LMB orbit · wheel zoom");
+    ui.weak(tr("RMB+WASD fly · MMB / Alt+LMB orbit · wheel zoom", "ПКМ+WASD полёт · СКМ / Alt+ЛКМ орбита · колесо зум"));
     match d.brush.hover {
-        Some(h) => ui.weak(format!("cursor: x {:.1}  y {:.1}  z {:.1}", h.x, h.y, h.z)),
-        None => ui.weak("cursor: -"),
+        Some(h) => ui.weak(format!("{}: x {:.1}  y {:.1}  z {:.1}", tr("cursor", "курсор"), h.x, h.y, h.z)),
+        None => ui.weak(format!("{}: -", tr("cursor", "курсор"))),
     };
-    ui.weak(format!("sculpt steps: {} undo / {} redo", d.th.undo_len(), d.th.redo_len()));
+    ui.weak(format!("{}: {} {} / {} {}", tr("sculpt steps", "шаги лепки"), d.th.undo_len(), tr("undo", "отмена"), d.th.redo_len(), tr("redo", "повтор")));
 }
 
 
@@ -242,7 +260,7 @@ mod tests {
         register_editor_items(&mut app);
         let r = app.world().resource::<EditorRegistry>();
         let ids: Vec<_> = r.panels(PanelLocation::RightInspector).iter().map(|p| p.id).collect();
-        assert_eq!(ids, ["global", "brushes"]);
+        assert_eq!(ids, ["global", "terrain_settings", "brushes"]);
         assert_eq!(r.tool_for_panel("brushes").unwrap().id, TOOL_TERRAIN_BRUSH);
         let labels: Vec<_> = r.spawner_items().iter().map(|i| i.label).collect();
         for want in ["Pine", "Boulder", "Campfire", "Pier", "Duck"] {
@@ -264,12 +282,12 @@ mod tests {
 /// Per-body water levels: pick a basin on the terrain and set its level without touching the global one.
 fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, queue: &mut crate::mcp_commands::StudioCommandQueue, global_level: f32) {
     ui.separator();
-    ui.label(egui::RichText::new("Water bodies (own level, global level untouched)").strong().color(TEAL));
+    ui.label(egui::RichText::new(tr("Water bodies (own level, global level untouched)", "Водоёмы (свой уровень, общий не меняется)")).strong().color(TEAL));
     ui.horizontal(|ui| {
-        if chip(ui, w.picking, if w.picking { "Click terrain... (Esc cancels)" } else { "Pick water body" }).clicked() {
+        if chip(ui, w.picking, if w.picking { tr("Click terrain... (Esc cancels)", "Кликните рельеф... (Esc — отмена)") } else { tr("Pick water body", "Выбрать водоём") }).clicked() {
             w.picking = !w.picking;
         }
-        if ui.add_enabled(w.selected.is_some(), egui::Button::new("Reset to global")).clicked() {
+        if ui.add_enabled(w.selected.is_some(), egui::Button::new(tr("Reset to global", "Сбросить к общему"))).clicked() {
             if let Some(b) = w.selected.and_then(|i| w.items.get(i)) {
                 queue.push(crate::mcp_commands::StudioCommand::SetWaterBody { x: b.seed[0], z: b.seed[1], level: None });
             }
@@ -277,7 +295,7 @@ fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, queue: 
     });
     let mut pick = None;
     for (i, b) in w.items.iter().enumerate() {
-        if ui.selectable_label(w.selected == Some(i), format!("Body {}  ({:.0}, {:.0})  level {:.1}", i + 1, b.seed[0], b.seed[1], b.level)).clicked() {
+        if ui.selectable_label(w.selected == Some(i), format!("{} {}  ({:.0}, {:.0})  {} {:.1}", tr("Body", "Водоём"), i + 1, b.seed[0], b.seed[1], tr("level", "уровень"), b.level)).clicked() {
             pick = Some(i);
         }
     }
@@ -286,9 +304,9 @@ fn water_bodies_ui(ui: &mut egui::Ui, w: &mut crate::water::WaterBodies, queue: 
     }
     if let Some(i) = w.selected.filter(|&i| i < w.items.len()) {
         let (seed, mut lvl) = (w.items[i].seed, w.items[i].level);
-        if ui.add(egui::Slider::new(&mut lvl, 0.0..=40.0).text("body level")).changed() {
+        if ui.add(egui::Slider::new(&mut lvl, 0.0..=40.0).text(tr("body level", "уровень водоёма"))).changed() {
             queue.push(crate::mcp_commands::StudioCommand::SetWaterBody { x: seed[0], z: seed[1], level: Some(lvl) });
         }
-        ui.weak(format!("global level {global_level:.1} stays as is"));
+        ui.weak(format!("{} {global_level:.1} {}", tr("global level", "общий уровень"), tr("stays as is", "не меняется")));
     }
 }

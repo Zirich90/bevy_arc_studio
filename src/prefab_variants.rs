@@ -539,16 +539,17 @@ fn sync_at(w: &mut World, assets: &Path) {
 }
 fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::Filter) {
     use crate::mcp_commands::StudioCommand as Cmd;
-    ui.heading("Prefab variants");
+    use crate::ui::i18n::tr;
+    ui.heading(tr("Prefab variants", "Варианты префабов"));
     let Some(root) = d.sel.primary else {
-        ui.label("Select a prefab root.");
+        ui.label(tr("Select a prefab root.", "Выберите корень префаба."));
         return;
     };
     let Ok((inst, overrides)) = d.prefab_roots.get(root) else {
-        ui.label("Select a prefab root in the outliner.");
+        ui.label(tr("Select a prefab root in the outliner.", "Выберите корень префаба в дереве сцены."));
         return;
     };
-    ui.label(format!("Base: {}", inst.prefab_path));
+    ui.label(format!("{}: {}", tr("Base", "База"), inst.prefab_path));
     let mut patches: Patches =
         serde_json::from_str(overrides.map_or("{}", |o| o.json.as_str())).unwrap_or_default();
     let file = match load_resolved(&crate::props::assets_dir(), &inst.prefab_path) {
@@ -559,16 +560,16 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
         }
     };
     let target = Target::Entity(root);
-    ui.weak("Overrides follow base updates. Reset restores the inherited value.");
+    ui.weak(tr("Overrides follow base updates. Reset restores the inherited value.", "Переопределения следуют обновлениям базы. Сброс возвращает унаследованное значение."));
     let name_id = ui.make_persistent_id("variant_name");
     let mut name: String = ui.data_mut(|m| m.get_temp(name_id)).unwrap_or_default();
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut name)
-                .hint_text("new variant name")
+                .hint_text(tr("new variant name", "имя нового варианта"))
                 .desired_width(165.0),
         );
-        if ui.button("Save variant").clicked() {
+        if ui.button(tr("Save variant", "Сохранить вариант")).clicked() {
             d.queue.push(Cmd::SavePrefabVariant {
                 target: target.clone(),
                 path: name.clone(),
@@ -614,7 +615,7 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
                             field.into()
                         });
                         if ui
-                            .add_enabled(changed, egui::Button::new("Reset"))
+                            .add_enabled(changed, egui::Button::new(tr("Reset", "Сбросить")))
                             .clicked()
                         {
                             d.queue.push(Cmd::SetPrefabOverride {
@@ -628,7 +629,7 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
                     });
                     ui.horizontal(|ui| {
                         ui.add(egui::TextEdit::singleline(&mut value).desired_width(235.0));
-                        if ui.small_button("Apply").clicked() {
+                        if ui.small_button(tr("Apply", "Применить")).clicked() {
                             d.queue.push(Cmd::SetPrefabOverride {
                                 target: target.clone(),
                                 member: m.id.clone(),

@@ -138,7 +138,7 @@ fn apply_time_of_day(
     }
     ambient.brightness = 14.0 * nb * (1.0 - d) + 450.0 * d;
     for mut v in &mut vol {
-        v.density_factor = if spec.fog_enabled { spec.fog_density * 1.6 } else { 0.0 };
+        v.density_factor = if spec.fog_enabled { spec.fog_density * 0.1 } else { 0.0 };
     }
     for (mut exp, mut fog) in &mut cam {
         exp.ev100 = ev;

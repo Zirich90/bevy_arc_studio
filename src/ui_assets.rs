@@ -19,6 +19,8 @@ use crate::props::assets_dir;
 use crate::terrain_render::TerrainGrid;
 use crate::thumbnails::Thumbnails;
 use crate::ui::*;
+use crate::ui::i18n::tr;
+use crate::ui::icons::{self, Icon};
 use crate::ui_inspector::spawn_point;
 
 const RESCAN: Duration = Duration::from_millis(1500);
@@ -106,7 +108,6 @@ pub enum Placing {
 
 #[derive(Resource)]
 pub struct AssetBrowserState {
-    pub open: bool,
     pub click_place: bool,
     pub placing: Option<Placing>,
     tab: Tab,
@@ -120,7 +121,6 @@ pub struct AssetBrowserState {
 impl Default for AssetBrowserState {
     fn default() -> Self {
         Self {
-            open: true,
             click_place: false,
             placing: None,
             tab: Tab::All,
@@ -137,7 +137,44 @@ pub struct AssetBrowserPlugin;
 
 impl Plugin for AssetBrowserPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AssetBrowserState>().add_systems(Update, placement_system);
+        app.init_resource::<AssetBrowserState>()
+            .init_resource::<AssetLoadStats>()
+            .register_type::<AssetLoadStats>()
+            .add_systems(Update, (placement_system, count_asset_loads));
+    }
+}
+
+/// Loader-event counters; switching layouts must leave these unchanged (no asset reload).
+#[derive(Resource, Reflect, Default)]
+#[reflect(Resource)]
+pub struct AssetLoadStats {
+    pub added: u32,
+    pub modified: u32,
+    pub loaded: u32,
+}
+
+fn count_asset_loads(
+    mut stats: ResMut<AssetLoadStats>,
+    mut mesh: MessageReader<AssetEvent<bevy::render::mesh::Mesh>>,
+    mut image: MessageReader<AssetEvent<bevy::image::Image>>,
+    mut material: MessageReader<AssetEvent<bevy::pbr::StandardMaterial>>,
+    mut gltf: MessageReader<AssetEvent<bevy::gltf::Gltf>>,
+) {
+    let stats = &mut *stats;
+    tally(stats, mesh.read());
+    tally(stats, image.read());
+    tally(stats, material.read());
+    tally(stats, gltf.read());
+}
+
+fn tally<'a, A: bevy::asset::Asset>(stats: &mut AssetLoadStats, events: impl Iterator<Item = &'a AssetEvent<A>>) {
+    for ev in events {
+        match ev {
+            AssetEvent::Added { .. } => stats.added += 1,
+            AssetEvent::Modified { .. } => stats.modified += 1,
+            AssetEvent::LoadedWithDependencies { .. } => stats.loaded += 1,
+            _ => {}
+        }
     }
 }
 
@@ -145,11 +182,11 @@ impl Plugin for AssetBrowserPlugin {
 
 fn card(ui: &mut egui::Ui, icon: &str, tint: egui::Color32, title: &str, sub: &str, active: bool, thumb: Option<(&mut Thumbnails, &str)>) -> egui::Response {
     let (rect, r) = ui.allocate_exact_size(CARD, egui::Sense::click());
-    let fill = if active { egui::Color32::from_rgb(20, 70, 66) } else if r.hovered() { egui::Color32::from_gray(48) } else { egui::Color32::from_gray(30) };
+    let fill = if active { egui::Color32::from_rgb(18, 62, 58) } else if r.hovered() { egui::Color32::from_rgb(42, 50, 54) } else { CHROME_BG };
     let tex = thumb.and_then(|(t, key)| if ui.is_rect_visible(rect) { t.request(key) } else { None });
     let p = ui.painter();
     p.rect_filled(rect, 5.0, fill);
-    p.rect_stroke(rect, 5.0, egui::Stroke::new(1.0, if active { TEAL } else { egui::Color32::from_gray(58) }), egui::StrokeKind::Inside);
+    p.rect_stroke(rect, 5.0, egui::Stroke::new(1.0, if active { TEAL } else { BORDER }), egui::StrokeKind::Inside);
     let badge = egui::Rect::from_min_size(rect.min + egui::vec2(6.0, 6.0), egui::vec2(BADGE, BADGE));
     if let Some(id) = tex {
         p.image(id, badge, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
@@ -163,7 +200,7 @@ fn card(ui: &mut egui::Ui, icon: &str, tint: egui::Color32, title: &str, sub: &s
         job.wrap = egui::text::TextWrapping::truncate_at_width(wrap);
         ui.painter().layout_job(job)
     };
-    let (g1, g2) = (line(title, 12.0, egui::Color32::from_gray(228)), line(sub, 10.0, egui::Color32::from_gray(135)));
+    let (g1, g2) = (line(title, 12.0, TEXT), line(sub, 10.0, MUTED));
     let x = rect.min.x + BADGE + 14.0;
     ui.painter().galley(egui::pos2(x, rect.min.y + 16.0), g1, egui::Color32::WHITE);
     ui.painter().galley(egui::pos2(x, rect.min.y + 36.0), g2, egui::Color32::WHITE);
@@ -174,21 +211,21 @@ fn card(ui: &mut egui::Ui, icon: &str, tint: egui::Color32, title: &str, sub: &s
 fn import_menu(ui: &mut egui::Ui, rel: &str) {
     let id = egui::Id::new(("arcmeta", rel));
     let mut m: AssetMeta = ui.data_mut(|d| d.get_temp(id)).unwrap_or_else(|| asset_meta::load(rel));
-    ui.label(egui::RichText::new(format!("Import settings - {rel}")).size(11.0).color(TEAL));
+    ui.label(egui::RichText::new(format!("{} - {rel}", tr("Import settings", "Настройки импорта"))).size(11.0).color(TEAL));
     ui.horizontal(|ui| {
-        ui.label("Scale");
+        ui.label(tr("Scale", "Масштаб"));
         ui.add(egui::DragValue::new(&mut m.scale).speed(0.01).range(0.001..=1000.0));
-        ui.label("Yaw");
+        ui.label(tr("Yaw", "Поворот"));
         ui.add(egui::DragValue::new(&mut m.yaw_deg).speed(1.0).suffix(" deg"));
-        ui.label("Y offset");
+        ui.label(tr("Y offset", "Смещение Y"));
         ui.add(egui::DragValue::new(&mut m.y_offset).speed(0.01));
     });
     let saved = asset_meta::load(rel);
     ui.horizontal(|ui| {
-        if ui.add_enabled(m != saved, egui::Button::new("Save")).on_hover_text("Writes the .arcmeta.json sidecar; new spawns of this model use it").clicked() {
+        if ui.add_enabled(m != saved, egui::Button::new(tr("Save", "Сохранить"))).on_hover_text(tr("Writes the .arcmeta.json sidecar; new spawns of this model use it", "Записывает .arcmeta.json; новые спавны модели используют его")).clicked() {
             let _ = asset_meta::save(rel, &m);
         }
-        if ui.button("Reset").clicked() {
+        if ui.button(tr("Reset", "Сбросить")).clicked() {
             m = AssetMeta::default();
             let _ = asset_meta::save(rel, &m);
         }
@@ -200,8 +237,8 @@ fn model_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], sx: f32, 
     for e in list {
         let kind = model_kind(&e.rel);
         let armed = d.assets.placing == Some(Placing::Model(kind.clone()));
-        let sub = if asset_meta::load(&e.rel).is_default() { e.group.clone() } else { format!("{} - custom import", e.group) };
-        let resp = card(ui, "GLB", egui::Color32::from_rgb(120, 170, 255), &e.name, &sub, armed, Some((&mut d.thumbs, &e.rel))).on_hover_text(&e.rel);
+        let sub = if asset_meta::load(&e.rel).is_default() { e.group.clone() } else { format!("{} - {}", e.group, tr("custom import", "свой импорт")) };
+        let resp = card(ui, "GLB", egui::Color32::from_rgb(120, 170, 255), &e.name, &sub, armed, Some((&mut d.thumbs, &e.rel))).on_hover_text(format!("{}\n{}", e.name, e.rel));
         resp.context_menu(|ui| import_menu(ui, &e.rel));
         if resp.clicked() {
             if d.assets.click_place {
@@ -216,7 +253,7 @@ fn model_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], sx: f32, 
 fn prefab_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], center: Vec3) {
     for e in list {
         let armed = d.assets.placing == Some(Placing::Prefab(e.rel.clone()));
-        if card(ui, "PFB", egui::Color32::from_rgb(255, 190, 90), &e.name, "prefab - click to spawn", armed, None).on_hover_text(&e.rel).clicked() {
+        if card(ui, "PFB", egui::Color32::from_rgb(255, 190, 90), &e.name, tr("prefab - click to spawn", "префаб - клик для спавна"), armed, None).on_hover_text(format!("{}\n{}", e.name, e.rel)).clicked() {
             if d.assets.click_place {
                 d.assets.placing = Some(Placing::Prefab(e.rel.clone()));
             } else {
@@ -227,9 +264,6 @@ fn prefab_cards(ui: &mut egui::Ui, d: &mut UiData, list: &[AssetEntry], center: 
 }
 
 pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
-    if !d.assets.open {
-        return;
-    }
     if d.assets.scanned.is_none_or(|t| t.elapsed() > RESCAN) {
         let assets = assets_dir();
         let project = assets.parent().map(Path::to_path_buf).unwrap_or_default();
@@ -239,32 +273,39 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
     let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
     let (sx, sz) = spawn_point(d);
     let center = Vec3::new(sx, 0.0, sz);
-    egui::Panel::bottom("asset_browser").exact_size(176.0).resizable(false).frame(frame).show(ui, |ui| {
+    let max_height = (ui.available_height() * 0.55).max(76.0);
+    let panel_id = d.layout.asset_panel_id();
+    let panel = egui::Panel::bottom(panel_id).default_size(d.layout.asset_height().clamp(76.0, max_height)).size_range(76.0..=max_height).resizable(true).frame(frame).show(ui, |ui| {
         let counts = [d.assets.index.models.len(), d.assets.index.prefabs.len(), d.assets.index.scenes.len()];
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(tr("ASSET BROWSER", "БРАУЗЕР АССЕТОВ")).strong().size(12.0).color(TEAL));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(ui, false, Icon::Chevron, tr("Collapse the Asset Browser dock (reopen from Window → Asset Browser)", "Свернуть браузер ассетов (вернуть через Окно → Браузер ассетов)"), 20.0).clicked() {
+                    d.layout.toggle(crate::ui::layout::Panel::Assets);
+                }
+                ui.add(egui::TextEdit::singleline(&mut d.assets.search).hint_text(tr("Search file name...", "Поиск по имени файла...")).desired_width(160.0));
+                icons::paint(ui, Icon::Search, 13.0, MUTED);
+            });
+        });
         ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new("ASSET BROWSER").strong().size(12.0).color(TEAL));
-            if ui.small_button("Hide").on_hover_text("Hide (Assets button in the toolbar)").clicked() {
-                d.assets.open = false;
-            }
-            vsep(ui);
-            for (tab, label) in [
-                (Tab::All, "All".to_string()),
-                (Tab::Models, format!("Models (.glb / .gltf) {}", counts[0])),
-                (Tab::Prefabs, format!("Prefabs (.prefab.json) {}", counts[1])),
-                (Tab::Scenes, format!("Scenes (.scn.json) {}", counts[2])),
-                (Tab::Kit, "Procedural & Level Kit".to_string()),
+            for (tab, kind, name) in [
+                (Tab::All, Icon::Objects, tr("All", "Все").to_string()),
+                (Tab::Models, Icon::Cube, format!("{} (.glb / .gltf) {}", tr("Models", "Модели"), counts[0])),
+                (Tab::Prefabs, Icon::Folder, format!("{} (.prefab.json) {}", tr("Prefabs", "Префабы"), counts[1])),
+                (Tab::Scenes, Icon::Save, format!("{} (.scn.json) {}", tr("Scenes", "Сцены"), counts[2])),
+                (Tab::Kit, Icon::Grid, tr("Procedural & Level Kit", "Процедурный набор и уровни").to_string()),
             ] {
-                if chip(ui, d.assets.tab == tab, &label).clicked() {
+                if icon_chip(ui, d.assets.tab == tab, kind, &name, &name).clicked() {
                     d.assets.tab = tab;
                 }
             }
-            ui.add(egui::TextEdit::singleline(&mut d.assets.search).hint_text("Search file name...").desired_width(120.0));
-            if chip(ui, d.assets.click_place, "Click to place").on_hover_text("Armed: a card sticks to the cursor; click terrain / grid to place, Esc or right click to stop").clicked() {
+            vsep(ui);
+            if icon_chip(ui, d.assets.click_place, Icon::Select, tr("Click to place", "Клик для размещения"), tr("Armed: a card sticks to the cursor; click terrain / grid to place, Esc or right click to stop", "Режим ожидания: карточка следует за курсором; клик по рельефу / сетке размещает её, Esc или правый клик — отмена")).clicked() {
                 d.assets.click_place = !d.assets.click_place;
                 d.assets.placing = None;
             }
             if let Some(p) = &d.assets.placing {
-                ui.label(egui::RichText::new(format!("placing {}", match p { Placing::Model(k) | Placing::Prefab(k) => k })).size(11.0).color(TEAL));
+                ui.label(egui::RichText::new(format!("{} {}", tr("placing", "размещение"), match p { Placing::Model(k) | Placing::Prefab(k) => k })).size(11.0).color(TEAL));
             }
         });
         ui.separator();
@@ -285,34 +326,34 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
                 egui::ScrollArea::vertical().id_salt("assets_models").auto_shrink([false, false]).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| model_cards(ui, d, &list, sx, sz));
                     if list.is_empty() {
-                        ui.weak("No models match - drop .glb files into assets/models/ or assets/showcase/");
+                        ui.weak(tr("No models match - drop .glb files into assets/models/ or assets/showcase/", "Модели не найдены - положите .glb в assets/models/ или assets/showcase/"));
                     }
                 });
             }
             Tab::Prefabs => {
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut d.assets.prefab_name).hint_text("prefab name").desired_width(150.0));
+                    ui.add(egui::TextEdit::singleline(&mut d.assets.prefab_name).hint_text(tr("prefab name", "имя префаба")).desired_width(150.0));
                     let n = d.sel.selected.len();
                     ui.add_enabled_ui(n > 0 && !d.assets.prefab_name.trim().is_empty(), |ui| {
-                        if chip(ui, false, "[+ Save Selected as Prefab]").on_hover_text("Saves the selection to assets/prefabs/<name>.prefab.json").clicked() {
+                        if icon_chip(ui, false, Icon::Save, tr("Save Selected as Prefab", "Сохранить выделенное как префаб"), tr("Saves the selection to assets/prefabs/<name>.prefab.json", "Сохраняет выделение в assets/prefabs/<имя>.prefab.json")).clicked() {
                             d.queue.push(Cmd::SaveSelectionAsPrefab { path: d.assets.prefab_name.trim().to_string() });
                             d.assets.scanned = None;
                         }
                     });
-                    ui.weak(format!("{n} selected"));
+                    ui.weak(format!("{}: {n}", tr("Selected", "Выделено")));
                 });
                 let list: Vec<_> = d.assets.index.prefabs.iter().filter(|e| hit(e)).cloned().collect();
                 egui::ScrollArea::vertical().id_salt("assets_prefabs").auto_shrink([false, false]).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| prefab_cards(ui, d, &list, center));
                     if list.is_empty() {
-                        ui.weak("No prefabs yet - select objects and press [+ Save Selected as Prefab]");
+                        ui.weak(tr("No prefabs yet - select objects and save them as a prefab", "Префабов пока нет - выделите объекты и сохраните их как префаб"));
                     }
                 });
             }
             Tab::Scenes => {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut d.assets.scene_path).desired_width(240.0));
-                    if chip(ui, false, "[Save Current]").clicked() {
+                    if icon_chip(ui, false, Icon::Save, tr("Save Current", "Сохранить текущую"), tr("Write the scene to the path above", "Записать сцену по указанному пути")).clicked() {
                         d.queue.push(Cmd::SaveScene { path: d.assets.scene_path.trim().to_string() });
                         d.assets.scanned = None;
                     }
@@ -321,17 +362,17 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
                 egui::ScrollArea::vertical().id_salt("assets_scenes").auto_shrink([false, false]).show(ui, |ui| {
                     for e in &list {
                         ui.horizontal(|ui| {
-                            if chip(ui, false, "[Load]").clicked() {
+                            if icon_chip(ui, false, Icon::Folder, tr("Load", "Загрузить"), &e.rel).clicked() {
                                 d.queue.push(Cmd::LoadScene { path: e.rel.clone() });
                             }
-                            if ui.small_button("use name").clicked() {
+                            if ui.small_button(tr("use name", "взять имя")).clicked() {
                                 d.assets.scene_path = e.rel.clone();
                             }
-                            ui.label(egui::RichText::new(&e.rel).color(egui::Color32::from_gray(210)));
+                            ui.label(egui::RichText::new(&e.rel).color(TEXT));
                         });
                     }
                     if list.is_empty() {
-                        ui.weak("No scenes - Save Current writes a .scn.json into scenes/");
+                        ui.weak(tr("No scenes - Save Current writes a .scn.json into scenes/", "Сцен нет - «Сохранить текущую» создаёт .scn.json в scenes/"));
                     }
                 });
             }
@@ -342,29 +383,49 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
                 egui::ScrollArea::vertical().id_salt("assets_kit").auto_shrink([false, false]).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         for it in &items {
-                            if card(ui, "OBJ", egui::Color32::from_rgb(120, 220, 150), it.label, it.category, false, None).clicked() {
+                            if card(ui, "OBJ", egui::Color32::from_rgb(120, 220, 150), crate::ui::i18n::label(it.label), crate::ui::i18n::label(it.category), false, None).clicked() {
                                 (it.spawn)(&mut d.queue, sx, sz);
                             }
                         }
                         for style in WallStyle::ALL {
-                            if card(ui, "ROOM", egui::Color32::from_rgb(230, 130, 170), style.label(), "5 x 4 room at view center", false, None).clicked() {
+                            if card(ui, "ROOM", egui::Color32::from_rgb(230, 130, 170), crate::ui::i18n::label(style.label()), tr("5 x 4 room at view center", "комната 5 x 4 в центре вида"), false, None).clicked() {
                                 let (min, max) = ([cell.x - 2, cell.y - 2], [cell.x + 2, cell.y + 1]);
                                 d.queue.push(Cmd::SetGrid { enabled: Some(true), cell_size: None, floor_level: None, floor_height: None, angle_snap_deg: None });
                                 d.queue.push(Cmd::BuildRoom { min, max, floor: level, style });
                             }
                         }
-                        if card(ui, "DEMO", egui::Color32::from_rgb(255, 150, 90), "Demo Tavern", "two rooms, door, stairs", false, None).clicked() {
+                        if card(ui, "DEMO", egui::Color32::from_rgb(255, 150, 90), tr("Demo Tavern", "Демо-таверна"), tr("two rooms, door, stairs", "две комнаты, дверь, лестница"), false, None).clicked() {
                             for c in demo_tavern_commands(WallStyle::WoodTavern) {
                                 d.queue.push(c);
                             }
                         }
-                        if card(ui, "SKY", egui::Color32::from_rgb(160, 160, 255), "Misty Dusk", "world preset", false, None).clicked() {
+                        if card(ui, "SKY", egui::Color32::from_rgb(160, 160, 255), tr("Misty Dusk", "Туманный закат"), tr("world preset", "пресет мира"), false, None).clicked() {
                             d.queue.push(Cmd::ApplyPreset(WorldPreset::MistyDuskLake));
                         }
                     });
                 });
             }
         }
+    });
+    if ui.ctx().read_response(panel_id.with("__resize")).is_some_and(|handle| handle.drag_stopped() || handle.double_clicked()) {
+        d.layout.set_asset_height(panel.response.rect.height());
+    }
+}
+
+/// Compact reopen strip shown in Classic when the Asset Browser dock is hidden (keeps a predictable bottom anchor).
+pub fn collapsed_strip(ui: &mut egui::Ui, d: &mut UiData) {
+    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::symmetric(8, 4));
+    egui::Panel::bottom("asset_browser_strip").frame(frame).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            icons::paint(ui, Icon::Folder, 14.0, TEAL);
+            ui.label(egui::RichText::new(tr("ASSET BROWSER", "БРАУЗЕР АССЕТОВ")).strong().size(11.5).color(TEAL));
+            ui.weak(egui::RichText::new(tr("collapsed", "свёрнуто")).size(11.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(ui, false, Icon::Chevron, tr("Reopen the Asset Browser dock", "Развернуть браузер ассетов"), 20.0).clicked() {
+                    d.layout.toggle(crate::ui::layout::Panel::Assets);
+                }
+            });
+        });
     });
 }
 

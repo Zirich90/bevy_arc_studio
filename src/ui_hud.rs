@@ -5,117 +5,191 @@ use bevy_egui::egui;
 
 use crate::arc_core::*;
 use crate::mcp_commands::StudioCommand as Cmd;
-use crate::studio::StudioMode;
 use crate::ui::*;
 
-fn metric(ui: &mut egui::Ui, name: &str, value: String) {
-    ui.label(egui::RichText::new(name).size(10.5).color(egui::Color32::from_gray(140)));
-    ui.label(egui::RichText::new(value).size(12.5).monospace().color(egui::Color32::from_gray(230)));
-}
-
-pub fn draw(ctx: &egui::Context, d: &mut UiData) {
+pub fn draw(ui: &mut egui::Ui, d: &UiData) {
     let fps = d.diag.get(&FrameTimeDiagnosticsPlugin::FPS).and_then(|x| x.smoothed()).unwrap_or(0.0);
     let ms = d.diag.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME).and_then(|x| x.smoothed()).unwrap_or(0.0);
     let ents = d.diag.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT).and_then(|x| x.value()).unwrap_or(0.0);
     let props = d.objs.iter().count();
     let lights = d.light_count.iter().count();
-    let left = if d.studio.mode != StudioMode::Playing { crate::ui_outliner::OUTLINER_W + 16.0 } else { 10.0 };
-    let pos = egui::pos2(left, d.studio.toolbar_h + 10.0);
-    let frame = egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(8, 11, 16, 205)).stroke(egui::Stroke::new(1.0, BORDER)).corner_radius(10).inner_margin(egui::Margin::same(10));
-    egui::Area::new(egui::Id::new("studio_hud")).fixed_pos(pos).order(egui::Order::Foreground).show(ctx, |ui| {
-        frame.show(ui, |ui| {
-            ui.set_width(318.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("ARCSTUDIO").strong().size(12.0).color(TEAL));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if d.studio.mode == StudioMode::Playing && chip(ui, false, "Stop (Tab)").clicked() {
-                        d.studio.mode = StudioMode::Edit;
-                    }
-                });
-            });
-            egui::Grid::new("hud_metrics").num_columns(10).spacing([6.0, 0.0]).show(ui, |ui| {
-                metric(ui, "FPS", format!("{fps:.0}"));
-                metric(ui, "MS", format!("{ms:.1}"));
-                metric(ui, "ENT", format!("{ents:.0}"));
-                metric(ui, "PROPS", format!("{props}"));
-                metric(ui, "LIGHTS", format!("{lights}"));
-                ui.end_row();
-            });
-            ui.add_space(2.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Quality").size(11.5).color(egui::Color32::from_gray(150)));
-                for (label, q) in [("Low", QualityPreset::Low), ("Med", QualityPreset::Medium), ("High", QualityPreset::High), ("Ultra", QualityPreset::Ultra)] {
-                    if chip(ui, d.spec.quality_preset == q, label).clicked() {
-                        d.queue.push(Cmd::SetQuality(q));
-                    }
+    ui.weak(egui::RichText::new(format!("{fps:.0} FPS  MS {ms:.1}")).monospace().size(11.5))
+        .on_hover_text(format!("{ents:.0} {} · {props} {} · {lights} {}", i18n::tr("entities", "сущностей"), i18n::tr("props", "объектов"), i18n::tr("lights", "источников света")));
+}
+
+/// Slim full-width status bar pinned to the window bottom, concept style: context left, telemetry right.
+pub fn status_bar(ui: &mut egui::Ui, d: &UiData) {
+    use crate::ui::i18n::tr;
+    let frame = egui::Frame::new().fill(CHROME_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::symmetric(10, 3));
+    egui::Panel::bottom("status_bar").frame(frame).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("●").size(8.0).color(TEAL));
+            let weak = |t: String| egui::RichText::new(t).size(11.5);
+            match d.layout.active() {
+                crate::ui::layout::Layout::Focus => {
+                    ui.weak(weak(tr("FOCUS MODE", "РЕЖИМ ФОКУСА").into()));
+                    ui.weak(weak("•".into()));
+                    let tool = d.reg.tools().into_iter().find(|t| t.id == d.studio.tool).map(|t| crate::ui::i18n::label(t.label).to_string()).unwrap_or_else(|| tr("Select", "Выбор").into());
+                    ui.weak(weak(format!("{} {}", tr("Tool:", "Инструмент:"), tool)));
+                    ui.weak(weak("•".into()));
+                    ui.weak(weak("Ctrl+Shift+2".into()));
                 }
-            });
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(format!("Time: {}", hhmm(d.spec.time_of_day))).monospace().size(12.5));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if chip(ui, d.spec.auto_sun, "Auto Sun").clicked() {
-                        let (before, mut next) = ((*d.spec).clone(), (*d.spec).clone());
-                        next.auto_sun = !next.auto_sun;
-                        d.wh.record("Auto Sun", before, next.clone());
-                        *d.spec = next;
+                crate::ui::layout::Layout::Smart => {
+                    ui.weak(weak(tr("SMART WORKSPACES", "СМАРТ-ПРОСТРАНСТВА").into()));
+                    ui.weak(weak("•".into()));
+                    ui.weak(weak(crate::ui::layout::workspace_label(d.layout.workspace()).into()));
+                    ui.weak(weak("•".into()));
+                    ui.weak(weak("Ctrl+Shift+3".into()));
+                }
+                crate::ui::layout::Layout::Classic => {
+                    let name = std::path::Path::new(&d.studio.scene_path).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| tr("Untitled scene", "Безымянная сцена").into());
+                    ui.weak(weak(format!("{} {}", tr("Scene:", "Сцена:"), name)));
+                    ui.weak(weak("•".into()));
+                    ui.weak(weak(format!("{} {}", d.objs.iter().count(), tr("objects", "объектов"))));
+                    if !d.studio.status.is_empty() {
+                        ui.weak(weak("•".into()));
+                        ui.weak(weak(crate::ui::i18n::shown(&d.studio.status).to_string()));
                     }
-                    if chip(ui, false, "+").clicked() {
-                        d.spec.sun_speed = (d.spec.sun_speed * 1.5).min(6.0);
-                    }
-                    ui.label(egui::RichText::new(format!("x{:.1}", d.spec.sun_speed / 0.15)).monospace().size(11.5));
-                    if chip(ui, false, "-").clicked() {
-                        d.spec.sun_speed = (d.spec.sun_speed / 1.5).max(0.01);
-                    }
-                });
-            });
-            let mut t = d.spec.time_of_day;
-            ui.spacing_mut().slider_width = 292.0;
-            let r = ui.add(egui::Slider::new(&mut t, 0.0..=24.0).show_value(false));
-            let mut ev = Ev::default();
-            ev.note(&r);
-            let mut next = (*d.spec).clone();
-            next.time_of_day = t;
-            let mut cur = (*d.spec).clone();
-            if ev.changed || ev.finish {
-                track_ev(&ev, &mut d.wh, "Time of day", &mut cur, next);
-                if ev.changed {
-                    *d.spec = cur;
                 }
             }
-            let s = d.spec.clone();
-            let items = [
-                ("Water", d.studio.show_water),
-                ("Reflections", s.reflections),
-                ("Fog", s.fog_enabled),
-                ("God Rays", s.god_rays),
-                ("Grass", d.studio.show_grass),
-                ("Shadows", s.shadows),
-            ];
-            let mut clicked = None;
-            ui.horizontal_wrapped(|ui| {
-                for (k, (label, on)) in items.iter().enumerate() {
-                    if chip(ui, *on, label).clicked() {
-                        clicked = Some(k);
-                    }
-                }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                draw(ui, d);
             });
-            if let Some(k) = clicked {
-                match k {
-                    0 => d.studio.show_water = !d.studio.show_water,
-                    4 => d.studio.show_grass = !d.studio.show_grass,
-                    _ => {
-                        let mut next = s.clone();
-                        match k {
-                            1 => next.reflections = !next.reflections,
-                            2 => next.fog_enabled = !next.fog_enabled,
-                            3 => next.god_rays = !next.god_rays,
-                            _ => next.shadows = !next.shadows,
+        });
+    });
+}
+
+/// Floating viewport chips per concept: perspective left, time/camera right, active brush top-left in Focus.
+pub(crate) fn viewport_chips(ui: &mut egui::Ui, d: &mut UiData) {
+    use crate::ui::i18n::tr;
+    use crate::ui::icons::{self, Icon};
+    let focus = d.layout.active() == crate::ui::layout::Layout::Focus;
+    let bottom = if focus { if d.studio.show_stats { 40.0 } else { 16.0 } } else { 34.0 };
+    let frame = || egui::Frame::new().fill(CHROME_BG).stroke(egui::Stroke::new(1.0, BORDER)).corner_radius(6).inner_margin(egui::Margin::symmetric(8, 4));
+    egui::Area::new(egui::Id::new("chip_perspective")).anchor(egui::Align2::LEFT_BOTTOM, [10.0, -bottom]).show(ui.ctx(), |ui| {
+        frame().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                icons::paint(ui, Icon::Cube, 13.0, TEXT);
+                ui.weak(egui::RichText::new(tr("Perspective", "Перспектива")).size(11.5));
+            });
+        });
+    });
+    egui::Area::new(egui::Id::new("chip_viewport_right")).anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -bottom]).show(ui.ctx(), |ui| {
+        frame().show(ui, |ui| {
+            if focus {
+                let cam = match d.studio.cam_style {
+                    crate::studio::CamStyle::Orbit => tr("Orbit Cam", "Орбитальная"),
+                    crate::studio::CamStyle::Fly => tr("Fly Cam", "Свободная"),
+                };
+                ui.horizontal(|ui| {
+                    icons::paint(ui, Icon::Camera, 13.0, TEXT);
+                    ui.menu_button(cam, |ui| {
+                        if ui.button(tr("Orbit Camera", "Орбитальная камера")).clicked() {
+                            d.queue.push(Cmd::SetCameraStyle(crate::studio::CamStyle::Orbit));
+                            ui.close();
                         }
-                        d.wh.record(format!("Toggle {}", items[k].0), s, next.clone());
-                        *d.spec = next;
-                    }
-                }
+                        if ui.button(tr("Fly Camera", "Свободная камера")).clicked() {
+                            d.queue.push(Cmd::SetCameraStyle(crate::studio::CamStyle::Fly));
+                            ui.close();
+                        }
+                    });
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    icons::paint(ui, Icon::Sun, 13.0, TEXT);
+                    ui.weak(egui::RichText::new(hhmm(d.spec.time_of_day)).monospace().size(11.5));
+                });
             }
         });
     });
+    if focus && d.studio.tool == "terrain_brush" {
+        egui::Area::new(egui::Id::new("chip_brush_active")).anchor(egui::Align2::LEFT_TOP, [58.0, d.studio.toolbar_h + 12.0]).show(ui.ctx(), |ui| {
+            frame().show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    icons::paint(ui, Icon::Brush, 13.0, TEXT);
+                    ui.weak(egui::RichText::new(tr("Terrain brush", "Кисть рельефа")).size(11.5));
+                    ui.label(egui::RichText::new("●").size(8.0).color(TEAL));
+                    ui.weak(egui::RichText::new(tr("Active", "Активна")).size(11.5));
+                });
+            });
+        });
+    }
+}
+
+pub(crate) fn controls(ui: &mut egui::Ui, d: &mut UiData) {
+    use crate::ui::i18n::tr;
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(tr("Quality", "Качество")).size(11.5).color(egui::Color32::from_gray(150)));
+        for (label, ru, q) in [("Low", "Низкое", QualityPreset::Low), ("Med", "Среднее", QualityPreset::Medium), ("High", "Высокое", QualityPreset::High), ("Ultra", "Ультра", QualityPreset::Ultra)] {
+            if chip(ui, d.spec.quality_preset == q, tr(label, ru)).clicked() {
+                d.queue.push(Cmd::SetQuality(q));
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(format!("{} {}", tr("Time:", "Время:"), hhmm(d.spec.time_of_day))).monospace().size(12.5));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if chip(ui, d.spec.auto_sun, tr("Auto Sun", "Авто-солнце")).clicked() {
+                let (before, mut next) = ((*d.spec).clone(), (*d.spec).clone());
+                next.auto_sun = !next.auto_sun;
+                d.wh.record("Auto Sun", before, next.clone());
+                *d.spec = next;
+            }
+            if chip(ui, false, "+").clicked() {
+                d.spec.sun_speed = (d.spec.sun_speed * 1.5).min(6.0);
+            }
+            ui.label(egui::RichText::new(format!("x{:.1}", d.spec.sun_speed / 0.15)).monospace().size(11.5));
+            if chip(ui, false, "-").clicked() {
+                d.spec.sun_speed = (d.spec.sun_speed / 1.5).max(0.01);
+            }
+        });
+    });
+    let mut t = d.spec.time_of_day;
+    ui.spacing_mut().slider_width = 292.0;
+    let r = ui.add(egui::Slider::new(&mut t, 0.0..=24.0).show_value(false));
+    let mut ev = Ev::default();
+    ev.note(&r);
+    let mut next = (*d.spec).clone();
+    next.time_of_day = t;
+    let mut cur = (*d.spec).clone();
+    if ev.changed || ev.finish {
+        track_ev(&ev, &mut d.wh, "Time of day", &mut cur, next);
+        if ev.changed {
+            *d.spec = cur;
+        }
+    }
+    let s = d.spec.clone();
+    let items = [
+        ("Water", "Вода", d.studio.show_water),
+        ("Reflections", "Отражения", s.reflections),
+        ("Fog", "Туман", s.fog_enabled),
+        ("God Rays", "Лучи", s.god_rays),
+        ("Grass", "Трава", d.studio.show_grass),
+        ("Shadows", "Тени", s.shadows),
+    ];
+    let mut clicked = None;
+    ui.horizontal_wrapped(|ui| {
+        for (k, (label, ru, on)) in items.iter().enumerate() {
+            if chip(ui, *on, tr(label, ru)).clicked() {
+                clicked = Some(k);
+            }
+        }
+    });
+    if let Some(k) = clicked {
+        match k {
+            0 => d.studio.show_water = !d.studio.show_water,
+            4 => d.studio.show_grass = !d.studio.show_grass,
+            _ => {
+                let mut next = s.clone();
+                match k {
+                    1 => next.reflections = !next.reflections,
+                    2 => next.fog_enabled = !next.fog_enabled,
+                    3 => next.god_rays = !next.god_rays,
+                    _ => next.shadows = !next.shadows,
+                }
+                d.wh.record(format!("Toggle {}", items[k].0), s, next.clone());
+                *d.spec = next;
+            }
+        }
+    }
 }

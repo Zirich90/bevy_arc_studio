@@ -13,7 +13,7 @@ use crate::editor_registry::{EditorAppExt, EditorRegistry, PanelLocation};
 use crate::mcp_commands::StudioCommand;
 use crate::operators::{Target, add_component};
 use crate::props::assets_dir;
-use crate::ui::{TEAL, UiData, chip};
+use crate::ui::{TEAL, UiData, chip, i18n::tr, icons::{self, Icon}};
 use crate::ui_inspector::Filter;
 use crate::world_io::SceneComponentAppExt;
 
@@ -232,10 +232,10 @@ fn inspector(ui: &mut egui::Ui, v: &mut dyn PartialReflect) -> bool {
     let Some(m) = v.try_downcast_mut::<MaterialOverride>() else { return false };
     let mut changed = false;
     if !m.preset.is_empty() {
-        ui.weak(format!("follows library: {}", m.preset));
+        ui.weak(format!("{}: {}", tr("follows library", "из библиотеки"), m.preset));
     }
     ui.horizontal(|ui| {
-        ui.label("base color");
+        ui.label(tr("base color", "базовый цвет"));
         let mut c = egui::Color32::from_rgba_unmultiplied(
             (m.base_color[0] * 255.0).round() as u8,
             (m.base_color[1] * 255.0).round() as u8,
@@ -248,11 +248,11 @@ fn inspector(ui: &mut egui::Ui, v: &mut dyn PartialReflect) -> bool {
             changed = true;
         }
     });
-    changed |= ui.add(egui::Slider::new(&mut m.metallic, 0.0..=1.0).text("metallic")).changed();
-    changed |= ui.add(egui::Slider::new(&mut m.roughness, 0.089..=1.0).text("roughness")).changed();
-    changed |= ui.add(egui::Slider::new(&mut m.reflectance, 0.0..=1.0).text("reflectance")).changed();
+    changed |= ui.add(egui::Slider::new(&mut m.metallic, 0.0..=1.0).text(tr("metallic", "металличность"))).changed();
+    changed |= ui.add(egui::Slider::new(&mut m.roughness, 0.089..=1.0).text(tr("roughness", "шероховатость"))).changed();
+    changed |= ui.add(egui::Slider::new(&mut m.reflectance, 0.0..=1.0).text(tr("reflectance", "отражательность"))).changed();
     ui.horizontal(|ui| {
-        ui.label("emissive");
+        ui.label(tr("emissive", "свечение"));
         let mut e = m.emissive;
         if ui.color_edit_button_rgb(&mut e).changed() {
             m.emissive = e;
@@ -266,32 +266,35 @@ fn inspector(ui: &mut egui::Ui, v: &mut dyn PartialReflect) -> bool {
 }
 
 fn materials_tab(ui: &mut egui::Ui, d: &mut UiData, _f: &Filter) {
-    ui.label(egui::RichText::new("Materials").strong().color(TEAL));
+    ui.horizontal(|ui| {
+        icons::paint(ui, Icon::Folder, 14.0, TEAL);
+        ui.label(egui::RichText::new(tr("Materials", "Материалы")).strong().color(TEAL));
+    });
     let Some(sel) = d.sel.primary else {
-        ui.weak("Select an object to edit its material.");
+        ui.weak(tr("Select an object to edit its material.", "Выберите объект, чтобы править его материал."));
         return;
     };
     let target = Target::Entity(sel);
-    ui.weak("Edit the values in Objects & Spawner → MaterialOverride; the object's own materials stay untouched for other instances.");
-    if chip(ui, false, "Edit material of selection").on_hover_text("Adds a MaterialOverride seeded from the current look").clicked() {
+    ui.weak(tr("Edit the values in Objects & Spawner → MaterialOverride; the object's own materials stay untouched for other instances.", "Правьте значения в «Объекты и спавнер» → MaterialOverride; собственные материалы объекта не меняются для других экземпляров."));
+    if chip(ui, false, tr("Edit material of selection", "Править материал выделенного")).on_hover_text(tr("Adds a MaterialOverride seeded from the current look", "Добавляет MaterialOverride с текущими значениями")).clicked() {
         d.queue.push(StudioCommand::EditMaterial { target: target.clone() });
     }
     let id = ui.make_persistent_id("material_save_name");
     let mut name: String = ui.data_mut(|m| m.get_temp(id)).unwrap_or_default();
     ui.horizontal(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut name).hint_text("preset name").desired_width(140.0));
-        if chip(ui, false, "Save as preset").clicked() {
+        ui.add(egui::TextEdit::singleline(&mut name).hint_text(tr("preset name", "имя пресета")).desired_width(140.0));
+        if chip(ui, false, tr("Save as preset", "Сохранить как пресет")).clicked() {
             d.queue.push(StudioCommand::SaveMaterial { target: target.clone(), name: name.clone() });
         }
     });
     ui.data_mut(|m| m.insert_temp(id, name));
-    ui.label(egui::RichText::new("Library").strong().color(TEAL));
+    ui.label(egui::RichText::new(tr("Library", "Библиотека")).strong().color(TEAL));
     if d.matlib.names.is_empty() {
-        ui.weak(format!("No presets yet ({})", d.matlib.dir.display()));
+        ui.weak(format!("{} ({})", tr("No presets yet", "Пресетов пока нет"), d.matlib.dir.display()));
     }
     ui.horizontal_wrapped(|ui| {
         for n in d.matlib.names.clone() {
-            if chip(ui, false, &n).on_hover_text("Apply to the selection").clicked() {
+            if chip(ui, false, &n).on_hover_text(tr("Apply to the selection", "Применить к выделенному")).clicked() {
                 d.queue.push(StudioCommand::ApplyMaterial { target: target.clone(), name: n });
             }
         }
