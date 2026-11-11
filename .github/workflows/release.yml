@@ -36,12 +36,12 @@ jobs:
       - name: Static linking for distributable
         shell: bash
         # dynamic_linking is a dev-only convenience; ship self-contained binaries
-        run: sed -i.bak '/"dynamic_linking",/d' Cargo.toml
+        run: sed -i.bak 's/"dynamic_linking",//g; s/"dynamic_linking"//g' Cargo.toml crates/arc_studio_app/Cargo.toml
       - name: Build release
         shell: bash
         env:
           CARGO_BUILD_JOBS: 2
-        run: cargo build --release -p bevy_arc_studio
+        run: cargo build --release -p arc_studio_app --bin bevy_arc_studio
       - name: Stage package
         shell: bash
         run: |
