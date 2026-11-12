@@ -270,7 +270,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
         d.assets.index = scan_assets(&assets, &project);
         d.assets.scanned = Some(Instant::now());
     }
-    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
+    let frame = egui::Frame::new().fill(d.layout.panel_fill()).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
     let (sx, sz) = spawn_point(d);
     let center = Vec3::new(sx, 0.0, sz);
     let max_height = (ui.available_height() * 0.55).max(76.0);
@@ -414,7 +414,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
 
 /// Compact reopen strip shown in Classic when the Asset Browser dock is hidden (keeps a predictable bottom anchor).
 pub fn collapsed_strip(ui: &mut egui::Ui, d: &mut UiData) {
-    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::symmetric(8, 4));
+    let frame = egui::Frame::new().fill(d.layout.panel_fill()).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::symmetric(8, 4));
     egui::Panel::bottom("asset_browser_strip").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             icons::paint(ui, Icon::Folder, 14.0, TEAL);

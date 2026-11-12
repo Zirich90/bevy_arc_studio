@@ -60,6 +60,10 @@ fn settings_menu(ui: &mut egui::Ui, d: &mut UiData) {
                 ui.close();
             }
         });
+        let mut opacity = d.layout.panel_opacity();
+        if ui.add(egui::Slider::new(&mut opacity, 0..=100).text(tr("Panel opacity", "Непрозрачность панелей")).suffix("%")).changed() {
+            d.layout.set_panel_opacity(opacity);
+        }
         ui.separator();
         if ui.button(tr("Separate Game", "Отдельная игра")).clicked() {
             crate::game_process::toggle_panel(ui.ctx());
@@ -142,7 +146,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
                     vsep(ui);
                     ui.menu_button(tr("Tools", "Инструменты"), |ui| tools(ui, d, true));
                     if chip(ui, d.gz.snap_ground, tr("Snap", "Привязка")).on_hover_text(tr("Snap to Ground", "Привязка к земле")).clicked() {
-                        d.gz.snap_ground = !d.gz.snap_ground;
+                        d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: Some(!d.gz.snap_ground), align_normal: None });
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.weak(format!("{} {}", tr("Workspace:", "Рабочее пространство:"), crate::ui::layout::workspace_label(d.layout.workspace())));
@@ -156,10 +160,10 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData) -> f32 {
                     vsep(ui);
                     ui.menu_button(tr("Snap", "Привязка"), |ui| {
                         if ui.selectable_label(d.gz.snap_ground, tr("Snap to Ground", "Привязка к земле")).clicked() {
-                            d.gz.snap_ground = !d.gz.snap_ground;
+                            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: Some(!d.gz.snap_ground), align_normal: None });
                         }
                         if ui.selectable_label(d.gz.align_normal, tr("Align to Normal", "Выровнять по нормали")).clicked() {
-                            d.gz.align_normal = !d.gz.align_normal;
+                            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: None, align_normal: Some(!d.gz.align_normal) });
                         }
                     });
                     let cam = match d.studio.cam_style {
@@ -199,8 +203,8 @@ pub(crate) fn tools(ui: &mut egui::Ui, d: &mut UiData, compact: bool) {
         let on = d.studio.tool == TOOL_SELECT && d.gz.mode == m;
         let response = if compact { icons::button(ui, on, kind, tr(label, ru), 30.0) } else { icon_chip(ui, on, kind, tr(label, ru), tr(label, ru)) };
         if response.clicked() {
-            d.gz.mode = m;
-            d.reg.activate_tool(&mut d.studio, TOOL_SELECT);
+            d.queue.push(Cmd::SetGizmo { mode: Some(m), snap_ground: None, align_normal: None });
+            d.queue.push(Cmd::SetTool { id: TOOL_SELECT.into() });
         }
     }
     for t in d.reg.tools().into_iter().filter(|t| t.id != TOOL_SELECT).cloned().collect::<Vec<_>>() {
@@ -214,22 +218,22 @@ pub(crate) fn tools(ui: &mut egui::Ui, d: &mut UiData, compact: bool) {
         let tip = format!("{shown} · {}", i18n::label(t.hint));
         let response = if compact { icons::button(ui, d.studio.tool == t.id, kind, &tip, 30.0) } else { icon_chip(ui, d.studio.tool == t.id, kind, &shown, &tip) };
         if response.clicked() {
-            d.reg.activate_tool(&mut d.studio, t.id);
+            d.queue.push(Cmd::SetTool { id: t.id.to_string() });
         }
     }
     if compact {
         if icons::button(ui, d.gz.snap_ground, Icon::Grid, tr("Snap to Ground", "Привязка к земле"), 30.0).clicked() {
-            d.gz.snap_ground = !d.gz.snap_ground;
+            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: Some(!d.gz.snap_ground), align_normal: None });
         }
         if icons::button(ui, d.gz.align_normal, Icon::GridPlus, tr("Align to Normal", "Выровнять по нормали"), 30.0).clicked() {
-            d.gz.align_normal = !d.gz.align_normal;
+            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: None, align_normal: Some(!d.gz.align_normal) });
         }
     } else {
         if chip(ui, d.gz.snap_ground, tr("Snap to Ground", "Привязка к земле")).on_hover_text(tr("Snap to Ground", "Привязка к земле")).clicked() {
-            d.gz.snap_ground = !d.gz.snap_ground;
+            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: Some(!d.gz.snap_ground), align_normal: None });
         }
         if chip(ui, d.gz.align_normal, tr("Align to Normal", "Выровнять по нормали")).on_hover_text(tr("Align to Normal", "Выровнять по нормали")).clicked() {
-            d.gz.align_normal = !d.gz.align_normal;
+            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: None, align_normal: Some(!d.gz.align_normal) });
         }
     }
 }
@@ -246,8 +250,8 @@ pub(crate) fn tools_vertical(ui: &mut egui::Ui, d: &mut UiData) {
             ("Scale (R)", "Масштаб (R)", Icon::Scale, GizmoMode::Scale),
         ] {
             if icons::button(ui, d.studio.tool == TOOL_SELECT && d.gz.mode == m, kind, tr(label, ru), 34.0).clicked() {
-                d.gz.mode = m;
-                d.reg.activate_tool(&mut d.studio, TOOL_SELECT);
+                d.queue.push(Cmd::SetGizmo { mode: Some(m), snap_ground: None, align_normal: None });
+                d.queue.push(Cmd::SetTool { id: TOOL_SELECT.into() });
             }
         }
         for t in d.reg.tools().into_iter().filter(|t| t.id != TOOL_SELECT).cloned().collect::<Vec<_>>() {
@@ -259,15 +263,15 @@ pub(crate) fn tools_vertical(ui: &mut egui::Ui, d: &mut UiData) {
                 _ => Icon::Objects,
             };
             if icons::button(ui, d.studio.tool == t.id, kind, &format!("{shown} · {}", i18n::label(t.hint)), 34.0).clicked() {
-                d.reg.activate_tool(&mut d.studio, t.id);
+                d.queue.push(Cmd::SetTool { id: t.id.to_string() });
             }
         }
         ui.separator();
         if icons::button(ui, d.gz.snap_ground, Icon::Grid, tr("Snap to Ground", "Привязка к земле"), 34.0).clicked() {
-            d.gz.snap_ground = !d.gz.snap_ground;
+            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: Some(!d.gz.snap_ground), align_normal: None });
         }
         if icons::button(ui, d.gz.align_normal, Icon::GridPlus, tr("Align to Normal", "Выровнять по нормали"), 34.0).clicked() {
-            d.gz.align_normal = !d.gz.align_normal;
+            d.queue.push(Cmd::SetGizmo { mode: None, snap_ground: None, align_normal: Some(!d.gz.align_normal) });
         }
     });
 }

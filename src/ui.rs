@@ -81,14 +81,31 @@ pub struct UiData<'w, 's> {
     pub light_count: Query<'w, 's, (), Or<(With<PointLight>, With<DirectionalLight>)>>,
 }
 
-fn apply_style(ctx: &egui::Context) {
+/// Panel/window background at the user's opacity percent (0 = transparent, 100 = opaque PANEL_BG).
+pub(crate) fn panel_fill(opacity_pct: u8) -> egui::Color32 {
+    tinted(PANEL_BG, opacity_pct)
+}
+
+/// Focus dock/rail background at the user's opacity percent (opaque base CHROME_BG).
+pub(crate) fn chrome_fill(opacity_pct: u8) -> egui::Color32 {
+    tinted(CHROME_BG, opacity_pct)
+}
+
+fn tinted(base: egui::Color32, opacity_pct: u8) -> egui::Color32 {
+    let alpha = (f32::from(opacity_pct) * 2.55).round() as u8;
+    let [r, g, b, _] = base.to_array();
+    egui::Color32::from_rgba_unmultiplied(r, g, b, alpha)
+}
+
+fn apply_style(ctx: &egui::Context, opacity: u8) {
+    let fill = panel_fill(opacity);
     ctx.global_style_mut(|s| {
         s.visuals = egui::Visuals::dark();
         s.visuals.override_text_color = Some(TEXT);
         s.visuals.extreme_bg_color = CHROME_BG;
-        s.visuals.faint_bg_color = PANEL_BG;
-        s.visuals.panel_fill = PANEL_BG;
-        s.visuals.window_fill = PANEL_BG;
+        s.visuals.faint_bg_color = fill;
+        s.visuals.panel_fill = fill;
+        s.visuals.window_fill = fill;
         s.visuals.selection.bg_fill = egui::Color32::from_rgb(23, 107, 99);
         s.visuals.selection.stroke = egui::Stroke::new(1.0, TEAL);
         s.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(5);
@@ -97,10 +114,12 @@ fn apply_style(ctx: &egui::Context) {
         s.visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(47, 59, 64);
         s.visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(58, 76, 80);
         s.visuals.slider_trailing_fill = true;
+        s.visuals.handle_shape = egui::style::HandleShape::Circle;
         s.spacing.item_spacing = egui::vec2(6.0, 5.0);
         s.spacing.button_padding = egui::vec2(9.0, 5.0);
-        s.spacing.interact_size.y = 30.0;
+        s.spacing.interact_size.y = 20.0;
         s.spacing.slider_width = 140.0;
+        s.spacing.slider_rail_height = 4.0;
     });
 }
 
@@ -122,11 +141,12 @@ pub(crate) fn icon_chip(ui: &mut egui::Ui, on: bool, kind: icons::Icon, label: &
     response.on_hover_text(tooltip)
 }
 
-pub fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<bool>, keys: Res<ButtonInput<KeyCode>>) {
+pub fn studio_ui_system(mut contexts: EguiContexts, mut d: UiData, mut outliner: Local<ui_outliner::OutlinerState>, mut styled: Local<Option<u8>>, keys: Res<ButtonInput<KeyCode>>) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
-    if !*styled {
-        apply_style(ctx);
-        *styled = true;
+    let opacity = d.layout.panel_opacity();
+    if *styled != Some(opacity) {
+        apply_style(ctx, opacity);
+        *styled = Some(opacity);
     }
     if !ctx.input(|input| input.pointer.any_down() || input.pointer.any_released()) {
         d.layout.apply_pending();

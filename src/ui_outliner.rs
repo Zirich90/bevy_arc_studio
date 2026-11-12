@@ -48,7 +48,7 @@ pub fn draw(ui: &mut egui::Ui, d: &mut UiData, st: &mut OutlinerState) {
         }
     }
 
-    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
+    let frame = egui::Frame::new().fill(d.layout.panel_fill()).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
     let width = OUTLINER_W.min((ui.ctx().viewport_rect().width() * 0.22).max(72.0));
     egui::Panel::left("outliner").exact_size(width).resizable(false).frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {

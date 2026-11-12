@@ -8,6 +8,7 @@ use bevy_egui::egui;
 
 use crate::arc_core::*;
 use crate::gizmo_3d::ObjState;
+use crate::lighting::NightLight;
 use crate::mcp_commands::StudioCommand as Cmd;
 use crate::props::assets_dir;
 use crate::editor_registry::PanelLocation;
@@ -60,7 +61,7 @@ pub fn crow(ui: &mut egui::Ui, f: &Filter, ev: &mut Ev, label: &str, v: &mut boo
 }
 
 pub fn draw(ui: &mut egui::Ui, d: &mut UiData) {
-    let frame = egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(10));
+    let frame = egui::Frame::new().fill(d.layout.panel_fill()).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(10));
     let width = (ui.ctx().viewport_rect().width() * 0.36).clamp(116.0, 360.0);
     if d.layout.active() == crate::ui::layout::Layout::Focus {
         let mut open = true;
@@ -220,7 +221,8 @@ fn quality_section(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
 
 /// Registered panels of the left / bottom docks (nothing is drawn while a dock has no panels).
 pub fn draw_docks(ui: &mut egui::Ui, d: &mut UiData) {
-    let frame = || egui::Frame::new().fill(PANEL_BG).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
+    let fill = d.layout.panel_fill();
+    let frame = || egui::Frame::new().fill(fill).stroke(egui::Stroke::new(1.0, BORDER)).inner_margin(egui::Margin::same(8));
     for (loc, name) in [(PanelLocation::Left, "registry_left"), (PanelLocation::Bottom, "registry_bottom")] {
         let panels = d.reg.panels(loc);
         if panels.is_empty() {
@@ -397,38 +399,49 @@ pub fn objects_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         }
     }
     if let Some(le) = light {
-        if let Ok((mut pl, nl)) = d.lights.get_mut(le) {
+        if let Ok((pl, nl)) = d.lights.get(le) {
             ui.separator();
             ui.label(egui::RichText::new("PointLight").strong().color(TEAL));
+            let mut new_pl = pl.clone();
+            let mut pl_changed = false;
             let c = pl.color.to_srgba();
             let mut rgb = [c.red, c.green, c.blue];
             ui.horizontal(|ui| {
                 if egui::color_picker::color_edit_button_rgb(ui, &mut rgb).changed() {
-                    pl.color = Color::srgb(rgb[0], rgb[1], rgb[2]);
+                    new_pl.color = Color::srgb(rgb[0], rgb[1], rgb[2]);
+                    pl_changed = true;
                 }
                 ui.label(tr("color", "цвет"));
             });
             let mut range = pl.range;
             if ui.add(egui::Slider::new(&mut range, 1.0..=120.0).text(tr("radius (range)", "радиус (дальность)"))).changed() {
-                pl.range = range;
+                new_pl.range = range;
+                pl_changed = true;
             }
             let mut src = pl.radius;
             if ui.add(egui::Slider::new(&mut src, 0.0..=2.0).text(tr("source radius", "радиус источника"))).changed() {
-                pl.radius = src;
+                new_pl.radius = src;
+                pl_changed = true;
             }
             match nl {
-                Some(mut nl) => {
+                Some(nl) => {
                     let mut base = nl.base;
                     if ui.add(egui::Slider::new(&mut base, 0.0..=400_000.0).logarithmic(true).text(tr("intensity (night)", "яркость (ночь)"))).changed() {
-                        nl.base = base;
+                        let mut new_nl = nl.clone();
+                        new_nl.base = base;
+                        d.redits.0.push((le, std::any::TypeId::of::<NightLight>(), Box::new(new_nl)));
                     }
                 }
                 None => {
                     let mut i = pl.intensity;
                     if ui.add(egui::Slider::new(&mut i, 0.0..=400_000.0).logarithmic(true).text(tr("intensity", "яркость"))).changed() {
-                        pl.intensity = i;
+                        new_pl.intensity = i;
+                        pl_changed = true;
                     }
                 }
+            }
+            if pl_changed {
+                d.redits.0.push((le, std::any::TypeId::of::<PointLight>(), Box::new(new_pl)));
             }
         }
     }

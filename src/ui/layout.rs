@@ -76,6 +76,7 @@ pub(crate) struct LayoutState {
     profiles: [[PanelState; 3]; 3],
     asset_heights: [u16; 3],
     lang: super::i18n::Lang,
+    panel_opacity: u8,
     saved: Preferences,
     dirty_since: Option<Instant>,
     path: Option<PathBuf>,
@@ -90,6 +91,12 @@ struct Preferences {
     asset_heights: [u16; 3],
     #[serde(default)]
     lang: super::i18n::Lang,
+    #[serde(default = "default_opacity")]
+    panel_opacity: u8,
+}
+
+fn default_opacity() -> u8 {
+    100
 }
 
 impl Default for Preferences {
@@ -105,6 +112,7 @@ impl Default for Preferences {
             })),
             asset_heights: [176; 3],
             lang: super::i18n::Lang::En,
+            panel_opacity: 100,
         }
     }
 }
@@ -152,6 +160,7 @@ impl Default for LayoutState {
             profiles: saved.profiles.clone(),
             asset_heights: saved.asset_heights,
             lang: saved.lang,
+            panel_opacity: saved.panel_opacity,
             saved,
             dirty_since: None,
             path,
@@ -181,6 +190,22 @@ impl LayoutState {
         super::i18n::set(lang);
     }
 
+    pub(crate) fn panel_opacity(&self) -> u8 {
+        self.panel_opacity
+    }
+
+    pub(crate) fn set_panel_opacity(&mut self, opacity: u8) {
+        self.panel_opacity = opacity;
+    }
+
+    pub(crate) fn panel_fill(&self) -> egui::Color32 {
+        super::panel_fill(self.panel_opacity)
+    }
+
+    pub(crate) fn chrome_fill(&self) -> egui::Color32 {
+        super::chrome_fill(self.panel_opacity)
+    }
+
     pub(crate) fn save_if_dirty(&mut self, ctx: &egui::Context) {
         let Some(path) = self.path.as_deref() else { return };
         let current = Preferences {
@@ -190,6 +215,7 @@ impl LayoutState {
             profiles: self.profiles.clone(),
             asset_heights: self.asset_heights,
             lang: self.lang,
+            panel_opacity: self.panel_opacity,
         };
         if current == self.saved {
             self.dirty_since = None;
@@ -394,7 +420,8 @@ const PANELS: [(Panel, &str, &str, super::icons::Icon); 3] = [
 ];
 
 pub(crate) fn focus_dock(ui: &mut egui::Ui, d: &mut super::UiData) {
-    let frame = || egui::Frame::new().fill(super::CHROME_BG)
+    let fill = d.layout.chrome_fill();
+    let frame = || egui::Frame::new().fill(fill)
         .stroke(egui::Stroke::new(1.0, super::BORDER))
         .corner_radius(7).inner_margin(egui::Margin::same(6));
     egui::Area::new(egui::Id::new("focus_tools"))
@@ -624,6 +651,7 @@ mod tests {
         inspector.pinned = true;
         inspector.context = Some("global".into());
         prefs.asset_heights[Layout::Focus as usize] = 240;
+        prefs.panel_opacity = 60;
         prefs.write(&path).unwrap();
         assert_eq!(Preferences::read(&path), prefs);
         prefs.active = Layout::Smart;
@@ -647,6 +675,23 @@ mod tests {
         let prefs = Preferences { lang: crate::ui::i18n::Lang::Ru, ..Preferences::default() };
         prefs.write(&path).unwrap();
         assert_eq!(Preferences::read(&path).lang, crate::ui::i18n::Lang::Ru);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+
+    #[test]
+    fn panel_opacity_defaults_opaque_and_maps_to_alpha() {
+        assert_eq!(Preferences::default().panel_opacity, 100);
+        assert_eq!(crate::ui::panel_fill(100), crate::ui::PANEL_BG);
+        assert_eq!(crate::ui::panel_fill(0).a(), 0);
+        assert_eq!(crate::ui::panel_fill(50).a(), 128);
+        let dir = std::env::temp_dir().join(format!("arcstudio-opacity-{}", std::process::id()));
+        let path = dir.join("interface.json");
+        let mut value = serde_json::to_value(Preferences::default()).unwrap();
+        value.as_object_mut().unwrap().remove("panel_opacity");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&path, value.to_string()).unwrap();
+        assert_eq!(Preferences::read(&path).panel_opacity, 100);
         std::fs::remove_file(path).unwrap();
         std::fs::remove_dir(dir).unwrap();
     }
