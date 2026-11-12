@@ -1105,9 +1105,9 @@ fn level_panel(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
     };
     header(ui, Icon::Grid, tr("Grid & Storey", "Сетка и этаж"));
     ui.checkbox(&mut d.gset.enabled, tr("Grid Snap (move: cell, Ctrl = ½ cell; rotate: angle step)", "Привязка к сетке (перемещение: ячейка, Ctrl = ½ ячейки; вращение: шаг угла)"));
-    ui.add(egui::Slider::new(&mut d.gset.cell_size, 0.5..=8.0).text(tr("cell size", "размер ячейки")));
+    ui.add(egui::Slider::new(&mut d.gset.cell_size, 0.5..=16.0).text(tr("cell size", "размер ячейки")));
     ui.add(egui::Slider::new(&mut d.gset.angle_snap_deg, 1.0..=90.0).text(tr("angle snap°", "шаг угла°")));
-    ui.add(egui::Slider::new(&mut d.gset.floor_height, 2.0..=8.0).text(tr("floor height", "высота этажа")));
+    ui.add(egui::Slider::new(&mut d.gset.floor_height, 1.5..=12.0).text(tr("floor height", "высота этажа")));
     let bound = d.gset.ground_snap;
     if chip(ui, bound, if bound { tr("Bound to ground - click to unbind", "Привязано к земле - клик чтобы отвязать") } else { tr("Unbound (Y = 0) - click to bind to ground", "Не привязано (Y = 0) - клик чтобы привязать к земле") }).clicked() {
         d.gset.ground_snap = !bound;

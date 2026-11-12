@@ -10,6 +10,7 @@ use bevy_egui::EguiContexts;
 
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
+use crate::mcp_commands::{StudioCommand as Cmd, StudioCommandQueue};
 use crate::props::SceneObject;
 use crate::selection::{Deleted, EditorSelection, draw_box, prune_selection};
 use crate::studio::StudioState;
@@ -725,71 +726,30 @@ fn refresh_cloned_ids(mut commands: Commands, roots: Query<Entity, With<FreshIds
     }
 }
 
-/// Live, editable roots among `ids`, ready for `clone_objects`.
-pub fn clone_sources(ids: &[Entity], q: &Query<(&mut Transform, &mut Visibility)>, all: &Query<&SceneObject>, deleted: &Query<(), With<Deleted>>, parents: &Query<&ChildOf>) -> Vec<(Entity, Transform, SceneObject, bool)> {
-    ids.iter()
-        .filter(|e| !deleted.contains(**e))
-        .filter_map(|e| Some((*e, *q.get(*e).ok()?.0, all.get(*e).ok()?.clone(), parents.contains(*e))))
-        .collect()
-}
-
-#[allow(clippy::too_many_arguments)]
 fn scene_edit_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
     studio: Res<StudioState>,
     mut egui: EguiContexts,
-    mut commands: Commands,
-    mut sel: ResMut<EditorSelection>,
-    mut hist: ResMut<SceneHistory>,
-    mut clip: ResMut<ObjectClipboard>,
+    sel: Res<EditorSelection>,
+    clip: Res<ObjectClipboard>,
     gz: Res<GizmoState>,
-    terrain: Res<TerrainGrid>,
-    mut q: Query<(&mut Transform, &mut Visibility)>,
-    all: Query<&SceneObject>,
-    deleted: Query<(), With<Deleted>>,
-    parents: Query<&ChildOf>,
+    mut queue: ResMut<StudioCommandQueue>,
 ) {
     if studio.tool == "node_graph" || egui.ctx_mut().map(|c| c.egui_wants_keyboard_input()).unwrap_or(false) || gz.drag.is_some() {
         return;
     }
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
-
     if ctrl && keys.just_pressed(KeyCode::KeyC) && !sel.selected.is_empty() {
-        clip.sources = top_level(&sel, &parents);
-        clip.pastes = 0;
+        queue.push(Cmd::Copy);
     }
-
-    let paste = ctrl && keys.just_pressed(KeyCode::KeyV) && !clip.sources.is_empty();
-    let dup = ctrl && keys.just_pressed(KeyCode::KeyD) && !sel.selected.is_empty();
-    if paste || dup {
-        let ids = if paste { clip.sources.clone() } else { top_level(&sel, &parents) };
-        let stagger = if paste {
-            clip.pastes += 1;
-            clip.pastes as f32
-        } else {
-            1.0
-        };
-        let srcs = clone_sources(&ids, &q, &all, &deleted, &parents);
-        let mut next_id = all.iter().map(|o| o.id).max().unwrap_or(0);
-        let (before, after, fresh) = clone_objects(&mut commands, &terrain.0, &srcs, stagger, &mut next_id);
-        if let Some(first) = fresh.first().copied() {
-            hist.record(if paste { "Paste" } else { "Duplicate" }, before, after);
-            sel.selected = fresh.into_iter().collect();
-            sel.primary = Some(first);
-        }
+    if ctrl && keys.just_pressed(KeyCode::KeyV) && !clip.sources.is_empty() {
+        queue.push(Cmd::Paste);
     }
-
+    if ctrl && keys.just_pressed(KeyCode::KeyD) && !sel.selected.is_empty() {
+        queue.push(Cmd::Duplicate { offset: [0.0, 0.0] });
+    }
     if keys.just_pressed(KeyCode::Delete) && !sel.selected.is_empty() {
-        let (mut before, mut after) = (Vec::new(), Vec::new());
-        for e in sel.selected.iter().copied() {
-            let Ok((tf, _)) = q.get(e) else { continue };
-            before.push(ObjState { entity: e, tf: *tf, alive: true });
-            after.push(ObjState { entity: e, tf: *tf, alive: false });
-        }
-        if hist.record("Delete", before, after.clone()) {
-            apply_states(&after, &mut q, &mut commands);
-            sel.clear();
-        }
+        queue.push(Cmd::DeleteSelected);
     }
 }
 

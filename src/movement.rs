@@ -10,6 +10,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::arc_core::*;
 use crate::camera::EditorCamera;
 use crate::level_builder::{Door, GridSettings, LevelTile, tile_footprint};
+use crate::mcp_commands::{StudioCommand as Cmd, StudioCommandQueue};
 use crate::navigation::*;
 use crate::props::{ObjectCategory, SceneObject};
 use crate::selection::Deleted;
@@ -357,8 +358,8 @@ fn play_input(
     mut egui: EguiContexts,
     mut active: ResMut<ActiveActor>,
     mut preview: ResMut<PathPreview>,
-    mut commands: Commands,
-    mut doors: Query<(&LevelTile, &mut Door), Without<Deleted>>,
+    mut queue: ResMut<StudioCommandQueue>,
+    doors: Query<(&LevelTile, &Door), Without<Deleted>>,
     gset: Res<GridSettings>,
     lock: Res<MoveInputLock>,
 ) {
@@ -397,11 +398,8 @@ fn play_input(
             })
             .min_by(|a, b| a.1.total_cmp(&b.1));
         if let Some((i, _)) = hit {
-            if let Some((_, mut door)) = doors.iter_mut().nth(i) {
-                if !door.is_open && door.is_locked {
-                    return;
-                }
-                door.is_open = !door.is_open;
+            if let Some((tile, _)) = doors.iter().nth(i) {
+                queue.push(Cmd::ToggleDoor { pos: tile.grid_pos.to_array(), open: None });
                 return;
             }
         }
@@ -415,7 +413,7 @@ fn play_input(
             .filter(|(_, d)| *d < 0.9)
             .min_by(|a, b| a.1.total_cmp(&b.1));
         if let Some((e, _)) = pick {
-            active.0 = Some(e);
+            queue.push(Cmd::SelectActor { entity: e });
             return;
         }
     }
@@ -444,10 +442,8 @@ fn play_input(
         p.cursor = cursor;
     }
 
-    if clicked {
-        if let Some(path) = preview.0.as_ref().and_then(|p| p.path.as_ref()) {
-            commands.entity(actor).insert(waypoints_from(path, &grid.0, &units));
-        }
+    if clicked && preview.0.as_ref().is_some_and(|p| p.path.is_some()) {
+        queue.push(Cmd::MoveActor { entity: actor, to: hit });
     }
 }
 

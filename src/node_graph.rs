@@ -298,7 +298,7 @@ fn panel(ui: &mut egui::Ui, d: &mut crate::ui::UiData, _: &crate::ui_inspector::
         })
         .clicked()
     {
-        d.studio.tool = if open { "select" } else { "node_graph" }.into();
+        d.queue.push(Cmd::SetGraphPanel { open: !open });
     }
     for (label, events) in [
         (tr("World / multiphysics graph", "Граф мира / мультифизики"), false),

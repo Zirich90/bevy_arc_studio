@@ -130,17 +130,14 @@ pub(crate) fn controls(ui: &mut egui::Ui, d: &mut UiData) {
         ui.label(egui::RichText::new(format!("{} {}", tr("Time:", "Время:"), hhmm(d.spec.time_of_day))).monospace().size(12.5));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if chip(ui, d.spec.auto_sun, tr("Auto Sun", "Авто-солнце")).clicked() {
-                let (before, mut next) = ((*d.spec).clone(), (*d.spec).clone());
-                next.auto_sun = !next.auto_sun;
-                d.wh.record("Auto Sun", before, next.clone());
-                *d.spec = next;
+                d.queue.push(Cmd::SetSpec { field: "auto_sun".into(), value: (!d.spec.auto_sun) as u8 as f64 });
             }
             if chip(ui, false, "+").clicked() {
-                d.spec.sun_speed = (d.spec.sun_speed * 1.5).min(6.0);
+                d.queue.push(Cmd::SetSpec { field: "sun_speed".into(), value: (d.spec.sun_speed * 1.5).min(6.0) as f64 });
             }
             ui.label(egui::RichText::new(format!("x{:.1}", d.spec.sun_speed / 0.15)).monospace().size(11.5));
             if chip(ui, false, "-").clicked() {
-                d.spec.sun_speed = (d.spec.sun_speed / 1.5).max(0.01);
+                d.queue.push(Cmd::SetSpec { field: "sun_speed".into(), value: (d.spec.sun_speed / 1.5).max(0.01) as f64 });
             }
         });
     });
@@ -177,18 +174,16 @@ pub(crate) fn controls(ui: &mut egui::Ui, d: &mut UiData) {
     });
     if let Some(k) = clicked {
         match k {
-            0 => d.studio.show_water = !d.studio.show_water,
-            4 => d.studio.show_grass = !d.studio.show_grass,
+            0 => d.queue.push(Cmd::SetView { show_water: Some(!d.studio.show_water), show_grass: None }),
+            4 => d.queue.push(Cmd::SetView { show_water: None, show_grass: Some(!d.studio.show_grass) }),
             _ => {
-                let mut next = s.clone();
-                match k {
-                    1 => next.reflections = !next.reflections,
-                    2 => next.fog_enabled = !next.fog_enabled,
-                    3 => next.god_rays = !next.god_rays,
-                    _ => next.shadows = !next.shadows,
-                }
-                d.wh.record(format!("Toggle {}", items[k].0), s, next.clone());
-                *d.spec = next;
+                let (field, on) = match k {
+                    1 => ("reflections", s.reflections),
+                    2 => ("fog_enabled", s.fog_enabled),
+                    3 => ("god_rays", s.god_rays),
+                    _ => ("shadows", s.shadows),
+                };
+                d.queue.push(Cmd::SetSpec { field: field.into(), value: (!on) as u8 as f64 });
             }
         }
     }

@@ -51,6 +51,8 @@ pub enum StudioCommand {
     /// Play-in-Editor: `Playing` snapshots the scene, `Edit` (Stop) rolls it back, `Paused` freezes game systems.
     SetPlayMode { mode: StudioMode },
     SetTab(InspectorTab),
+    /// Toggle editor view flags (water / grass visibility); `None` leaves a flag unchanged. Not undoable.
+    SetView { show_water: Option<bool>, show_grass: Option<bool> },
     SetBrush { kind: BrushKind, radius: f32, strength: f32 },
     /// kind: pine | boulder | campfire | pier | lantern | model:<file.glb in assets/models | path/under/assets.glb>
     SpawnObject { kind: String, x: f32, z: f32, yaw: f32 },
@@ -72,8 +74,12 @@ pub enum StudioCommand {
     /// Result line: `{"distance_meters","distance_feet","cost_feet","is_reachable"}`.
     QueryPath { from: Vec3, to: Vec3 },
     MoveActor { entity: Entity, to: Vec3 },
+    /// Make `entity` (a Mover) the active actor for click-to-move. Not undoable.
+    SelectActor { entity: Entity },
     /// Gizmo tool and snapping; `None` leaves a field unchanged.
     SetGizmo { mode: Option<GizmoMode>, snap_ground: Option<bool>, align_normal: Option<bool> },
+    /// Activate an editor tool by id (select / terrain_brush / level_builder / node_graph); opens its bound panel. Not undoable.
+    SetTool { id: String },
     /// Select by `SceneObject.id` (see ListObjects); `additive` keeps the current selection.
     SelectIds { ids: Vec<u32>, additive: bool },
     /// Edit a transform (target: `id` or the primary selection); rot_deg = (x, y, z) Euler YXZ; undoable.
@@ -244,6 +250,7 @@ pub struct Extra<'w, 's> {
     custom: Res<'w, CustomCommands>,
     clip: ResMut<'w, ObjectClipboard>,
     parents: Query<'w, 's, &'static ChildOf>,
+    reg: Res<'w, crate::editor_registry::EditorRegistry>,
 }
 
 /// Clone `ids` (and descendants) for Duplicate/Paste; the new roots become the selection.
@@ -333,6 +340,11 @@ pub fn execute_commands(
             StudioCommand::SetTab(t) => {
                 studio.tab = t.panel_id().to_string();
                 Ok(format!("tab {t:?}"))
+            }
+            StudioCommand::SetView { show_water, show_grass } => {
+                if let Some(v) = show_water { studio.show_water = v; }
+                if let Some(v) = show_grass { studio.show_grass = v; }
+                Ok(format!("view water={} grass={}", studio.show_water, studio.show_grass))
             }
             StudioCommand::SetBrush { kind, radius, strength } => {
                 brush.kind = kind;
@@ -452,6 +464,13 @@ pub fn execute_commands(
             StudioCommand::MoveActor { entity, to } => {
                 queue_world_cmd(&mut spawner.commands, "MoveActor", move |w| movement::cmd_move_actor(w, entity, to))
             }
+            StudioCommand::SelectActor { entity } => {
+                queue_world_cmd(&mut spawner.commands, "SelectActor", move |w| {
+                    if w.get::<movement::Mover>(entity).is_none() { return Err("entity is not a Mover".into()); }
+                    w.resource_mut::<movement::ActiveActor>().0 = Some(entity);
+                    Ok(format!("active actor {entity}"))
+                })
+            }
             StudioCommand::SetModule { id, enabled } => queue_world_cmd(&mut spawner.commands, "SetModule", move |w| crate::modules::set_module(w, &id, enabled)),
             StudioCommand::RescanModules => queue_world_cmd(&mut spawner.commands, "RescanModules", crate::modules::rescan),
             StudioCommand::ConnectModule { path } => queue_world_cmd(&mut spawner.commands, "ConnectModule", move |w| crate::modules::connect_module(w, &path)),
@@ -466,6 +485,9 @@ pub fn execute_commands(
                 extra.gz.snap_ground = snap_ground.unwrap_or(extra.gz.snap_ground);
                 extra.gz.align_normal = align_normal.unwrap_or(extra.gz.align_normal);
                 Ok(format!("gizmo {:?} snap={} align={}", extra.gz.mode, extra.gz.snap_ground, extra.gz.align_normal))
+            }
+            StudioCommand::SetTool { id } => {
+                if extra.reg.activate_tool(&mut studio, &id) { Ok(format!("tool {id}")) } else { Err(format!("unknown tool '{id}'")) }
             }
             StudioCommand::SelectIds { ids, additive } => {
                 let mut set: Vec<Entity> = if additive { sel.selected.iter().copied().collect() } else { Vec::new() };
@@ -716,6 +738,8 @@ mod tests {
                 StudioCommand::SetGizmo { mode: Some(GizmoMode::Rotate), snap_ground: Some(true), align_normal: None },
                 StudioCommand::SetTransform { id: Some(3), pos: Some(Vec3::new(1.0, 2.0, 3.0)), rot_deg: None, scale: None, drop_to_ground: true },
                 StudioCommand::SetSpec { field: "lake_radius".into(), value: 20.0 },
+                StudioCommand::SetView { show_water: Some(false), show_grass: None },
+                StudioCommand::SetTool { id: "terrain_brush".into() },
                 StudioCommand::SelectIds { ids: vec![1, 2], additive: false },
                 StudioCommand::Duplicate { offset: [2.0, 0.0] },
                 StudioCommand::ListObjects,

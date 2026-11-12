@@ -11,6 +11,7 @@ use crate::arc_core::*;
 use crate::camera::EditorCamera;
 use crate::editor_registry::{EditorAppExt, PanelDef, PanelLocation, ToolDef, spawn_kind};
 use crate::gizmo_3d::gizmo_system;
+use crate::mcp_commands::StudioCommand as Cmd;
 use crate::studio::{CamStyle, StudioState};
 use crate::terrain_brush::{BrushKind, brush_system};
 use crate::ui::*;
@@ -184,6 +185,7 @@ fn environment_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter, terrain: bool,
 
     // live (cheap) fields: transactional preview, one undo entry per drag
     if lev.changed || lev.finish {
+        live.sanitize();
         let mut cur = (*d.spec).clone();
         track_ev(&lev, &mut d.wh, "World settings", &mut cur, live);
         if lev.changed {
@@ -218,16 +220,16 @@ fn brushes_tab(ui: &mut egui::Ui, d: &mut UiData, f: &Filter) {
         for k in BrushKind::ALL {
             let name = i18n::label(k.label());
             if (f.ok(k.label()) || f.ok(name)) && chip(ui, d.brush.kind == k, name).clicked() {
-                d.brush.kind = k;
+                d.queue.push(Cmd::SetBrush { kind: k, radius: d.brush.radius, strength: d.brush.strength });
             }
         }
     });
     let (mut r, mut s) = (d.brush.radius, d.brush.strength);
     if f.ok("brush radius") && ui.add(egui::Slider::new(&mut r, 2.0..=45.0).text(i18n::shown("Brush Radius (m)"))).changed() {
-        d.brush.radius = r;
+        d.queue.push(Cmd::SetBrush { kind: d.brush.kind, radius: r, strength: d.brush.strength });
     }
     if f.ok("strength") && ui.add(egui::Slider::new(&mut s, 0.5..=20.0).text(i18n::shown("Strength"))).changed() {
-        d.brush.strength = s;
+        d.queue.push(Cmd::SetBrush { kind: d.brush.kind, radius: d.brush.radius, strength: s });
     }
     ui.separator();
     let help = match d.brush.kind {

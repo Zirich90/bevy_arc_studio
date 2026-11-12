@@ -382,6 +382,12 @@ pub fn set_component(w: &mut World, target: &Target, component: &str, value: &st
     let json = doc.to_string();
     let reg_entry = reg.get(tid).ok_or("type vanished")?;
     let new = TypedReflectDeserializer::new(reg_entry, &reg).deserialize(&mut serde_json::Deserializer::from_str(&json)).map_err(|e| e.to_string())?;
+    // Linked-prefab members store bindings as overrides, not as a direct component (same route as the inspector).
+    if tid == TypeId::of::<crate::quillshade_bridge::QuillshadeBinding>() && w.get::<crate::prefab_variants::PrefabMember>(e).is_some() {
+        drop(reg);
+        let binding = crate::quillshade_bridge::QuillshadeBinding::from_reflect(new.as_partial_reflect()).ok_or("invalid QuillshadeBinding value")?;
+        return crate::quillshade_bridge::write_binding(w, target, binding);
+    }
     let rc = reg.get_type_data::<ReflectComponent>(tid).ok_or("not a component")?;
     rc.insert(&mut w.get_entity_mut(e).map_err(|e| e.to_string())?, new.as_ref(), &reg);
     drop(reg);
@@ -615,6 +621,25 @@ mod tests {
         assert_eq!(w.get::<OpProbe>(e).unwrap().hp, 5);
         remove_component(w, &t, "OpProbe").unwrap();
         assert!(w.get::<OpProbe>(e).is_none());
+    }
+
+    #[test]
+    fn set_component_on_prefab_member_routes_to_override() {
+        use crate::quillshade_bridge::{MaterialParameter, MaterialValue, QuillshadeBinding};
+        let mut app = app();
+        app.register_type::<QuillshadeBinding>().register_type::<MaterialParameter>().register_type::<MaterialValue>();
+        let w = app.world_mut();
+        let root = w.spawn(Name::new("Root")).id();
+        let member = w.spawn((
+            Name::new("Member"),
+            QuillshadeBinding { material: "old".into(), ..Default::default() },
+            crate::prefab_variants::PrefabMember { root, key: "m".into() },
+        )).id();
+        // Root has no PrefabInstance: the override path is taken and fails there, proving the
+        // binding was not inserted directly on the member (which would have succeeded).
+        let err = set_component(w, &Target::Entity(member), "QuillshadeBinding", r#"{"material":"new"}"#).unwrap_err();
+        assert!(err.contains("prefab instance root"), "{err}");
+        assert_eq!(w.get::<QuillshadeBinding>(member).unwrap().material, "old");
     }
 
     #[test]

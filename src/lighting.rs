@@ -17,7 +17,8 @@ pub struct Sun;
 #[derive(Component)]
 pub struct Moon;
 /// Point light that is lit between dusk and dawn (19:30–06:30).
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Reflect)]
+#[reflect(Component)]
 pub struct NightLight {
     pub base: f32,
 }
@@ -88,7 +89,7 @@ pub struct LightingPlugin;
 
 impl Plugin for LightingPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<NightBoost>().insert_resource(GlobalAmbientLight { color: Color::srgb(0.45, 0.55, 0.9), brightness: 0.0, ..default() })
+        app.init_resource::<NightBoost>().register_type::<NightLight>().insert_resource(GlobalAmbientLight { color: Color::srgb(0.45, 0.55, 0.9), brightness: 0.0, ..default() })
             .insert_resource(DirectionalLightShadowMap { size: 4096 })
             .add_systems(Update, (advance_clock, apply_time_of_day, apply_toggles, flicker_night_lights).chain());
     }
