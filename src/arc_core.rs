@@ -808,6 +808,8 @@ pub(crate) fn evaluate_world_graph_with_biology(
         match node.params { NodeParameters::HydraulicErosion {droplets:d,thermal_iterations,..} => {droplets+=d as u64;iterations+=thermal_iterations as u64;}, NodeParameters::FluidFlow {iterations:i,..} => iterations+=i as u64, _=>{} }
     }
     if droplets>2_000_000 || cells*iterations>32_000_000 {return Err("graph iteration budget exceeded".into());}
+    let mut consumers=BTreeMap::<u32,usize>::new();
+    for e in graph.edges.iter().filter(|e|needed.contains(&e.to)) {*consumers.entry(e.from).or_insert(0)+=1;}
     let mut outputs=BTreeMap::<u32, (GraphFields, Option<[f64; 3]>)>::new();
     for id in order.into_iter().filter(|id|needed.contains(id)) {
         let node=graph.nodes.iter().find(|n|n.id==id).unwrap();
@@ -820,7 +822,10 @@ pub(crate) fn evaluate_world_graph_with_biology(
             (GraphFields {grid,temperature_c:vec![15.0;count],water_m,biomass:vec![0.0;count],scatter:vec![]}, None)
         } else {
             let input=graph.edges.iter().find(|e|e.to==id).ok_or_else(||format!("node {id} has no input"))?;
-            outputs.get(&input.from).ok_or("missing evaluated input")?.clone()
+            // the last consumer takes the fields by move; fan-out keeps cloning
+            let left=consumers.get_mut(&input.from).ok_or("missing evaluated input")?;
+            *left-=1;
+            if *left==0 {outputs.remove(&input.from).ok_or("missing evaluated input")?} else {outputs.get(&input.from).ok_or("missing evaluated input")?.clone()}
         };
         match node.params {
             NodeParameters::Noise {..} => {},
@@ -1329,6 +1334,22 @@ impl HeightfieldGrid {
         const R: i32 = 3;
         let mut rng = StdRng::seed_from_u64(seed);
         let lim = self.n as f32 - 3.0;
+        // radial erosion brush is identical for every droplet: weigh it once
+        let mut wsum = 0.0;
+        for b in -R..=R {
+            for a in -R..=R {
+                wsum += (1.0 - ((a * a + b * b) as f32).sqrt() / R as f32).max(0.0);
+            }
+        }
+        let mut brush = Vec::new();
+        for b in -R..=R {
+            for a in -R..=R {
+                let w = (1.0 - ((a * a + b * b) as f32).sqrt() / R as f32).max(0.0) / wsum;
+                if w > 0.0 {
+                    brush.push((a, b, w));
+                }
+            }
+        }
         for _ in 0..droplets {
             let (mut px, mut pz) = (rng.gen_range(1.0..lim), rng.gen_range(1.0..lim));
             let (mut dx, mut dz, mut speed, mut water, mut sed) = (0.0_f32, 0.0_f32, 1.0_f32, 1.0_f32, 0.0_f32);
@@ -1367,22 +1388,13 @@ impl HeightfieldGrid {
                 } else {
                     let ero = ((cap - sed) * K_E).min(-dh);
                     let (ci, cj) = (ox.round() as i32, oz.round() as i32);
-                    let mut wsum = 0.0;
-                    for b in -R..=R {
-                        for a in -R..=R {
-                            wsum += (1.0 - ((a * a + b * b) as f32).sqrt() / R as f32).max(0.0);
-                        }
-                    }
                     let n = self.n as i32;
-                    for b in -R..=R {
-                        for a in -R..=R {
-                            let w = (1.0 - ((a * a + b * b) as f32).sqrt() / R as f32).max(0.0) / wsum;
-                            let (ii, jj) = (ci + a, cj + b);
-                            if w > 0.0 && ii >= 0 && jj >= 0 && ii < n && jj < n {
-                                let k = (jj * n + ii) as usize;
-                                self.heights[k] -= ero * w;
-                                self.erosion_mask[k] += ero * w;
-                            }
+                    for &(a, b, w) in &brush {
+                        let (ii, jj) = (ci + a, cj + b);
+                        if ii >= 0 && jj >= 0 && ii < n && jj < n {
+                            let k = (jj * n + ii) as usize;
+                            self.heights[k] -= ero * w;
+                            self.erosion_mask[k] += ero * w;
                         }
                     }
                     sed += ero;
@@ -1397,18 +1409,22 @@ impl HeightfieldGrid {
         let n = self.n;
         let c = self.cell();
         let tan_t = talus_deg.to_radians().tan();
+        let neighbours: [(i32, i32, f32); 8] = std::array::from_fn(|k| {
+            let (di, dj) = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)][k];
+            (di, dj, c * ((di * di + dj * dj) as f32).sqrt())
+        });
+        let mut delta = vec![0.0_f32; n * n];
         for _ in 0..iterations {
-            let mut delta = vec![0.0_f32; n * n];
+            delta.fill(0.0);
             for j in 0..n {
                 for i in 0..n {
                     let hc = self.heights[j * n + i];
-                    for (di, dj) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                    for &(di, dj, dist) in &neighbours {
                         let (ii, jj) = (i as i32 + di, j as i32 + dj);
                         if ii < 0 || jj < 0 || ii >= n as i32 || jj >= n as i32 {
                             continue;
                         }
                         let k = jj as usize * n + ii as usize;
-                        let dist = c * ((di * di + dj * dj) as f32).sqrt();
                         let dh = hc - self.heights[k];
                         if dh / dist > tan_t {
                             let m = 0.5 * (dh - dist * tan_t) * 0.5;
@@ -1418,7 +1434,7 @@ impl HeightfieldGrid {
                     }
                 }
             }
-            for (h, d) in self.heights.iter_mut().zip(delta) {
+            for (h, d) in self.heights.iter_mut().zip(&delta) {
                 *h += d;
             }
         }
@@ -1497,7 +1513,7 @@ impl HeightfieldGrid {
         let i1 = ((cx + rg).ceil() as i32).clamp(0, m);
         let j0 = ((cz - rg).floor() as i32).clamp(0, m);
         let j1 = ((cz + rg).ceil() as i32).clamp(0, m);
-        let mut updates = Vec::new();
+        let mut updates = Vec::with_capacity(((i1 - i0 + 1) * (j1 - j0 + 1)) as usize);
         for j in j0..=j1 {
             for i in i0..=i1 {
                 let (wx, wz) = self.grid_to_world(i as usize, j as usize);

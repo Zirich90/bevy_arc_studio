@@ -1,7 +1,9 @@
 //! Lake surface: depth-tinted translucent PBR mesh with animated Gerstner-like ripples.
 
+use std::sync::LazyLock;
+
 use bevy::asset::RenderAssetUsages;
-use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 
 use bevy::window::PrimaryWindow;
@@ -105,19 +107,21 @@ impl Plugin for WaterPlugin {
     }
 }
 
-const WAVES: [(Vec2, f32, f32, f32); 4] = [
-    // direction, wave number, speed, amplitude
-    (Vec2::new(0.8, 0.6), 0.9, 0.9, 0.050),
-    (Vec2::new(-0.5, 0.86), 1.5, 1.2, 0.028),
-    (Vec2::new(0.2, -0.98), 2.3, 1.6, 0.016),
-    (Vec2::new(-0.9, -0.4), 3.4, 2.0, 0.008),
-];
+static WAVES: LazyLock<[(Vec2, f32, f32, f32); 4]> = LazyLock::new(|| {
+    [
+        // direction, wave number, speed, amplitude
+        (Vec2::new(0.8, 0.6), 0.9, 0.9, 0.050),
+        (Vec2::new(-0.5, 0.86), 1.5, 1.2, 0.028),
+        (Vec2::new(0.2, -0.98), 2.3, 1.6, 0.016),
+        (Vec2::new(-0.9, -0.4), 3.4, 2.0, 0.008),
+    ]
+    .map(|(d, k, w, a)| (d.normalize(), k, w, a))
+});
 
 /// (height, d/dx, d/dz) of the ripple field.
 fn wave(x: f32, z: f32, t: f32) -> (f32, f32, f32) {
     let (mut h, mut dx, mut dz) = (0.0, 0.0, 0.0);
-    for (d, k, w, a) in WAVES {
-        let d = d.normalize();
+    for &(d, k, w, a) in WAVES.iter() {
         let ph = k * (d.x * x + d.y * z) - w * t;
         h += a * ph.sin();
         let c = a * k * ph.cos();
@@ -290,14 +294,19 @@ pub fn describe_sections(w: &mut World) -> Vec<serde_json::Value> {
 
 /// Write the animated surface into `mesh`; a freshly rebuilt mesh gets it too, so a rebuild never flashes a flat surface.
 fn ripple(mesh: &mut Mesh, w: &Water, t: f32) {
-    let mut pos = Vec::with_capacity(w.nx * w.nz);
-    let mut nrm = Vec::with_capacity(w.nx * w.nz);
+    // reuse the attribute buffers instead of reallocating them every animation tick
+    let (Some(VertexAttributeValues::Float32x3(mut pos)), Some(VertexAttributeValues::Float32x3(mut nrm))) =
+        (mesh.remove_attribute(Mesh::ATTRIBUTE_POSITION), mesh.remove_attribute(Mesh::ATTRIBUTE_NORMAL))
+    else {
+        return;
+    };
     for j in 0..w.nz {
         for i in 0..w.nx {
             let (x, z) = (w.origin.x + i as f32 * w.cell, w.origin.y + j as f32 * w.cell);
             let (y, dx, dz) = wave(x, z, t);
-            pos.push([x, y + w.base[j * w.nx + i], z]);
-            nrm.push(Vec3::new(-dx, 1.0, -dz).normalize().to_array());
+            let k = j * w.nx + i;
+            pos[k] = [x, y + w.base[k], z];
+            nrm[k] = Vec3::new(-dx, 1.0, -dz).normalize().to_array();
         }
     }
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
@@ -469,6 +478,25 @@ mod tests {
         assert_eq!(dry.at(Vec2::new(mx, mz)), NavCell::Free);
         assert_ne!(wet.at(Vec2::new(mx, mz)), NavCell::Free);
         assert_eq!(wet.at(Vec2::ZERO), dry.at(Vec2::ZERO));
+    }
+
+    #[test]
+    fn ripple_writes_the_wave_field_into_the_existing_buffers() {
+        let g = grid();
+        let spec = WorldSpec { water_level: 6.0, ..default() };
+        let (mut mesh, water) = build_water_mesh(&spec, &g, &[], &body_owners(&g, 6.0, &[]), NO_BODY);
+        ripple(&mut mesh, &water, 0.7);
+        let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else { panic!("positions") };
+        let Some(VertexAttributeValues::Float32x3(nrm)) = mesh.attribute(Mesh::ATTRIBUTE_NORMAL) else { panic!("normals") };
+        assert_eq!(pos.len(), water.nx * water.nz);
+        assert_eq!(nrm.len(), pos.len());
+        for (k, p) in pos.iter().enumerate() {
+            let (i, j) = (k % water.nx, k / water.nx);
+            let (x, z) = (water.origin.x + i as f32 * water.cell, water.origin.y + j as f32 * water.cell);
+            let (y, _, _) = wave(x, z, 0.7);
+            assert_eq!(p[1], y + water.base[k]);
+            assert!((Vec3::from(nrm[k]).length() - 1.0).abs() < 1e-5);
+        }
     }
 
     #[test]

@@ -154,16 +154,20 @@ pub fn sync(w: &mut World, mut last: Local<(bool, Vec<ScatterItem>, Vec<u8>, u64
     }
     let state=w.resource::<SimulationState>();
     let active=state.graph_active;
-    let items=state.fields.as_ref().filter(|_|active).map(|f|f.scatter.clone()).unwrap_or_default();
-    let grid=state.fields.as_ref().map(|f|f.grid.clone());
+    let tick=state.tick;
+    // read-only pass: compare against the live terrain without cloning it every tick
+    let items=state.fields.as_ref().filter(|_|active).map(|f|f.scatter.as_slice()).unwrap_or(&[]);
     let depths: Vec<u8> = state.fields.as_ref().filter(|_| active).map(|fields| {
         fields.water_m.iter().map(|&depth| {
             u8::from(depth > 0.0) + u8::from(depth > f64::from(crate::navigation::WADE_DEPTH))
         }).collect()
     }).unwrap_or_default();
-    let mut changed = last.0 != active || last.1 != items || last.2 != depths;
-    if let Some(grid)=grid {
-        let previous = &w.resource::<TerrainGrid>().0;
+    let mut changed = last.0 != active || last.1.as_slice() != items || last.2 != depths;
+    let previous = &w.resource::<TerrainGrid>().0;
+    let mut region=None;
+    let mut replacement=None;
+    if let Some(f)=state.fields.as_ref() {
+        let grid=&f.grid;
         if last.0 == active && last.2.len() == depths.len()
             && previous.n == grid.n && previous.size == grid.size
         {
@@ -179,22 +183,27 @@ pub fn sync(w: &mut World, mut last: Local<(bool, Vec<ScatterItem>, Vec<u8>, u64
                 }
             }
             if min.is_finite() {
-                w.insert_resource(DirtyTerrain {
-                    revision: w.resource::<TerrainVersion>().0.wrapping_add(1),
-                    min: min - Vec2::splat(spacing),
-                    max: max + Vec2::splat(spacing),
-                });
+                region=Some((min - Vec2::splat(spacing), max + Vec2::splat(spacing)));
             }
         }
-        if grid != w.resource::<TerrainGrid>().0 {
-            let mesh=build_terrain_mesh(&grid,&grid.build_splatmap(w.resource::<WorldSpec>()));
-            let handles:Vec<_>=w.query_filtered::<&Mesh3d,With<TerrainMesh>>().iter(w).map(|h|h.0.clone()).collect();
-            for h in handles {let _=w.resource_mut::<Assets<Mesh>>().insert(&h,mesh.clone());}
-            w.resource_mut::<TerrainGrid>().0=grid;
+        if grid != previous {
+            replacement=Some((build_terrain_mesh(grid,&grid.build_splatmap(w.resource::<WorldSpec>())), grid.clone()));
             changed=true;
         }
     }
-    *last = (active, items, depths, w.resource::<SimulationState>().tick);
+    *last = (active, items.to_vec(), depths, tick);
+    if let Some((min,max))=region {
+        w.insert_resource(DirtyTerrain {
+            revision: w.resource::<TerrainVersion>().0.wrapping_add(1),
+            min,
+            max,
+        });
+    }
+    if let Some((mesh,grid))=replacement {
+        let handles:Vec<_>=w.query_filtered::<&Mesh3d,With<TerrainMesh>>().iter(w).map(|h|h.0.clone()).collect();
+        for h in handles {let _=w.resource_mut::<Assets<Mesh>>().insert(&h,mesh.clone());}
+        w.resource_mut::<TerrainGrid>().0=grid;
+    }
     if changed {w.resource_mut::<TerrainVersion>().0=w.resource::<TerrainVersion>().0.wrapping_add(1);}
 }
 

@@ -158,13 +158,11 @@ pub(crate) fn brush_system(
         let col = kind.color();
         let seg = 72;
         for (k, (rr, c)) in [(brush.radius, col), (brush.radius * 0.5, col.with_alpha(0.45))].into_iter().enumerate() {
-            let pts: Vec<Vec3> = (0..=seg)
-                .map(|n| {
-                    let a = n as f32 / seg as f32 * TAU;
-                    let (x, z) = (h.x + a.cos() * rr, h.z + a.sin() * rr);
-                    Vec3::new(x, grid.0.sample_height(x, z) + 0.25 + 0.05 * k as f32, z)
-                })
-                .collect();
+            let pts: [Vec3; 73] = std::array::from_fn(|n| {
+                let a = n as f32 / seg as f32 * TAU;
+                let (x, z) = (h.x + a.cos() * rr, h.z + a.sin() * rr);
+                Vec3::new(x, grid.0.sample_height(x, z) + 0.25 + 0.05 * k as f32, z)
+            });
             gizmos.linestrip(pts, c);
         }
         gizmos.line(h, h + Vec3::Y * 2.5, col);
