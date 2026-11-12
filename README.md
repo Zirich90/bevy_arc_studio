@@ -11,7 +11,7 @@ English · [Русский](#русский)
 
 Originally created to build levels for an upcoming RPG, it combines procedural terrain generation with manual scene editing and a remote command protocol (`bevy_remote`), so worlds can be built by hand or by AI agents (such as Claude).
 
-![Editor](docs/screenshots/e5_asset_browser.png)
+![Editor](docs/screenshots/concept_visual/01_classic_1600_en.png)
 
 | Level Builder | Tactical PF2e combat (Play mode) |
 |---|---|
@@ -40,21 +40,22 @@ Originally created to build levels for an upcoming RPG, it combines procedural t
 - Separate game process: save a `.scn.json` scene, then use the **Separate game** window to Launch it. The editor uses BRP port 15702; the game uses 15704. The live entity tree refreshes automatically; components can be read and edited, and the game supports Pause / Resume / Stop. Stop leaves the editor scene unchanged. Use **Switch game to scene** to load another saved scene and resume Play. [Usage and BRP commands](docs/architecture/10_separate_game.md).
 - Prefabs: tiles of a spawned prefab follow its root when it is moved or rotated.
 - Water bodies: each basin can have its own water level (`SetWaterBody`), so a moat can be filled without raising the lake; levels are saved in scenes and navigation wades accordingly. Grass, pines, rocks and reeds follow the sculpted terrain, and grass and pines under water are hidden.
+- **World simulation**: Noodle world graphs are executed, not just drawn — a typed, versioned pipeline (noise → hydraulic/thermal erosion → temperature → rain & water flow → biology → Poisson scatter) is evaluated on the CPU with deterministic, budget-guarded math. In Play mode a multiphysics grid (water, oil, lava, snow/ice, heat) conserves mass and energy; PF2e effects such as Fireball feed it, and terrain, water and navigation update live.
 - Pathfinding (Theta* + funnel) with click-to-move.
 - Extension points for game plugins: `EditorRegistry` (tools, panels, inspector overrides, spawner items), `SpawnKinds` (spawn handlers by kind), `CustomCommands` (`StudioCommand::Custom { name, args }`), scene-component registry.
 - **Pathfinder 2e plugin** (separate crate `crates/bevy_arc_pf2e`, built only on those extension points; the editor has no PF2e code): RON actor archetypes, factions, trigger volumes, and pilot tactical combat (distances in feet): initiative, 3-action turns, Stride / Step / Strike / Arcane Bolt / Fireball / Raise Shield / Interact, Reactive Strike gate that stops a Stride mid-route, enemy AI, Turn Order Bar, Tactical Hotbar and Combat Log. Agents drive it through the `CombatInput` order queue.
 - Scripted snow-castle showcase: `cargo run --bin showcase`.
 - Pure, unit-tested math core in `src/arc_core.rs`, independent of ECS rendering.
 
-## Quillshade and Noodle integration (in progress)
+## Quillshade and Noodle integration
 
-The current integration provides a working editor bridge. Full terrain multiphysics and PF2e effect execution are scheduled for the [next stage I2](docs/architecture/08_quillshade_noodle.md#следующий-этап-i2-исполнение-графов-и-мультифизика). The inspected upstream sources contain no such simulation backend; Noodle's `geometry_nodes` example demonstrates point processing and instancing.
+The integration is complete through stage I2: materials, environment, executed world graphs and CPU multiphysics are part of the editor ([I2 acceptance log](docs/clean_room_audit/logs/stage_i2_acceptance_log.md)). The simulation backend is ArcStudio's own pure math core; upstream provides the material runtime and the node canvas.
 
-- [bevy-quillshade](https://github.com/fe3dback/bevy-quillshade): generated material crate in `crates/quillshade`, WESL/assets, 11 generated 3D material entries, object/tile/prefab-root bindings, environment presets and a Reflect binding inspector. `file_watcher` is enabled; material layout or generated Rust changes require recompilation.
-- [bevy_noodle](https://github.com/gold-silver-copper/bevy_noodle): native **Node Graph** canvas, world and PF2e/environment graph templates, versioned RON documents, graph validation, shared Undo/Redo and Play-in-Editor rollback. Graph nodes currently describe pipelines; simulation evaluators are not implemented.
-- BRP commands: `AssignQuillshadeMaterial`, `SetQuillshadeEnvironment`, `ReplaceStudioGraph`, `SetGraphPanel`, `DescribeIntegration`. Query the live schema with `Describe`; `DescribeIntegration` reports material IDs, graph RON and supported capabilities.
+- [bevy-quillshade](https://github.com/fe3dback/bevy-quillshade): generated material crate in `crates/quillshade`, WESL/assets, 11 generated 3D materials with typed `f32`/`Vec4` parameter overrides and a Reflect binding inspector. Bindings cover objects, tiles, prefab roots and individual linked-prefab members; terrain has a master material plus 6 splat-layer slots, and each water basin can carry its own material. Environment presets persist with transitions, Undo/Redo and PIE rollback; source RON hot-reloads. `file_watcher` is enabled; material layout or generated Rust changes require recompilation.
+- [bevy_noodle](https://github.com/gold-silver-copper/bevy_noodle): native **Node Graph** canvas (drag/connect/delete, auto-layout), typed and versioned world and PF2e graph templates in RON, graph validation, shared Undo/Redo and Play-in-Editor rollback. World graphs run through the CPU evaluator (see *World simulation* above); event graphs drive PF2e effects.
+- BRP commands: `AssignQuillshadeMaterial`, `SetTerrainMaterial`, `SetWaterMaterial`, `SetQuillshadeEnvironment`, `ReplaceStudioGraph`, `AddStudioGraphNode`, `SetStudioGraphParameters`, `EvaluateStudioGraph`, `SaveStudioGraph`, `LoadStudioGraph`, `AutoLayoutStudioGraph`, `SetGraphPanel`, `DescribeIntegration`. Query the live schema with `Describe`; `DescribeIntegration` reports material IDs, graph RON, terrain/water sections and supported capabilities.
 
-Not yet implemented: arbitrary material parameter inspection, terrain-layer and per-basin material slots, persistent material overrides on individual linked-prefab members, environment Undo/PIE rollback, and multiphysics/PF2e graph evaluators. Full visual and hot-reload acceptance remains pending. See the [contracts and work plan](docs/architecture/08_quillshade_noodle.md) and [verification log](docs/clean_room_audit/logs/stage_09_integration_log.md).
+See the [contracts and work plan](docs/architecture/08_quillshade_noodle.md) and the [integration verification log](docs/clean_room_audit/logs/stage_09_integration_log.md).
 
 ![Native world graph](docs/screenshots/integration_world_graph.png)
 
@@ -62,11 +63,17 @@ Upstream snapshots: Quillshade [`35be859`](https://github.com/fe3dback/bevy-quil
 
 Regenerate with `./scripts/regenerate_quillshade.ps1 -ShaderEditor <path-to-shader_editor>` using the compatible upstream Quillshade executable. Edit source RON in `quillshade/`; generated output is one-way and must not be edited manually.
 
-Verified on Windows on 2026-11-02: 142 Rust tests passed, one doctest ignored; BRP material assignment/history, graph history, PIE and prefab-root/tile scene roundtrip passed. `.cargo/config.toml` keeps build output and temporary files in the workspace's `target/` directory (E: on the development machine). [Build memory recovery and rollback](docs/architecture/08_quillshade_noodle.md) are documented; pagefile changes are a separate administrative action, never part of a build.
+Verified on Windows: I2 acceptance closed all eight criteria on 2026-11-04 (BRP scenarios, multiphysics balances, Fireball/Theta* and viewed screenshots); the library suite on 2026-11-12 runs 174 tests passed, one doctest ignored. `.cargo/config.toml` keeps build output and temporary files in the workspace's `target/` directory (E: on the development machine). [Build memory recovery and rollback](docs/architecture/08_quillshade_noodle.md) are documented; pagefile changes are a separate administrative action, never part of a build.
 
 ## Interface layouts
 
 Choose **View → Interface Layout** or press **Ctrl+Shift+1/2/3**. Classic keeps the scene tree, inspector and asset browser around the viewport. Focus puts tools in a vertical dock and opens panels on demand. Smart groups registered panels into Scene, Terrain, World, Build and Modules. Select a tool explicitly to start editing in that mode.
+
+| Classic | Focus | Smart |
+|---|---|---|
+| ![Classic](docs/screenshots/ArcStudio_3_Layouts/Classic.png) | ![Focus](docs/screenshots/ArcStudio_3_Layouts/Focus.png) | ![Smart](docs/screenshots/ArcStudio_3_Layouts/Smart_Scene.png) |
+
+The interface is bilingual: **Settings → Language** switches English/Russian, and the choice persists in `ArcStudio/interface.json`.
 
 Use **Window** to show and pin panels. Press **Ctrl+K** to search commands, panels and tools. Use the arrows to select an entry, Enter to run it and Esc to close the palette. **F** frames the selection. **Separate Game** sits beside the Play controls.
 
@@ -97,6 +104,8 @@ Register inspector panels at `PanelLocation::RightInspector` to make them availa
 ![Gizmo](docs/screenshots/gizmo_polish_01_move.png)
 
 ## Quick start
+
+Prebuilt editor binaries for Windows, Linux and macOS are attached to the [v0.1.0 release](https://github.com/Zirich90/bevy_arc_studio/releases/tag/v0.1.0); each archive bundles the app with `assets/`, scenes, modules and Quillshade materials. Or build from source:
 
 ```bash
 ./run.sh            # Windows: run.bat
@@ -138,7 +147,7 @@ The project was built by an AI agent from independent mathematical specification
 
 - Manifest with SHA-256 hashes of the specs: [CLEAN_ROOM_PROOF.md](docs/clean_room_audit/CLEAN_ROOM_PROOF.md)
 - Math specifications: [01](docs/architecture/01_viewport_camera_math.md) · [02](docs/architecture/02_3d_gizmo_projection.md) · [03](docs/architecture/03_surface_snapping_and_picking.md) · [04](docs/architecture/04_procedural_terrain_and_splatmap.md) · [05](docs/architecture/05_transactional_undo_and_mcp_api.md)
-- Stage prompts: [00](docs/clean_room_audit/prompts/stage_00_prompt.md) · [01](docs/clean_room_audit/prompts/stage_01_prompt.md) · [02](docs/clean_room_audit/prompts/stage_02_prompt.md) · [03](docs/clean_room_audit/prompts/stage_03_prompt.md) · [04](docs/clean_room_audit/prompts/stage_04_prompt.md) · [05](docs/clean_room_audit/prompts/stage_05_prompt.md) · … all stages up to E9: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/)
+- Stage prompts: [00](docs/clean_room_audit/prompts/stage_00_prompt.md) · [01](docs/clean_room_audit/prompts/stage_01_prompt.md) · [02](docs/clean_room_audit/prompts/stage_02_prompt.md) · [03](docs/clean_room_audit/prompts/stage_03_prompt.md) · [04](docs/clean_room_audit/prompts/stage_04_prompt.md) · [05](docs/clean_room_audit/prompts/stage_05_prompt.md) · … all stages: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/)
 - Flight logs: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
 
 ## Project Status & Contributing
@@ -163,7 +172,7 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 
 Проект создавался как рабочий инструмент для уровней моей будущей RPG. Он сочетает процедурную генерацию и ручное редактирование сцены с протоколом `bevy_remote`, поэтому локации можно собирать и мышкой, и с помощью ИИ-агентов (например, Claude).
 
-![Редактор](docs/screenshots/e5_asset_browser.png)
+![Редактор](docs/screenshots/concept_visual/04_classic_1600_ru.png)
 
 | Конструктор уровней | Тактический бой PF2e (Play) |
 |---|---|
@@ -188,21 +197,28 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 - Отдельный игровой процесс: сохраните сцену `.scn.json` и запустите её через **Separate game → Launch**. BRP редактора — порт 15702, игры — 15704. Дерево сущностей обновляется автоматически; доступны чтение и правка компонентов, Pause / Resume / Stop. Stop сохраняет редакторскую сцену без изменений. **Switch game to scene** загружает другую сохранённую сцену и продолжает Play. [Инструкция и команды BRP](docs/architecture/10_separate_game.md).
 - Префабы: тайлы заспавненного префаба следуют за его корнем при перемещении и повороте.
 - Водоёмы: у каждого бассейна свой уровень воды (`SetWaterBody`), поэтому ров можно залить, не поднимая озеро; уровни сохраняются в сцене, навигация учитывает брод. Трава, сосны, камни и тростник следуют за изменённым рельефом, трава и сосны под водой скрываются.
+- **Симуляция мира**: графы Noodle исполняются, а не только рисуются — типизированный версионированный конвейер (шум → гидравлическая/термальная эрозия → температура → дождь и поток воды → биология → Poisson-рассадка) считается на CPU детерминированно, с защитой от неограниченных нагрузок. В Play мультифизическая сетка (вода, нефть, лава, снег/лёд, тепло) сохраняет массу и энергию; эффекты PF2e (например, Fireball) питают её, а рельеф, вода и навигация обновляются на лету.
 - Поиск пути (Theta* + funnel), click-to-move.
 - Точки расширения для игровых плагинов: `EditorRegistry` (инструменты, панели, inspector overrides, пункты спавнера), `SpawnKinds` (обработчики спавна по `kind`), `CustomCommands` (`StudioCommand::Custom { name, args }`), реестр компонентов сцены.
 - **Плагин Pathfinder 2e** (отдельный крейт `crates/bevy_arc_pf2e`, только через эти точки расширения; в редакторе кода PF2e нет): RON-архетипы акторов, фракции, триггер-объёмы и пилотный тактический бой (расстояния в футах): инициатива, 3 действия за ход, Stride / Step / Strike / Arcane Bolt / Fireball / Raise Shield / Interact, Reactive Strike прерывает Stride на маршруте, ИИ врагов, Turn Order Bar, Tactical Hotbar и Combat Log. Для агентов — очередь приказов `CombatInput`.
 - Скриптовое шоукейс-демо «Снежный замок»: `cargo run --bin showcase`.
 - Чистое математическое ядро `src/arc_core.rs` с юнит-тестами, без зависимости от ECS-рендера.
 
-### Интеграция Quillshade и Noodle — в разработке
+### Интеграция Quillshade и Noodle
 
-Подключены [bevy-quillshade](https://github.com/fe3dback/bevy-quillshade) и [bevy_noodle](https://github.com/gold-silver-copper/bevy_noodle). Работают 11 сгенерированных 3D-материалов, назначение объектам, тайлам и корням префабов, пресеты окружения, Reflect-инспектор привязки и нативный Node Graph. Граф хранится в RON, проверяется перед применением, поддерживает общий Undo/Redo и откат PIE.
+Интеграция завершена, этап I2 принят: материалы, окружение, исполняемые графы мира и CPU-мультифизика входят в редактор ([журнал приёмки I2](docs/clean_room_audit/logs/stage_i2_acceptance_log.md)). Backend симуляции — собственное чистое матядро ArcStudio; upstream даёт runtime материалов и нодовый канвас.
 
-Шаблоны мира и эффектов PF2e пока описывают графы: исполнители симуляции отсутствуют и перенесены в [следующий этап I2](docs/architecture/08_quillshade_noodle.md#следующий-этап-i2-исполнение-графов-и-мультифизика). Проверка исходников авторов не обнаружила готового backend мультифизики; `geometry_nodes` Noodle демонстрирует обработку точек и инстансинг. В I2 также перенесены параметры произвольных материалов, слоты слоёв террейна/водоёмов, сохранение индивидуальных привязок членов linked-префаба, откат окружения, полная визуальная приёмка и проверка hot reload.
+- [bevy-quillshade](https://github.com/fe3dback/bevy-quillshade): генерируемый крейт материалов `crates/quillshade`, WESL/ассеты, 11 3D-материалов с типизированными overrides `f32`/`Vec4` и Reflect-инспектором привязки. Привязки к объектам, тайлам, корням префабов и отдельным членам linked-префабов; у рельефа мастер-материал и 6 слоев splatmap, у каждого водоёма может быть свой материал. Пресеты окружения сохраняются вместе с переходами, Undo/Redo и откатом PIE; исходный RON перечитывается на лету.
+- [bevy_noodle](https://github.com/gold-silver-copper/bevy_noodle): нативный **Node Graph** (drag/connect/delete, авто-раскладка), типизированные версионированные шаблоны мира и PF2e в RON, валидация, общий Undo/Redo и откат PIE. Графы мира исполняются CPU-оценатором (см. «Симуляция мира» выше); графы событий управляют эффектами PF2e.
+- Команды BRP: `AssignQuillshadeMaterial`, `SetTerrainMaterial`, `SetWaterMaterial`, `SetQuillshadeEnvironment`, `ReplaceStudioGraph`, `AddStudioGraphNode`, `SetStudioGraphParameters`, `EvaluateStudioGraph`, `SaveStudioGraph`, `LoadStudioGraph`, `AutoLayoutStudioGraph`, `SetGraphPanel`, `DescribeIntegration`; актуальные форматы через `Describe`.
 
-Для ИИ доступны `AssignQuillshadeMaterial`, `SetQuillshadeEnvironment`, `ReplaceStudioGraph`, `SetGraphPanel`, `DescribeIntegration`; актуальные форматы через `Describe`. Кодогенерация односторонняя: исходники в `quillshade/`, запуск через `scripts/regenerate_quillshade.ps1`; generated Rust/WESL вручную не менять.
+Кодогенерация односторонняя: исходники в `quillshade/`, запуск через `scripts/regenerate_quillshade.ps1`; generated Rust/WESL вручную не менять.
 
-[Контракты и план](docs/architecture/08_quillshade_noodle.md) · [результаты проверок](docs/clean_room_audit/logs/stage_09_integration_log.md) · [исходные коммиты и лицензии MIT](docs/architecture/third_party_integration.md). Проверено: 142 Rust-теста, BRP Undo/Redo, PIE и сохранение графа/материалов корня префаба и тайла. Один doctest пропущен. Сборки и временные файлы находятся в `target/` на диске workspace; на рабочей машине это E:.
+[Контракты и план](docs/architecture/08_quillshade_noodle.md) · [журнал приёмки I2](docs/clean_room_audit/logs/stage_i2_acceptance_log.md) · [исходные коммиты и лицензии MIT](docs/architecture/third_party_integration.md). Проверено на Windows: приёмка I2 закрыла все восемь критериев 2026-11-04 (BRP-сценарии, балансы мультифизики, Fireball/Theta* и просмотренные снимки); библиотечные тесты на 2026-11-12 — 174 passed, один doctest пропущен. Сборки и временные файлы находятся в `target/` на диске workspace; на рабочей машине это E:.
+
+### Интерфейс и раскладки
+
+**View → Interface Layout** или **Ctrl+Shift+1/2/3**: Classic (дерево сцены, инспектор и браузер ассетов вокруг вьюпорта), Focus (вертикальный док инструментов, панели по запросу), Smart (контекстные workspace: Scene, Terrain, World, Build, Modules). Палитра команд — **Ctrl+K**, **F** — фокус на выбранном. Интерфейс двуязычный: **Settings → Language** переключает English/Русский, выбор сохраняется в `ArcStudio/interface.json`.
 
 ### Горячие клавиши
 
@@ -221,6 +237,8 @@ Duck.glb: Sony Computer Entertainment Inc. (CC-BY 4.0) via Khronos glTF Sample A
 | `Delete` | Удалить выбранное |
 
 ### Быстрый старт
+
+Готовые бинарники редактора для Windows, Linux и macOS прикреплены к [релизу v0.1.0](https://github.com/Zirich90/bevy_arc_studio/releases/tag/v0.1.0); в архиве приложение вместе с `assets/`, сценами, модулями и материалами Quillshade. Или сборка из исходников:
 
 ```bash
 ./run.sh            # Windows: run.bat
@@ -247,7 +265,7 @@ app.add_plugins(bevy_arc_pf2e::Pf2ePlugin); // опционально: моду�
 
 - Манифест со слепками SHA-256 спецификаций: [CLEAN_ROOM_PROOF.md](docs/clean_room_audit/CLEAN_ROOM_PROOF.md)
 - Математические спецификации: [docs/architecture/01..05](docs/architecture/01_viewport_camera_math.md)
-- Промпты этапов: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/) (этапы 00–11, E0–E9)
+- Промпты этапов: [docs/clean_room_audit/prompts/](docs/clean_room_audit/prompts/) (этапы 00–12, E0–E9)
 - Бортовые журналы: [docs/clean_room_audit/logs/](docs/clean_room_audit/logs/)
 
 ### Статус проекта и участие
